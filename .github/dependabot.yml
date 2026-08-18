@@ -1,0 +1,67 @@
+version: 2
+
+updates:
+  # Frontend (React + Vite)
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - client
+    commit-message:
+      prefix: "deps(client)"
+    groups:
+      # Bundle low-risk bumps into a single PR so the queue stays readable.
+      # Majors are deliberately excluded and arrive as individual PRs.
+      client-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Backend (Spring Boot)
+  - package-ecosystem: maven
+    directory: /server-springboot
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - server
+    commit-message:
+      prefix: "deps(server)"
+    groups:
+      server-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # The CI workflow's own actions (actions/checkout, setup-java, ...)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      actions-all:
+        patterns:
+          - "*"
