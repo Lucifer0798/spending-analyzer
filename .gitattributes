@@ -1,0 +1,20 @@
+# Normalize to LF in the repository; check out native line endings on Windows.
+* text=auto
+
+# Scripts that must keep LF so they run on Linux (CI) regardless of author OS.
+mvnw text eol=lf
+*.sh text eol=lf
+
+# Windows batch files must keep CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets — never touch line endings.
+*.jar binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.xlsx binary
+*.xls binary
+*.sqlite binary
