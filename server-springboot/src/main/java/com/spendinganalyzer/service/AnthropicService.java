@@ -12,8 +12,8 @@ import com.spendinganalyzer.config.DotenvLoader;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.PredictionsPayload;
-import com.spendinganalyzer.model.Categories;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.repository.CategoryRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -24,11 +24,18 @@ public class AnthropicService {
 
     private final AnthropicClient client;
     private final ObjectMapper objectMapper;
+    private final CategoryRepository categoryRepository;
     private final String model;
 
-    public AnthropicService(AnthropicClient client, ObjectMapper objectMapper, DotenvLoader env) {
+    public AnthropicService(
+            AnthropicClient client,
+            ObjectMapper objectMapper,
+            CategoryRepository categoryRepository,
+            DotenvLoader env
+    ) {
         this.client = client;
         this.objectMapper = objectMapper;
+        this.categoryRepository = categoryRepository;
         this.model = env.get("ANTHROPIC_MODEL", "claude-opus-5");
     }
 
@@ -48,10 +55,13 @@ public class AnthropicService {
 
         String itemsJson = writeJson(items);
 
+        // Read from the database so user-created categories are offered to the model too.
+        List<String> categoryNames = categoryRepository.findAllNames();
+
         Map<String, Object> categorizationItem = JsonSchemaBuilder.object(
                 Map.of(
                         "id", JsonSchemaBuilder.integer(),
-                        "category", JsonSchemaBuilder.enumOf(Categories.ALL)
+                        "category", JsonSchemaBuilder.enumOf(categoryNames)
                 ),
                 List.of("id", "category")
         );
@@ -74,7 +84,7 @@ public class AnthropicService {
                 %s
 
                 Return a categorization for every id listed above.
-                """.formatted(String.join(", ", Categories.ALL), itemsJson);
+                """.formatted(String.join(", ", categoryNames), itemsJson);
 
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
