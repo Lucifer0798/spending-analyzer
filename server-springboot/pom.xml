@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.3</version>
+    <version>4.1.0</version>
     <relativePath/>
   </parent>
 
@@ -37,10 +37,19 @@
       <version>3.53.2.1</version>
     </dependency>
 
-    <!-- Versioned schema migrations. Version is managed by the Spring Boot parent. -->
+    <!-- Versioned schema migrations. Versions are managed by the Spring Boot parent. -->
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-core</artifactId>
+    </dependency>
+    <!--
+      Spring Boot 4 splits auto-configuration into per-technology modules. Without this,
+      flyway-core sits on the classpath but is never auto-configured, so migrations are
+      silently skipped and the schema is never created.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-flyway</artifactId>
     </dependency>
 
     <dependency>

@@ -6,8 +6,8 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.TextBlock;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.spendinganalyzer.config.DotenvLoader;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.MonthlyTotal;
@@ -98,7 +98,7 @@ public class AnthropicService {
 
         try {
             return objectMapper.readValue(text, CategorizationResult.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException("Failed to parse categorization response: " + e.getMessage(), e);
         }
     }
@@ -177,7 +177,7 @@ public class AnthropicService {
 
         try {
             return objectMapper.readValue(text, PredictionsPayload.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException("Failed to parse predictions response: " + e.getMessage(), e);
         }
     }
@@ -193,7 +193,7 @@ public class AnthropicService {
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException(e);
         }
     }

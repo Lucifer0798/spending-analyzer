@@ -1,7 +1,7 @@
 package com.spendinganalyzer.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.PredictionsPayload;
@@ -57,7 +57,7 @@ public class InsightsService {
     private PredictionsPayload parsePayload(String json) {
         try {
             return objectMapper.readValue(json, PredictionsPayload.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException("Corrupt predictions cache entry: " + e.getMessage(), e);
         }
     }
@@ -65,7 +65,7 @@ public class InsightsService {
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException(e);
         }
     }
