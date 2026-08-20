@@ -38,9 +38,9 @@ public class InsightsService {
                 .orElse(new PredictionsResponse(null, null));
     }
 
-    public PredictionsResponse refreshPredictions() {
-        List<CategoryMonthlySeries> series = statsService.computeMonthlyCategorySeries();
-        List<MonthlyTotal> monthlyTotals = statsService.computeMonthlyTotals();
+    public PredictionsResponse refreshPredictions(Long accountId) {
+        List<CategoryMonthlySeries> series = statsService.computeMonthlyCategorySeries(accountId);
+        List<MonthlyTotal> monthlyTotals = statsService.computeMonthlyTotals(accountId);
 
         PredictionsPayload payload;
         if (series.isEmpty()) {

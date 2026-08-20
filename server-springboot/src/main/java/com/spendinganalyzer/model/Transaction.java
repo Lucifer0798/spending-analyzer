@@ -11,5 +11,7 @@ public record Transaction(
         String category,
         @JsonProperty("category_source") String categorySource,
         @JsonProperty("upload_batch_id") String uploadBatchId,
-        @JsonProperty("created_at") String createdAt
+        @JsonProperty("created_at") String createdAt,
+        @JsonProperty("account_id") long accountId,
+        @JsonProperty("account_name") String accountName
 ) {}

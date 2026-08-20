@@ -12,6 +12,11 @@ import {
 } from "recharts";
 import { fetchPredictions, fetchSummary, refreshPredictions } from "../api";
 import type { PredictionsPayload, SummaryResponse } from "../types";
+import { currency } from "../format";
+
+interface Props {
+  accountId: number | null;
+}
 
 const BLUE = "#2a78d6";
 const MUTED = "#898781";
@@ -34,10 +39,6 @@ function trendArrow(trend: string) {
   if (trend === "decreasing") return "↓";
   if (trend === "increasing") return "↑";
   return "→";
-}
-
-function currency(n: number) {
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -64,7 +65,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
-export function Dashboard() {
+export function Dashboard({ accountId }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -72,7 +73,11 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchSummary().then(setSummary);
+    setSummary(null);
+    fetchSummary(accountId).then(setSummary);
+  }, [accountId]);
+
+  useEffect(() => {
     fetchPredictions().then((r) => {
       setPredictions(r.predictions);
       setGeneratedAt(r.generatedAt);
@@ -83,7 +88,7 @@ export function Dashboard() {
     setRefreshing(true);
     setError(null);
     try {
-      const r = await refreshPredictions();
+      const r = await refreshPredictions(accountId);
       setPredictions(r.predictions);
       setGeneratedAt(r.generatedAt);
     } catch (err) {
@@ -101,10 +106,9 @@ export function Dashboard() {
   const currentMonth = summary.monthlyTotals[summary.monthlyTotals.length - 1];
   const predictedTotal = predictions?.predictions.reduce((a, b) => a + b.predicted_next_month, 0) ?? null;
 
-  const categoryBars = [...summary.categoryTotals]
-    .filter((c) => c.category !== "Income" && c.category !== "Transfer")
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 12);
+  // Income and transfers are already excluded server-side via category flags,
+  // which also covers user-created categories marked as such.
+  const categoryBars = [...summary.categoryTotals].sort((a, b) => b.total - a.total).slice(0, 12);
 
   const hasData = summary.monthlyTotals.length > 0;
 
