@@ -5,7 +5,8 @@ export interface Transaction {
   amount: number;
   type: "debit" | "credit";
   category: string | null;
-  category_source: "ai" | "user" | "import" | null;
+  /** "cache" means it came from merchant memory rather than a fresh model call. */
+  category_source: "ai" | "user" | "import" | "cache" | null;
   upload_batch_id: string;
   created_at: string;
   account_id: number;
@@ -37,6 +38,33 @@ export interface CategoryDetail {
   is_transfer: boolean;
   sort_order: number;
   transactionCount: number;
+}
+
+export interface CategorizeResult {
+  categorized: number;
+  total?: number;
+  message?: string;
+  /** Answered from merchant memory, costing no model call. */
+  fromMemory: number;
+  fromModel: number;
+  /** Distinct merchants actually sent to the model — what drives cost. */
+  merchantsQueried: number;
+}
+
+export interface MerchantMemory {
+  id: number;
+  merchant_key: string;
+  category: string;
+  source: "ai" | "user";
+  hit_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MerchantsResponse {
+  merchants: MerchantMemory[];
+  count: number;
+  totalMemoryHits: number;
 }
 
 export interface UploadResult {

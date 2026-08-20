@@ -25,27 +25,8 @@ class RecurringDetectionServiceTest {
         return out;
     }
 
-    // --- merchant normalisation -------------------------------------------------
-
-    @Test
-    @DisplayName("strips store numbers and order references so one merchant stays one group")
-    void normalisesMerchantNames() {
-        assertThat(RecurringDetectionService.normalizeMerchant("WHOLE FOODS MARKET #123"))
-                .isEqualTo("WHOLE FOODS MARKET");
-        assertThat(RecurringDetectionService.normalizeMerchant("AMAZON.COM*AB123"))
-                .isEqualTo("AMAZON.COM");
-        assertThat(RecurringDetectionService.normalizeMerchant("STARBUCKS STORE 4521"))
-                .isEqualTo("STARBUCKS STORE");
-        assertThat(RecurringDetectionService.normalizeMerchant("netflix.com"))
-                .isEqualTo("NETFLIX.COM");
-    }
-
-    @Test
-    @DisplayName("normalisation never reduces a description to nothing")
-    void normalisationFallsBackRatherThanEmptying() {
-        assertThat(RecurringDetectionService.normalizeMerchant("12345")).isNotEmpty();
-        assertThat(RecurringDetectionService.normalizeMerchant("#999")).isNotEmpty();
-    }
+    // Merchant normalisation now lives in MerchantNormalizer, shared with merchant
+    // memory, and is covered by MerchantNormalizerTest.
 
     // --- positive detection -----------------------------------------------------
 

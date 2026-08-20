@@ -1,7 +1,9 @@
 import type {
   Account,
   AccountType,
+  CategorizeResult,
   CategoryDetail,
+  MerchantsResponse,
   PredictionsResponse,
   RecurringResponse,
   SummaryResponse,
@@ -122,9 +124,21 @@ export function deleteCategory(id: number) {
 // --- insights ---------------------------------------------------------------
 
 export function runCategorization() {
-  return request<{ categorized: number; total?: number; message?: string }>("/categorize", {
-    method: "POST",
-  });
+  return request<CategorizeResult>("/categorize", { method: "POST" });
+}
+
+// --- merchant memory --------------------------------------------------------
+
+export function fetchMerchants() {
+  return request<MerchantsResponse>("/merchants");
+}
+
+export function forgetMerchant(id: number) {
+  return request<{ ok: true }>(`/merchants/${id}`, { method: "DELETE" });
+}
+
+export function forgetAllMerchants() {
+  return request<{ ok: true; forgotten: number }>("/merchants", { method: "DELETE" });
 }
 
 export function fetchSummary(accountId: number | null) {

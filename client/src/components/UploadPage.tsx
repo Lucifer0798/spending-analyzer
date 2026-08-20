@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { runCategorization, uploadFile } from "../api";
-import type { Account, UploadResult } from "../types";
+import type { Account, CategorizeResult, UploadResult } from "../types";
 import { accountTypeLabel } from "../format";
 
 interface Props {
@@ -16,7 +16,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
-  const [categorizedCount, setCategorizedCount] = useState<number | null>(null);
+  const [categorization, setCategorization] = useState<CategorizeResult | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [targetAccountId, setTargetAccountId] = useState<number>(
     selectedAccountId ?? accounts[0]?.id ?? 1
@@ -27,7 +27,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
     async (file: File) => {
       setError(null);
       setResult(null);
-      setCategorizedCount(null);
+      setCategorization(null);
       setStage("uploading");
       try {
         const uploaded = await uploadFile(file, targetAccountId, skipDuplicates);
@@ -41,8 +41,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
 
         setStage("categorizing");
         try {
-          const catResult = await runCategorization();
-          setCategorizedCount(catResult.categorized);
+          setCategorization(await runCategorization());
         } catch (categorizeError) {
           // The import succeeded; surface the AI failure without discarding it.
           setError(
@@ -170,12 +169,35 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
                 Skipped as already imported: <strong>{result.skippedDuplicates}</strong>
               </li>
             )}
-            {categorizedCount !== null && (
-              <li>
-                AI categorized: <strong>{categorizedCount}</strong>
-              </li>
+            {categorization && (
+              <>
+                {categorization.fromMemory > 0 && (
+                  <li>
+                    Categorized from merchant memory: <strong>{categorization.fromMemory}</strong>{" "}
+                    <span className="opacity-75">(no AI call needed)</span>
+                  </li>
+                )}
+                {categorization.fromModel > 0 && (
+                  <li>
+                    Categorized by AI: <strong>{categorization.fromModel}</strong>
+                    {categorization.merchantsQueried > 0 && (
+                      <span className="opacity-75">
+                        {" "}
+                        — {categorization.merchantsQueried}{" "}
+                        {categorization.merchantsQueried === 1 ? "merchant" : "merchants"} asked about
+                      </span>
+                    )}
+                  </li>
+                )}
+              </>
             )}
           </ul>
+
+          {categorization && categorization.fromMemory > 0 && categorization.fromModel === 0 && (
+            <p className="mt-2">
+              Every merchant in this file was already known, so this import cost nothing in AI usage.
+            </p>
+          )}
 
           {result.inserted === 0 && result.skippedDuplicates > 0 && (
             <p className="mt-2">

@@ -6,10 +6,13 @@ import {
   deleteCategory,
   fetchAccounts,
   fetchCategories,
+  fetchMerchants,
+  forgetAllMerchants,
+  forgetMerchant,
   updateAccount,
   updateCategory,
 } from "../api";
-import type { Account, AccountType, CategoryDetail } from "../types";
+import type { Account, AccountType, CategoryDetail, MerchantsResponse } from "../types";
 import { accountTypeLabel } from "../format";
 
 interface Props {
@@ -20,6 +23,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [types, setTypes] = useState<AccountType[]>([]);
   const [categories, setCategories] = useState<CategoryDetail[]>([]);
+  const [memory, setMemory] = useState<MerchantsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -29,10 +33,15 @@ export function ManagePage({ onAccountsChanged }: Props) {
   const [newCategoryKind, setNewCategoryKind] = useState<"spending" | "income" | "transfer">("spending");
 
   const reload = async () => {
-    const [accountsRes, categoriesRes] = await Promise.all([fetchAccounts(true), fetchCategories()]);
+    const [accountsRes, categoriesRes, merchantsRes] = await Promise.all([
+      fetchAccounts(true),
+      fetchCategories(),
+      fetchMerchants(),
+    ]);
     setAccounts(accountsRes.accounts);
     setTypes(accountsRes.types);
     setCategories(categoriesRes.detailed);
+    setMemory(merchantsRes);
   };
 
   useEffect(() => {
@@ -253,6 +262,78 @@ export function ManagePage({ onAccountsChanged }: Props) {
             Add category
           </button>
         </div>
+      </section>
+
+      {/* ---------------- Merchant memory ---------------- */}
+      <section className="mt-10 mb-10">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Merchant memory</h2>
+          {memory && memory.count > 0 && (
+            <button
+              onClick={() => {
+                if (confirm(`Forget all ${memory.count} remembered merchants? They'll be sent to the AI again on the next import.`)) {
+                  run(() => forgetAllMerchants(), "Merchant memory cleared.");
+                }
+              }}
+              className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+            >
+              Forget all
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          How each merchant was categorized last time. Known merchants are categorized without
+          asking the AI, so repeat imports are quicker and cheaper. Correcting a transaction's
+          category updates the entry here, which is what makes the correction stick.
+        </p>
+
+        {!memory || memory.count === 0 ? (
+          <p className="mt-4 rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500 dark:bg-slate-900">
+            Nothing learned yet. Import a statement, or correct a transaction's category, and the
+            merchant will be remembered.
+          </p>
+        ) : (
+          <>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+              <strong>{memory.count}</strong> merchants remembered ·{" "}
+              <strong>{memory.totalMemoryHits}</strong> transactions categorized from memory instead
+              of the AI
+            </p>
+            <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
+                  {memory.merchants.map((m) => (
+                    <tr key={m.id}>
+                      <td className="px-4 py-2">
+                        <div className="text-sm text-slate-800 dark:text-slate-200">
+                          {m.merchant_key}
+                          {m.source === "user" && (
+                            <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] uppercase text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                              your correction
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {m.category}
+                          {m.hit_count > 0 && ` · reused ${m.hit_count}×`}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => run(() => forgetMerchant(m.id))}
+                          className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                          title="Ask the AI about this merchant again next time"
+                        >
+                          Forget
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );

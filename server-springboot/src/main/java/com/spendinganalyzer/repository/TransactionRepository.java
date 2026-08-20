@@ -7,10 +7,10 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Repository
 public class TransactionRepository {
@@ -143,6 +143,12 @@ public class TransactionRepository {
         return jdbc.update(
                 "UPDATE transactions SET category = :category, category_source = :source WHERE id = :id",
                 params) > 0;
+    }
+
+    public Optional<Transaction> findById(long id) {
+        return jdbc.query(SELECT_WITH_ACCOUNT + " WHERE t.id = :id",
+                        new MapSqlParameterSource("id", id), ROW_MAPPER)
+                .stream().findFirst();
     }
 
     public List<Transaction> findUncategorized() {
