@@ -36,31 +36,12 @@ public class RecurringDetectionService {
 
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE;
 
-    // Store numbers, terminal ids, and order references differ per visit and would otherwise
-    // split one merchant into many singletons.
-    private static final Pattern STORE_SUFFIX = Pattern.compile("[*#]\\s*[A-Z0-9-]+\\s*$");
-    private static final Pattern TRAILING_DIGITS = Pattern.compile("\\s+\\d{3,}\\s*$");
-    private static final Pattern LONG_DIGIT_RUN = Pattern.compile("\\b\\d{4,}\\b");
-    private static final Pattern MULTI_SPACE = Pattern.compile("\\s{2,}");
-
-    /**
-     * Reduces a raw statement description to a stable merchant label.
-     * Package-private so it can be unit tested directly.
-     */
-    static String normalizeMerchant(String description) {
-        String s = description.toUpperCase(Locale.ROOT).trim();
-        s = STORE_SUFFIX.matcher(s).replaceAll("");
-        s = LONG_DIGIT_RUN.matcher(s).replaceAll("");
-        s = TRAILING_DIGITS.matcher(s).replaceAll("");
-        s = s.replaceAll("[*#]+\\s*$", "");
-        s = MULTI_SPACE.matcher(s).replaceAll(" ").trim();
-        return s.isEmpty() ? description.trim().toUpperCase(Locale.ROOT) : s;
-    }
-
     public List<RecurringSeries> detect(List<Transaction> transactions) {
         Map<String, List<Transaction>> byMerchant = new LinkedHashMap<>();
         for (Transaction t : transactions) {
-            byMerchant.computeIfAbsent(normalizeMerchant(t.description()), k -> new ArrayList<>()).add(t);
+            // Shared with merchant memory so both agree on what counts as one merchant.
+            byMerchant.computeIfAbsent(MerchantNormalizer.normalize(t.description()), k -> new ArrayList<>())
+                    .add(t);
         }
 
         List<RecurringSeries> results = new ArrayList<>();
