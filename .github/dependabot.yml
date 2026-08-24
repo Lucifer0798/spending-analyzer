@@ -47,6 +47,21 @@ updates:
           - minor
           - patch
 
+  # Base images in the Dockerfile (eclipse-temurin)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "deps(docker)"
+
   # The CI workflow's own actions (actions/checkout, setup-java, ...)
   - package-ecosystem: github-actions
     directory: /

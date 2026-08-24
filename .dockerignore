@@ -1,0 +1,20 @@
+# Keep the build context to sources. Anything generated is rebuilt inside the image, and
+# copying a host-built target/ or node_modules/ in would risk baking in platform-specific
+# artifacts (Node's native binaries, in particular).
+.git
+.github
+.tools
+
+node_modules/
+dist/
+target/
+
+# Local state and secrets must never reach an image layer.
+.env
+*.sqlite
+*.sqlite3
+
+Dockerfile
+.dockerignore
+compose.yaml
+*.md

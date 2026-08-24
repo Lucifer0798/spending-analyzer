@@ -18,7 +18,9 @@ how to work on it.
 | `gh` CLI | Installed at `C:\Program Files\GitHub CLI`, **not on PATH**. Prefix commands with `export PATH="$PATH:/c/Program Files/GitHub CLI"` |
 | API key | **Not configured.** AI categorization and predictions return 401; everything else works, including merchant memory |
 
-### Two traps that cost time
+| Docker | Desktop 4.87 / engine 29.7.2, WSL2 backend. Must be **running** — start `Docker Desktop.exe` first, the daemon does not start on demand |
+
+### Three traps that cost time
 
 **A running app locks the jar.** If `./mvnw clean` fails with *"The process cannot access the
 file because it is being used by another process"*, a Spring Boot process is still holding
@@ -31,6 +33,19 @@ Get-CimInstance Win32_Process -Filter "Name = 'java.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
 
+**A running Vite dev server breaks `-Pfrontend`.** Same trap, other half of the app. The profile
+runs `npm ci`, which deletes `client/node_modules` — and Windows refuses to unlink Rolldown's
+native binding while Vite holds it, so the build dies with `EPERM ... unlink
+rolldown-binding.win32-x64-msvc.node`. Nothing is wrong with the build; stop the dev server:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+Docker builds are immune — they run against a clean copy inside the container, which is a good
+reason to reach for `docker build` when only checking that packaging still works.
+
 **Stale `target/test-classes` can mask a fix.** Maven does not remove deleted resources on an
 incremental build, so a config file you deleted can still be on the test classpath and make a
 correct fix look broken. When test behaviour contradicts the source, run `clean` before
@@ -40,9 +55,13 @@ debugging further.
 
 ## Workflow
 
-`main` is protected: no direct pushes, both CI jobs must pass, and a branch must be up to date
-with `main` before merging. Enforced for admins, so there is no bypass without turning
+`main` is protected: no direct pushes, the required CI checks must pass, and a branch must be up
+to date with `main` before merging. Enforced for admins, so there is no bypass without turning
 protection off in **Settings → Branches**.
+
+> The **Docker image** job runs on every PR but is *not* in the required-checks list — adding a
+> job to the workflow does not make it required. Add it in **Settings → Branches** if it should
+> block merges.
 
 - Branch names: `feat/*`, `chore/*`, `docs/*`
 - Squash merge, delete the branch
@@ -90,6 +109,26 @@ prediction cache is a single row not keyed by range. Listed in the README roadma
 **Flyway owns the schema.** Never edit an applied migration — add `V6__*.sql`. SQLite cannot
 alter a CHECK constraint in place, so widening one means the copy-and-swap rebuild used in `V5`.
 
+**The `frontend` profile is off by default.** With it on, every `./mvnw verify` would download
+Node and rebuild the client — around a minute added to a loop that otherwise finishes in seconds,
+to produce something the tests never touch. Release builds and the Docker image pass `-Pfrontend`
+explicitly. The cost is that a plain `java -jar` gives a working API and a 404 at `/`, which is
+the right trade for how often each is run.
+
+**Maven builds the frontend even inside Docker.** The obvious Dockerfile has a Node stage and a
+Maven stage, which caches better — but then "how the client is built" is defined twice and the two
+drift. The image runs `./mvnw -Pfrontend` instead, so `docker build` and a local release build
+produce the same jar by the same path.
+
+**CORS defaults to the Vite origin, not `*`.** Once the app is one artifact the frontend is
+same-origin and needs no CORS at all; the only real caller from another origin is the dev server.
+`CORS_ALLOWED_ORIGINS` widens it, and the container sets it blank. This is *not* access control —
+there is still no authentication, which is the top item on the README roadmap.
+
+**The database path is an environment variable.** `${user.dir}/data.sqlite` is right for a local
+run and useless in a container, where the file has to sit on a mounted volume to survive
+`docker rm`. Hence `SPENDING_ANALYZER_DB`, defaulting to the old behaviour.
+
 ---
 
 ## Testing
@@ -131,6 +170,13 @@ cd client && npm run dev
 # Full checks, as CI runs them
 cd server-springboot && ./mvnw clean verify
 cd client && npm run lint && npm run build
+docker build -t spending-analyzer .
+
+# The single artifact — whole app on :4000, no Vite
+cd server-springboot && ./mvnw -Pfrontend clean package && java -jar target/spending-analyzer.jar
+
+# Or the same thing containerised, with the database on a volume
+docker compose up --build
 ```
 
 `DELETE /api/reset` clears transactions but keeps accounts and categories.
