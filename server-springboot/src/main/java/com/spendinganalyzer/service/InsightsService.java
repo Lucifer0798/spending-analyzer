@@ -3,6 +3,7 @@ package com.spendinganalyzer.service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
+import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.PredictionsPayload;
 import com.spendinganalyzer.dto.PredictionsResponse;
@@ -39,8 +40,11 @@ public class InsightsService {
     }
 
     public PredictionsResponse refreshPredictions(Long accountId) {
-        List<CategoryMonthlySeries> series = statsService.computeMonthlyCategorySeries(accountId);
-        List<MonthlyTotal> monthlyTotals = statsService.computeMonthlyTotals(accountId);
+        // Forecasts use the full history for the account: a projection built from a narrow
+        // window would be worse, and the cached result is not keyed by date range.
+        List<CategoryMonthlySeries> series =
+                statsService.computeMonthlyCategorySeries(accountId, DateRange.ALL);
+        List<MonthlyTotal> monthlyTotals = statsService.computeMonthlyTotals(accountId, DateRange.ALL);
 
         PredictionsPayload payload;
         if (series.isEmpty()) {

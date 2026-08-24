@@ -40,6 +40,19 @@ export interface CategoryDetail {
   transactionCount: number;
 }
 
+/** Inclusive date window; null on either side means open-ended. */
+export interface DateRangeValue {
+  from: string | null;
+  to: string | null;
+}
+
+export const ALL_TIME: DateRangeValue = { from: null, to: null };
+
+export interface DateBounds {
+  earliest: string | null;
+  latest: string | null;
+}
+
 export interface CategorizeResult {
   categorized: number;
   total?: number;

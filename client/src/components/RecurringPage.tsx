@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { fetchRecurring } from "../api";
-import type { RecurringResponse } from "../types";
+import type { DateRangeValue, RecurringResponse } from "../types";
 import { currency, currencyPrecise } from "../format";
 
 interface Props {
   accountId: number | null;
+  range: DateRangeValue;
 }
 
 const CADENCE_LABELS: Record<string, string> = {
@@ -21,7 +22,7 @@ const CONFIDENCE_STYLES: Record<string, string> = {
   low: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
 };
 
-export function RecurringPage({ accountId }: Props) {
+export function RecurringPage({ accountId, range }: Props) {
   const [data, setData] = useState<RecurringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +30,11 @@ export function RecurringPage({ accountId }: Props) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetchRecurring(accountId)
+    fetchRecurring(accountId, range)
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load recurring charges."))
       .finally(() => setLoading(false));
-  }, [accountId]);
+  }, [accountId, range]);
 
   if (loading) {
     return <div className="px-4 py-10 text-center text-sm text-slate-500">Finding recurring charges…</div>;

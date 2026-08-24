@@ -3,6 +3,8 @@ import type {
   AccountType,
   CategorizeResult,
   CategoryDetail,
+  DateBounds,
+  DateRangeValue,
   MerchantsResponse,
   PredictionsResponse,
   RecurringResponse,
@@ -10,6 +12,7 @@ import type {
   Transaction,
   UploadResult,
 } from "./types";
+import { ALL_TIME } from "./types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -52,17 +55,39 @@ export function fetchTransactions(params: {
   category?: string;
   month?: string;
   accountId?: number | null;
+  range?: DateRangeValue;
   limit?: number;
   offset?: number;
 } = {}) {
-  return request<{ transactions: Transaction[]; total: number }>(`/transactions${qs(params)}`);
+  const { range, ...rest } = params;
+  return request<{ transactions: Transaction[]; total: number }>(
+    `/transactions${qs({ ...rest, from: range?.from, to: range?.to })}`
+  );
 }
 
 export function updateTransactionCategory(id: number, category: string) {
-  return request<{ ok: true }>(`/transactions/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ category }),
-  });
+  return updateTransaction(id, { category });
+}
+
+/** Any subset of the editable fields; omitted fields are left unchanged. */
+export function updateTransaction(
+  id: number,
+  changes: {
+    category?: string;
+    date?: string;
+    description?: string;
+    amount?: number;
+    type?: "debit" | "credit";
+  }
+) {
+  return request<{ ok: true; transaction: Transaction; learnedMerchant: string }>(
+    `/transactions/${id}`,
+    { method: "PATCH", body: JSON.stringify(changes) }
+  );
+}
+
+export function deleteTransaction(id: number) {
+  return request<{ ok: true }>(`/transactions/${id}`, { method: "DELETE" });
 }
 
 // --- accounts ---------------------------------------------------------------
@@ -141,12 +166,17 @@ export function forgetAllMerchants() {
   return request<{ ok: true; forgotten: number }>("/merchants", { method: "DELETE" });
 }
 
-export function fetchSummary(accountId: number | null) {
-  return request<SummaryResponse>(`/summary${qs({ accountId })}`);
+export function fetchSummary(accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<SummaryResponse>(`/summary${qs({ accountId, from: range.from, to: range.to })}`);
 }
 
-export function fetchRecurring(accountId: number | null) {
-  return request<RecurringResponse>(`/recurring${qs({ accountId })}`);
+export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<RecurringResponse>(`/recurring${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/** Earliest and latest dates on record, used to anchor the date-range presets. */
+export function fetchDateBounds(accountId: number | null) {
+  return request<DateBounds>(`/date-bounds${qs({ accountId })}`);
 }
 
 export function fetchPredictions() {
