@@ -2,6 +2,7 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.CategoryTotal;
+import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.MonthlyTotal;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -35,40 +36,48 @@ public class StatsService {
               AND COALESCE(c.is_transfer, 0) = 0
             """;
 
-    private static MapSqlParameterSource accountParams(Long accountId) {
-        return new MapSqlParameterSource("accountId", accountId);
+    /** Account and date-range predicates, appended to {@link #SPEND_FILTER}. */
+    private static String filters(Long accountId, DateRange range) {
+        StringBuilder sql = new StringBuilder();
+        if (accountId != null) sql.append(" AND t.account_id = :accountId");
+        if (range.from() != null) sql.append(" AND t.date >= :from");
+        if (range.to() != null) sql.append(" AND t.date <= :to");
+        return sql.toString();
     }
 
-    private static String accountClause(Long accountId) {
-        return accountId != null ? " AND t.account_id = :accountId" : "";
+    private static MapSqlParameterSource params(Long accountId, DateRange range) {
+        return new MapSqlParameterSource()
+                .addValue("accountId", accountId)
+                .addValue("from", range.from())
+                .addValue("to", range.to());
     }
 
-    public List<CategoryTotal> computeCategoryTotals(Long accountId) {
+    public List<CategoryTotal> computeCategoryTotals(Long accountId, DateRange range) {
         String sql = "SELECT COALESCE(t.category, 'Uncategorized') AS category, "
                 + "ROUND(SUM(t.amount), 2) AS total, COUNT(*) AS count "
-                + SPEND_FILTER + accountClause(accountId)
+                + SPEND_FILTER + filters(accountId, range)
                 + " GROUP BY t.category ORDER BY total DESC";
 
-        return jdbc.query(sql, accountParams(accountId), (rs, rowNum) ->
+        return jdbc.query(sql, params(accountId, range), (rs, rowNum) ->
                 new CategoryTotal(rs.getString("category"), rs.getDouble("total"), rs.getInt("count")));
     }
 
-    public List<MonthlyTotal> computeMonthlyTotals(Long accountId) {
+    public List<MonthlyTotal> computeMonthlyTotals(Long accountId, DateRange range) {
         String sql = "SELECT strftime('%Y-%m', t.date) AS month, ROUND(SUM(t.amount), 2) AS total "
-                + SPEND_FILTER + accountClause(accountId)
+                + SPEND_FILTER + filters(accountId, range)
                 + " GROUP BY month ORDER BY month";
 
-        return jdbc.query(sql, accountParams(accountId), (rs, rowNum) ->
+        return jdbc.query(sql, params(accountId, range), (rs, rowNum) ->
                 new MonthlyTotal(rs.getString("month"), rs.getDouble("total")));
     }
 
-    public List<CategoryMonthlySeries> computeMonthlyCategorySeries(Long accountId) {
+    public List<CategoryMonthlySeries> computeMonthlyCategorySeries(Long accountId, DateRange range) {
         record Row(String date, String category, double amount) {}
 
         String sql = "SELECT t.date, t.category, t.amount "
-                + SPEND_FILTER + " AND t.category IS NOT NULL" + accountClause(accountId);
+                + SPEND_FILTER + " AND t.category IS NOT NULL" + filters(accountId, range);
 
-        List<Row> rows = jdbc.query(sql, accountParams(accountId), (rs, rowNum) ->
+        List<Row> rows = jdbc.query(sql, params(accountId, range), (rs, rowNum) ->
                 new Row(rs.getString("date"), rs.getString("category"), rs.getDouble("amount")));
 
         Map<String, TreeMap<String, Double>> byCategory = new LinkedHashMap<>();
@@ -108,6 +117,15 @@ public class StatsService {
 
         series.sort((a, b) -> Double.compare(b.overallTotal(), a.overallTotal()));
         return series;
+    }
+
+    /** Earliest and latest transaction dates on record, so the UI can bound its pickers. */
+    public DateRange availableRange(Long accountId) {
+        String sql = "SELECT MIN(t.date) AS min_date, MAX(t.date) AS max_date "
+                + SPEND_FILTER + filters(accountId, DateRange.ALL);
+        return jdbc.query(sql, params(accountId, DateRange.ALL), (rs, rowNum) ->
+                        new DateRange(rs.getString("min_date"), rs.getString("max_date")))
+                .stream().findFirst().orElse(DateRange.ALL);
     }
 
     /** Projects the next value of a series by least-squares fit. Package-private for testing. */

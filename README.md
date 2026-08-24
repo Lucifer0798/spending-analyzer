@@ -268,31 +268,30 @@ If you ever genuinely need to bypass this, turn protection off in
 
 The running to-do list, roughly in the order worth tackling. Updated as things get done.
 
-**1. Date range on the dashboard.** It always shows all time. A "last 3 months" or custom range
-selector is the most obvious everyday gap.
-
-**2. Edit and delete transactions.** You can change a category, but not fix a wrong amount or
-remove a row imported by mistake.
-
-**3. Make it deployable as one thing.** Have Spring Boot serve the built frontend, and add a
+**1. Make it deployable as one thing.** Have Spring Boot serve the built frontend, and add a
 Docker image. One artifact to run instead of two dev servers — and the prerequisite for running
 this anywhere but your own machine.
 
-**4. Authentication.** There is none, and the API accepts requests from any origin. Fine on
-localhost, not fine anywhere reachable. Needed before (3) goes anywhere public.
+**2. Authentication.** There is none, and the API accepts requests from any origin. Fine on
+localhost, not fine anywhere reachable. Needed before (1) goes anywhere public.
 
-**5. Export.** Save the dashboard or the predictions as CSV or PDF.
+**3. Export.** Save the dashboard or the predictions as CSV or PDF.
 
-**6. Budgets.** Set a monthly target per category and track against it — the natural next step
+**4. Budgets.** Set a monthly target per category and track against it — the natural next step
 once predictions exist.
 
-**7. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
+**5. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
 
-**8. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
+**6. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
+
+**7. Predictions per date range.** Forecasts currently always use an account's full history and
+the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
 ### Done
 
+- ~~Date range filtering~~ — presets and a custom window across dashboard, transactions, recurring
+- ~~Edit and delete transactions~~
 - ~~Branch protection on `main`~~ — required CI checks, enforced for admins
 - ~~Merchant memory~~ — repeat imports skip the AI
 - ~~Accounts, custom categories, recurring detection, duplicate detection~~

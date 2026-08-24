@@ -1,6 +1,7 @@
 package com.spendinganalyzer;
 
 import com.spendinganalyzer.controller.TransactionController;
+import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
@@ -43,10 +44,10 @@ class SpendingAnalyzerApplicationTests {
 
     @Test
     void migrationsApplyAndSchemaIsQueryable() {
-        assertThat(transactionRepository.count(null, null, null)).isNotNegative();
-        assertThat(statsService.computeMonthlyTotals(null)).isNotNull();
-        assertThat(statsService.computeMonthlyCategorySeries(null)).isNotNull();
-        assertThat(statsService.computeCategoryTotals(null)).isNotNull();
+        assertThat(transactionRepository.count(null, null, null, DateRange.ALL)).isNotNegative();
+        assertThat(statsService.computeMonthlyTotals(null, DateRange.ALL)).isNotNull();
+        assertThat(statsService.computeMonthlyCategorySeries(null, DateRange.ALL)).isNotNull();
+        assertThat(statsService.computeCategoryTotals(null, DateRange.ALL)).isNotNull();
     }
 
     @Test

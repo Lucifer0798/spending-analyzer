@@ -11,11 +11,12 @@ import {
   YAxis,
 } from "recharts";
 import { fetchPredictions, fetchSummary, refreshPredictions } from "../api";
-import type { PredictionsPayload, SummaryResponse } from "../types";
+import type { DateRangeValue, PredictionsPayload, SummaryResponse } from "../types";
 import { currency } from "../format";
 
 interface Props {
   accountId: number | null;
+  range: DateRangeValue;
 }
 
 const BLUE = "#2a78d6";
@@ -65,7 +66,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
-export function Dashboard({ accountId }: Props) {
+export function Dashboard({ accountId, range }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -74,8 +75,8 @@ export function Dashboard({ accountId }: Props) {
 
   useEffect(() => {
     setSummary(null);
-    fetchSummary(accountId).then(setSummary);
-  }, [accountId]);
+    fetchSummary(accountId, range).then(setSummary);
+  }, [accountId, range]);
 
   useEffect(() => {
     fetchPredictions().then((r) => {
@@ -134,7 +135,11 @@ export function Dashboard({ accountId }: Props) {
       {hasData && (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatTile label="Total spend" value={currency(totalSpend)} sub={`${summary.monthlyTotals.length} months of data`} />
+            <StatTile
+              label="Total spend"
+              value={currency(totalSpend)}
+              sub={`${summary.monthlyTotals.length} ${summary.monthlyTotals.length === 1 ? "month" : "months"} of data`}
+            />
             <StatTile
               label="Last month"
               value={currency(currentMonth.total)}

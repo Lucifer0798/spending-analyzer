@@ -1,5 +1,6 @@
 package com.spendinganalyzer.controller;
 
+import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.dto.RecurringSeries;
 import com.spendinganalyzer.dto.SummaryResponse;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,26 +41,45 @@ public class InsightsController {
     }
 
     @GetMapping("/summary")
-    public SummaryResponse summary(@RequestParam(required = false) Long accountId) {
+    public SummaryResponse summary(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        DateRange range = DateRange.of(from, to);
         return new SummaryResponse(
-                statsService.computeCategoryTotals(accountId),
-                statsService.computeMonthlyTotals(accountId),
-                statsService.computeMonthlyCategorySeries(accountId)
+                statsService.computeCategoryTotals(accountId, range),
+                statsService.computeMonthlyTotals(accountId, range),
+                statsService.computeMonthlyCategorySeries(accountId, range)
         );
     }
 
+    /** Earliest and latest dates on record, so the UI can bound its date pickers. */
+    @GetMapping("/date-bounds")
+    public Map<String, Object> dateBounds(@RequestParam(required = false) Long accountId) {
+        DateRange available = statsService.availableRange(accountId);
+        Map<String, Object> body = new HashMap<>();
+        body.put("earliest", available.from());
+        body.put("latest", available.to());
+        return body;
+    }
+
     @GetMapping("/recurring")
-    public Map<String, Object> recurring(@RequestParam(required = false) Long accountId) {
-        List<RecurringSeries> series =
-                recurringDetectionService.detect(transactionRepository.findSpendingTransactions(accountId));
+    public Map<String, Object> recurring(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        DateRange range = DateRange.of(from, to);
+        List<RecurringSeries> series = recurringDetectionService.detect(
+                transactionRepository.findSpendingTransactions(accountId, range));
 
         double totalAnnualized = series.stream().mapToDouble(RecurringSeries::annualizedCost).sum();
-        double totalMonthly = totalAnnualized / 12.0;
 
         return Map.of(
                 "recurring", series,
                 "totalAnnualizedCost", Math.round(totalAnnualized * 100.0) / 100.0,
-                "totalMonthlyEquivalent", Math.round(totalMonthly * 100.0) / 100.0
+                "totalMonthlyEquivalent", Math.round((totalAnnualized / 12.0) * 100.0) / 100.0
         );
     }
 
@@ -67,6 +88,10 @@ public class InsightsController {
         return ResponseEntity.ok(insightsService.getCachedPredictions());
     }
 
+    /**
+     * Forecasts deliberately ignore any date filter: a projection built from a narrow
+     * window would be worse, and the cached result is not keyed by range.
+     */
     @PostMapping("/predictions/refresh")
     public ResponseEntity<?> refreshPredictions(@RequestParam(required = false) Long accountId) {
         try {
