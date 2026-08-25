@@ -66,36 +66,60 @@ of a list that's meant to show subscriptions.
 
 ## Running it
 
-**You'll need:** Java 21+, Node 20+, and an [Anthropic API key](https://console.anthropic.com/).
+There are two ways: **one container**, or **two dev servers**. Use the container to just run the
+app; use the dev servers when changing it.
 
-### 1. Add your API key
+### Your API key (optional, either way)
 
 ```bash
 cd server-springboot
 cp .env.example .env
 ```
 
-Then open `.env` and set `ANTHROPIC_API_KEY=` to your key.
+Open `.env` and set `ANTHROPIC_API_KEY=` to your [key](https://console.anthropic.com/).
 
 Without a key everything still runs — import, browsing, recurring charges, and any merchant
 already in memory all work offline. Only fresh AI categorization and predictions need it.
 
-### 2. Start the backend (port 4000)
+### Option A: Docker — one thing to run
+
+**You'll need:** Docker.
 
 ```bash
-cd server-springboot && ./mvnw spring-boot:run
+docker compose up --build
 ```
 
-On Windows use `mvnw.cmd`. No Maven install needed — the wrapper fetches it. The database and its
-tables are created automatically on first run.
+Open **http://localhost:4000**. That's the whole app: the React frontend is built into the jar
+and served by Spring Boot, so there's one process and one port.
 
-### 3. Start the frontend (port 5173)
+Your database lives in a named volume, so it survives `docker compose down` and any rebuild. The
+`.env` above is picked up automatically if it exists.
+
+To build the same single artifact without Docker:
 
 ```bash
+cd server-springboot && ./mvnw -Pfrontend clean package
+java -jar target/spending-analyzer.jar
+```
+
+The `frontend` profile is what compiles the client and packages it into the jar. It's off by
+default so the everyday build stays fast — see `CONTEXT.md`.
+
+### Option B: Dev servers — for working on it
+
+**You'll need:** Java 21+ and Node 22+.
+
+```bash
+# Backend on port 4000
+cd server-springboot && ./mvnw spring-boot:run
+
+# Frontend on port 5173, in another terminal
 cd client && npm install && npm run dev
 ```
 
-Open **http://localhost:5173**.
+Open **http://localhost:5173**. Vite proxies `/api` to the backend and reloads on save. On
+Windows use `mvnw.cmd`; no Maven install is needed, the wrapper fetches it. The database and its
+tables are created automatically on first run.
 
 ---
 
@@ -115,7 +139,11 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V5)
-  src/test/                 49 tests
+  src/test/                 76 tests
+  pom.xml                   The `frontend` profile builds the client into the jar
+
+Dockerfile                  Multi-stage build producing the single deployable image
+compose.yaml                Runs that image with a volume for the database
 
 .github/workflows/ci.yml    Runs on every push and pull request
 .github/dependabot.yml      Weekly dependency updates
@@ -152,6 +180,23 @@ rather than editing an existing file.
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
 names "Income" and "Transfer". That means a category *you* create can also be kept out of spending
 totals.
+
+---
+
+## Configuration
+
+Everything is an environment variable, and every one has a working default — the app starts with
+none of them set.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | *(empty)* | Enables AI categorization and predictions |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | Which model to ask |
+| `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
+| `PORT` | `4000` | Port the server listens on |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated origins allowed to call `/api`. Blank turns CORS off, which is what the container does — packaged as one artifact the frontend is same-origin and needs no exception |
+
+`ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` can also come from `server-springboot/.env`.
 
 ---
 
@@ -209,19 +254,24 @@ cd server-springboot && ./mvnw verify
 
 # Frontend: lint, type-check, build
 cd client && npm run lint && npm run build
+
+# The deployable artifact, as CI builds it
+docker build -t spending-analyzer .
 ```
 
-**Tests (49).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (76).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
 migration that a compile-only check would miss.
 
-**CI.** Every push and pull request runs both sides in parallel on GitHub Actions. Nothing merges
-without it passing.
+**CI.** Every push and pull request runs three jobs in parallel on GitHub Actions: the client, the
+server, and the Docker image. The image job doesn't just build — it starts the container and
+checks that both the API and the packaged frontend respond, since an image that builds and then
+fails to boot would otherwise pass unnoticed.
 
-**Dependencies.** Dependabot checks npm, Maven, and the CI actions weekly. Small updates are
-grouped into one pull request; major ones arrive separately so they get a proper look.
+**Dependencies.** Dependabot checks npm, Maven, the base images, and the CI actions weekly. Small
+updates are grouped into one pull request; major ones arrive separately so they get a proper look.
 
 ---
 
@@ -243,14 +293,16 @@ Roughly in order:
    module added. Both problems only appeared at runtime; the code compiled cleanly throughout.
 7. **Merchant memory**, so repeat imports mostly skip the AI entirely.
 8. **Branch protection on `main`**, so the CI in step 3 actually enforces something.
+9. **One deployable artifact** — the frontend packaged into the jar and a Docker image, with CI
+   starting the container and probing it rather than trusting a successful build.
 
 ---
 
 ## Working on it
 
-`main` is protected. You can't push to it directly — changes go through a pull request, and both
-CI jobs have to pass before it can merge. A branch also has to be up to date with `main` before
-merging, which stops two separately-green changes from being combined untested.
+`main` is protected. You can't push to it directly — changes go through a pull request, and the
+required CI jobs have to pass before it can merge. A branch also has to be up to date with `main`
+before merging, which stops two separately-green changes from being combined untested.
 
 ```bash
 git checkout -b my-change
@@ -268,28 +320,29 @@ If you ever genuinely need to bypass this, turn protection off in
 
 The running to-do list, roughly in the order worth tackling. Updated as things get done.
 
-**1. Make it deployable as one thing.** Have Spring Boot serve the built frontend, and add a
-Docker image. One artifact to run instead of two dev servers — and the prerequisite for running
-this anywhere but your own machine.
+**1. Authentication.** There is none — anyone who can reach the port can read and delete
+everything. Origins are no longer wide open, but that is not access control. This is the one
+thing standing between the container above and running it anywhere public.
 
-**2. Authentication.** There is none, and the API accepts requests from any origin. Fine on
-localhost, not fine anywhere reachable. Needed before (1) goes anywhere public.
+**2. Export.** Save the dashboard or the predictions as CSV or PDF.
 
-**3. Export.** Save the dashboard or the predictions as CSV or PDF.
-
-**4. Budgets.** Set a monthly target per category and track against it — the natural next step
+**3. Budgets.** Set a monthly target per category and track against it — the natural next step
 once predictions exist.
 
-**5. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
+**4. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
 
-**6. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
+**5. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
 
-**7. Predictions per date range.** Forecasts currently always use an account's full history and
+**6. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
+
+**7. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
+building it there. Worth doing after (1).
 
 ### Done
 
+- ~~Deployable as one thing~~ — frontend packaged into the jar, Docker image, CI builds and boots it
 - ~~Date range filtering~~ — presets and a custom window across dashboard, transactions, recurring
 - ~~Edit and delete transactions~~
 - ~~Branch protection on `main`~~ — required CI checks, enforced for admins

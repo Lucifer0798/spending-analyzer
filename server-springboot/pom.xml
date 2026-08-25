@@ -86,4 +86,89 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Builds the React client and packages it into the jar, so `java -jar` serves the whole
+      app on one port. Off by default: the everyday `./mvnw verify` loop and the CI server
+      job have no use for the frontend, and installing Node adds ~30s to a build that
+      otherwise takes seconds. Turn it on for a release build:
+
+        ./mvnw -Pfrontend clean package
+
+      The Docker image build uses this same profile, so there is one definition of how the
+      frontend gets built rather than two that can drift.
+    -->
+    <profile>
+      <id>frontend</id>
+      <properties>
+        <!-- Vite 8 requires ^20.19 || >=22.12, so this floor is not arbitrary. -->
+        <node.version>v22.23.2</node.version>
+        <client.dir>${project.basedir}/../client</client.dir>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.eirslett</groupId>
+            <artifactId>frontend-maven-plugin</artifactId>
+            <version>1.15.1</version>
+            <configuration>
+              <workingDirectory>${client.dir}</workingDirectory>
+              <!-- Keep the downloaded Node out of the client tree; target/ is already ignored. -->
+              <installDirectory>${project.build.directory}</installDirectory>
+            </configuration>
+            <executions>
+              <execution>
+                <id>install-node-and-npm</id>
+                <goals><goal>install-node-and-npm</goal></goals>
+                <configuration>
+                  <nodeVersion>${node.version}</nodeVersion>
+                </configuration>
+              </execution>
+              <execution>
+                <id>npm-ci</id>
+                <goals><goal>npm</goal></goals>
+                <configuration>
+                  <arguments>ci</arguments>
+                </configuration>
+              </execution>
+              <execution>
+                <id>npm-build</id>
+                <goals><goal>npm</goal></goals>
+                <configuration>
+                  <arguments>run build</arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <!--
+            Spring Boot serves classpath:/static as the site root, so index.html becomes the
+            welcome page and the hashed assets sit alongside it. The API lives under /api,
+            so nothing collides.
+          -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-resources-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>copy-client-dist</id>
+                <phase>prepare-package</phase>
+                <goals><goal>copy-resources</goal></goals>
+                <configuration>
+                  <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+                  <resources>
+                    <resource>
+                      <directory>${client.dir}/dist</directory>
+                      <filtering>false</filtering>
+                    </resource>
+                  </resources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

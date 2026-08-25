@@ -71,3 +71,44 @@ jobs:
           name: server-jar
           path: server-springboot/target/spending-analyzer.jar
           retention-days: 7
+
+  # The client and server jobs above check each half in isolation. This one checks the thing
+  # that actually ships: one image, with the frontend packaged inside the jar. Building it is
+  # only half the check — the image is started and probed, because a container that builds and
+  # then fails to boot is exactly the failure the smoke test exists to catch.
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build -t spending-analyzer:ci .
+
+      - name: Start container
+        run: docker run -d --name app -p 4000:4000 spending-analyzer:ci
+
+      - name: Wait for it to come up
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:4000/api/health; then
+              echo "up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::container did not become healthy within 120s"
+          docker logs app
+          exit 1
+
+      - name: Check the API and the packaged frontend both respond
+        run: |
+          curl -sf http://localhost:4000/api/health | grep -q '"ok":true'
+          curl -sf http://localhost:4000/ | grep -qi '<div id="root">'
+
+      - name: Container logs
+        if: always()
+        run: docker logs app
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f app
