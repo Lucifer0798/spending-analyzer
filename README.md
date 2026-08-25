@@ -139,7 +139,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V5)
-  src/test/                 76 tests
+  src/test/                 91 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -214,6 +214,9 @@ All endpoints live under `/api`.
 | `GET` | `/recurring` | Detected recurring charges |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
+| `GET` | `/export/transactions.csv` | Download transactions, filters and all |
+| `GET` | `/export/categories.csv` | Download spend per category |
+| `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
 | `GET` `DELETE` | `/merchants` | View or forget merchant memory |
@@ -233,6 +236,13 @@ supermarket, since you shop there regularly — but for a different amount each 
 is what separates "Netflix, £15.49 every month" from "groceries, roughly fortnightly, £60–£100".
 Charges on the same date are treated as one billing event, so two cards billed by the same
 merchant on the same day don't confuse the rhythm.
+
+**CSV exports carry the filters you're looking at, and a signed amount.** Exporting a filtered
+view gives you the filtered rows — but *all* of them, not the page on screen, because a silently
+truncated export is worse than none. Amounts are stored unsigned with direction in a separate
+`type` column, which would make a naive spreadsheet `SUM` wrong, so a `signed_amount` column sits
+alongside: negative for debits. The files start with a byte-order mark, without which Excel reads
+them in the OS codepage and mangles any accented merchant name.
 
 **Merchant memory keys on a cleaned-up merchant name.** Store numbers and order references vary
 per visit (`WHOLE FOODS MARKET #123`, `AMAZON.COM*AB123`), so they're stripped before matching.
@@ -259,7 +269,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (76).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (91).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -324,10 +334,11 @@ The running to-do list, roughly in the order worth tackling. Updated as things g
 everything. Origins are no longer wide open, but that is not access control. This is the one
 thing standing between the container above and running it anywhere public.
 
-**2. Export.** Save the dashboard or the predictions as CSV or PDF.
-
-**3. Budgets.** Set a monthly target per category and track against it — the natural next step
+**2. Budgets.** Set a monthly target per category and track against it — the natural next step
 once predictions exist.
+
+**3. Export the predictions.** Transactions, categories and months export as CSV; the AI forecast
+and its recommendations do not, and a PDF of the dashboard is still worth having.
 
 **4. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
@@ -342,6 +353,7 @@ building it there. Worth doing after (1).
 
 ### Done
 
+- ~~CSV export~~ — transactions, category totals and monthly totals, honouring the active filters
 - ~~Deployable as one thing~~ — frontend packaged into the jar, Docker image, CI builds and boots it
 - ~~Date range filtering~~ — presets and a custom window across dashboard, transactions, recurring
 - ~~Edit and delete transactions~~

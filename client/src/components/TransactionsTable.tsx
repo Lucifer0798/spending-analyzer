@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   deleteTransaction,
+  exportUrl,
   fetchCategories,
   fetchTransactions,
   updateTransaction,
@@ -8,6 +9,7 @@ import {
 } from "../api";
 import type { DateRangeValue, Transaction } from "../types";
 import { currencyPrecise } from "../format";
+import { ExportLink } from "./ExportLink";
 
 interface Props {
   accountId: number | null;
@@ -144,20 +146,33 @@ export function TransactionsTable({ accountId, range }: Props) {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Transactions</h1>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-        >
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          {/* Exports the whole filtered set, not the page on screen — hence the row count. */}
+          <ExportLink
+            href={exportUrl("transactions", {
+              accountId,
+              range,
+              category: categoryFilter || undefined,
+            })}
+            label="Export CSV"
+            disabled={total === 0}
+            title={total > 0 ? `Download all ${total} matching transactions` : undefined}
+          />
+        </div>
       </div>
 
       {error && (
