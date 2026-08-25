@@ -3,17 +3,26 @@ import {
   createAccount,
   createCategory,
   deleteAccount,
+  deleteBudget,
   deleteCategory,
   fetchAccounts,
+  fetchBudgets,
   fetchCategories,
   fetchMerchants,
   forgetAllMerchants,
   forgetMerchant,
+  setBudget,
   updateAccount,
   updateCategory,
 } from "../api";
-import type { Account, AccountType, CategoryDetail, MerchantsResponse } from "../types";
-import { accountTypeLabel } from "../format";
+import type {
+  Account,
+  AccountType,
+  BudgetSummary,
+  CategoryDetail,
+  MerchantsResponse,
+} from "../types";
+import { accountTypeLabel, currency } from "../format";
 
 interface Props {
   onAccountsChanged: () => void;
@@ -24,8 +33,13 @@ export function ManagePage({ onAccountsChanged }: Props) {
   const [types, setTypes] = useState<AccountType[]>([]);
   const [categories, setCategories] = useState<CategoryDetail[]>([]);
   const [memory, setMemory] = useState<MerchantsResponse | null>(null);
+  const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Only holds categories the user has actually typed into. Everything else reads its value
+  // straight from the saved budget, so there is no state to keep in step after a reload.
+  const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
 
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState<AccountType>("checking");
@@ -33,15 +47,17 @@ export function ManagePage({ onAccountsChanged }: Props) {
   const [newCategoryKind, setNewCategoryKind] = useState<"spending" | "income" | "transfer">("spending");
 
   const reload = async () => {
-    const [accountsRes, categoriesRes, merchantsRes] = await Promise.all([
+    const [accountsRes, categoriesRes, merchantsRes, budgetsRes] = await Promise.all([
       fetchAccounts(true),
       fetchCategories(),
       fetchMerchants(),
+      fetchBudgets(null),
     ]);
     setAccounts(accountsRes.accounts);
     setTypes(accountsRes.types);
     setCategories(categoriesRes.detailed);
     setMemory(merchantsRes);
+    setBudgets(budgetsRes);
   };
 
   useEffect(() => {
@@ -61,6 +77,10 @@ export function ManagePage({ onAccountsChanged }: Props) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     }
   };
+
+  // Budgeting income or transfers is meaningless — neither counts as spending anywhere else.
+  const spendingCategories = categories.filter((c) => !c.is_income && !c.is_transfer);
+  const budgetByCategory = new Map((budgets?.budgets ?? []).map((b) => [b.category, b]));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -262,6 +282,93 @@ export function ManagePage({ onAccountsChanged }: Props) {
             Add category
           </button>
         </div>
+      </section>
+
+      {/* ---------------- Budgets ---------------- */}
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Budgets</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          A monthly target per category. Progress against it shows on the dashboard. Income and
+          transfer categories are left out — they are not spending, so there is nothing to cap.
+        </p>
+
+        <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
+              {spendingCategories.map((c) => {
+                const saved = budgetByCategory.get(c.name);
+                const draft = budgetDrafts[c.name] ?? (saved ? String(saved.monthlyLimit) : "");
+                const parsed = Number(draft);
+                const canSave =
+                  draft.trim() !== "" &&
+                  Number.isFinite(parsed) &&
+                  parsed > 0 &&
+                  parsed !== saved?.monthlyLimit;
+
+                return (
+                  <tr key={c.id}>
+                    <td className="px-4 py-2">
+                      <div className="text-sm text-slate-800 dark:text-slate-200">{c.name}</div>
+                      {saved && (
+                        <div className="text-xs text-slate-500">
+                          {currency(saved.spent)} spent of {currency(saved.monthlyLimit)} this month
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="10"
+                          inputMode="decimal"
+                          value={draft}
+                          placeholder="No budget"
+                          onChange={(e) =>
+                            setBudgetDrafts((d) => ({ ...d, [c.name]: e.target.value }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && canSave) {
+                              run(() => setBudget(c.name, parsed), `Budget set for ${c.name}.`);
+                            }
+                          }}
+                          className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-900"
+                        />
+                        <button
+                          disabled={!canSave}
+                          onClick={() =>
+                            run(() => setBudget(c.name, parsed), `Budget set for ${c.name}.`)
+                          }
+                          className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+                        >
+                          Save
+                        </button>
+                        <button
+                          disabled={!saved}
+                          onClick={() =>
+                            run(() => deleteBudget(saved!.id), `Budget cleared for ${c.name}.`).then(
+                              // Drop the draft too, or the input keeps showing the old number.
+                              () => setBudgetDrafts((d) => ({ ...d, [c.name]: "" }))
+                            )
+                          }
+                          className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {budgets && budgets.budgets.length > 0 && (
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+            {currency(budgets.totalSpent)} spent against {currency(budgets.totalLimit)} budgeted.
+          </p>
+        )}
       </section>
 
       {/* ---------------- Merchant memory ---------------- */}

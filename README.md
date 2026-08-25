@@ -139,7 +139,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V5)
-  src/test/                 91 tests
+  src/test/                 113 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -171,6 +171,7 @@ Five tables, all created automatically:
 | `accounts` | Your accounts; everything belongs to one, defaulting to "Default" |
 | `categories` | The 16 built-in categories plus any you add |
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
+| `budgets` | A monthly spending target per category |
 | `predictions_cache` | The most recent AI forecast |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
@@ -194,7 +195,7 @@ none of them set.
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Which model to ask |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
 | `PORT` | `4000` | Port the server listens on |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated origins allowed to call `/api`. Blank turns CORS off, which is what the container does — packaged as one artifact the frontend is same-origin and needs no exception |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:[*]`, `http://127.0.0.1:[*]` | Comma-separated origin patterns allowed to call `/api`. Loopback on any port by default, because Vite moves off 5173 when it's taken. Blank turns CORS off, which is what the container does — packaged as one artifact the frontend is same-origin and needs no exception |
 
 `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` can also come from `server-springboot/.env`.
 
@@ -214,6 +215,7 @@ All endpoints live under `/api`.
 | `GET` | `/recurring` | Detected recurring charges |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
+| `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them |
 | `GET` | `/export/transactions.csv` | Download transactions, filters and all |
 | `GET` | `/export/categories.csv` | Download spend per category |
 | `GET` | `/export/monthly.csv` | Download spend per month |
@@ -236,6 +238,16 @@ supermarket, since you shop there regularly — but for a different amount each 
 is what separates "Netflix, £15.49 every month" from "groceries, roughly fortnightly, £60–£100".
 Charges on the same date are treated as one billing event, so two cards billed by the same
 merchant on the same day don't confuse the rhythm.
+
+**Budgets measure a month, and pick the month that has data in it.** A budget is monthly, so a
+date filter is reduced to the month it ends in. With no filter, the default is the newest month
+on record rather than the current calendar month — statements get imported weeks after the fact,
+and defaulting to "now" would show every budget untouched at zero on a fresh import. The month
+being measured is always named on the card, so it can't quietly disagree with your filter.
+
+Targets are stored per category name, which means a category rename or delete has to reach them.
+A rename carries the budget across; a delete drops it rather than folding it into whichever
+category the transactions moved to, since that would silently change a number you set.
 
 **CSV exports carry the filters you're looking at, and a signed amount.** Exporting a filtered
 view gives you the filtered rows — but *all* of them, not the page on screen, because a silently
@@ -269,7 +281,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (91).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (113).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -334,25 +346,23 @@ The running to-do list, roughly in the order worth tackling. Updated as things g
 everything. Origins are no longer wide open, but that is not access control. This is the one
 thing standing between the container above and running it anywhere public.
 
-**2. Budgets.** Set a monthly target per category and track against it — the natural next step
-once predictions exist.
-
-**3. Export the predictions.** Transactions, categories and months export as CSV; the AI forecast
+**2. Export the predictions.** Transactions, categories and months export as CSV; the AI forecast
 and its recommendations do not, and a PDF of the dashboard is still worth having.
 
-**4. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
+**3. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
 
-**5. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
+**4. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
 
-**6. Predictions per date range.** Forecasts currently always use an account's full history and
+**5. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
-**7. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
+**6. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
 building it there. Worth doing after (1).
 
 ### Done
 
+- ~~Budgets~~ — a monthly target per category, tracked on the dashboard
 - ~~CSV export~~ — transactions, category totals and monthly totals, honouring the active filters
 - ~~Deployable as one thing~~ — frontend packaged into the jar, Docker image, CI builds and boots it
 - ~~Date range filtering~~ — presets and a custom window across dashboard, transactions, recurring
