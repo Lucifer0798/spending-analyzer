@@ -190,3 +190,25 @@ export function refreshPredictions(accountId: number | null) {
 export function resetAllData() {
   return request<{ ok: true }>("/reset", { method: "DELETE" });
 }
+
+// --- export -----------------------------------------------------------------
+
+export type ExportKind = "transactions" | "categories" | "monthly";
+
+/**
+ * Builds a download URL rather than fetching. The browser handles the response, which keeps
+ * the filename the server sets — fetching would give us a blob with that header discarded,
+ * and the app would have to invent a filename to hand back.
+ */
+export function exportUrl(
+  kind: ExportKind,
+  params: {
+    accountId?: number | null;
+    range?: DateRangeValue;
+    category?: string;
+    month?: string;
+  } = {}
+) {
+  const { range, ...rest } = params;
+  return `/api/export/${kind}.csv${qs({ ...rest, from: range?.from, to: range?.to })}`;
+}

@@ -125,6 +125,12 @@ same-origin and needs no CORS at all; the only real caller from another origin i
 `CORS_ALLOWED_ORIGINS` widens it, and the container sets it blank. This is *not* access control —
 there is still no authentication, which is the top item on the README roadmap.
 
+**Exports are links, not fetches.** `/api/export/*.csv` are plain GETs returning an attachment,
+so the frontend renders an `<a download>` and the browser does the rest. Fetching them into a blob
+would discard the `Content-Disposition` filename and force the client to invent one. They are also
+unpaged on purpose — the transactions endpoint's 200-row default would truncate a file silently,
+and `ExportControllerTest` seeds 250 rows specifically to catch that regression.
+
 **The database path is an environment variable.** `${user.dir}/data.sqlite` is right for a local
 run and useless in a container, where the file has to sit on a mounted volume to survive
 `docker rm`. Hence `SPENDING_ANALYZER_DB`, defaulting to the old behaviour.
