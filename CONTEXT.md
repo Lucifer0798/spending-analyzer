@@ -120,10 +120,25 @@ Maven stage, which caches better — but then "how the client is built" is defin
 drift. The image runs `./mvnw -Pfrontend` instead, so `docker build` and a local release build
 produce the same jar by the same path.
 
-**CORS defaults to the Vite origin, not `*`.** Once the app is one artifact the frontend is
+**CORS defaults to loopback on any port, not `*`.** Once the app is one artifact the frontend is
 same-origin and needs no CORS at all; the only real caller from another origin is the dev server.
+The port has to be a wildcard (`http://localhost:[*]`) rather than a pinned 5173: Vite moves to
+5174 and upwards when another project already holds 5173, and a pinned origin turns that into a
+403 on every write while reads appear to work — a genuinely confusing failure, and one that
+already happened here. `CorsConfigTest` covers both the fallback port and the rejection cases.
 `CORS_ALLOWED_ORIGINS` widens it, and the container sets it blank. This is *not* access control —
 there is still no authentication, which is the top item on the README roadmap.
+
+**Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
+owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
+the budget rather than folding it into the fallback category. Anything else that starts storing
+a category name belongs in those two methods too.
+
+**Exports are links, not fetches.** `/api/export/*.csv` are plain GETs returning an attachment,
+so the frontend renders an `<a download>` and the browser does the rest. Fetching them into a blob
+would discard the `Content-Disposition` filename and force the client to invent one. They are also
+unpaged on purpose — the transactions endpoint's 200-row default would truncate a file silently,
+and `ExportControllerTest` seeds 250 rows specifically to catch that regression.
 
 **The database path is an environment variable.** `${user.dir}/data.sqlite` is right for a local
 run and useless in a container, where the file has to sit on a mounted volume to survive

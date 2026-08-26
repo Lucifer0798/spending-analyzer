@@ -136,6 +136,36 @@ export interface SummaryResponse {
   monthlyByCategory: CategoryMonthlySeries[];
 }
 
+export interface Budget {
+  id: number;
+  category: string;
+  monthly_limit: number;
+  updated_at: string;
+}
+
+/** "near" is 80% or more of the target; "over" is past it. */
+export type BudgetStatus = "under" | "near" | "over";
+
+export interface BudgetProgress {
+  id: number;
+  category: string;
+  monthlyLimit: number;
+  spent: number;
+  /** Negative once the budget is blown. */
+  remaining: number;
+  /** Uncapped, so 140 means 40% over. */
+  percentUsed: number;
+  status: BudgetStatus;
+}
+
+export interface BudgetSummary {
+  /** The month actually measured, which the server picks when none was asked for. */
+  month: string;
+  budgets: BudgetProgress[];
+  totalLimit: number;
+  totalSpent: number;
+}
+
 export interface Prediction {
   category: string;
   predicted_next_month: number;

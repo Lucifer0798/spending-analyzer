@@ -10,9 +10,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fetchPredictions, fetchSummary, refreshPredictions } from "../api";
+import { exportUrl, fetchPredictions, fetchSummary, refreshPredictions } from "../api";
 import type { DateRangeValue, PredictionsPayload, SummaryResponse } from "../types";
 import { currency } from "../format";
+import { ExportLink } from "./ExportLink";
+import { BudgetsCard } from "./BudgetsCard";
 
 interface Props {
   accountId: number | null;
@@ -152,8 +154,15 @@ export function Dashboard({ accountId, range }: Props) {
             />
           </div>
 
+          {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
+              for anyone not using them. */}
+          <BudgetsCard accountId={accountId} range={range} />
+
           <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Monthly spend trend</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monthly spend trend</h2>
+              <ExportLink compact href={exportUrl("monthly", { accountId, range })} label="Export CSV" />
+            </div>
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={summary.monthlyTotals}>
                 <CartesianGrid stroke={GRID} vertical={false} />
@@ -166,7 +175,16 @@ export function Dashboard({ accountId, range }: Props) {
           </div>
 
           <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Spending by category</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Spending by category</h2>
+              {/* The chart shows the top 12; the export has every category, which is the point of it. */}
+              <ExportLink
+                compact
+                href={exportUrl("categories", { accountId, range })}
+                label="Export CSV"
+                title="Download every category, not just the top 12 shown"
+              />
+            </div>
             <ResponsiveContainer width="100%" height={Math.max(240, categoryBars.length * 32)}>
               <BarChart data={categoryBars} layout="vertical" margin={{ left: 24 }}>
                 <CartesianGrid stroke={GRID} horizontal={false} />
