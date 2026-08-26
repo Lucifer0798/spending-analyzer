@@ -75,6 +75,16 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!--
+      MockMvc. Same Spring Boot 4 split as the Flyway module above: @AutoConfigureMockMvc moved
+      out of spring-boot-test-autoconfigure into this per-technology module, so the starter
+      alone no longer provides it.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

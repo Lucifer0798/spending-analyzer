@@ -14,6 +14,7 @@ import { exportUrl, fetchPredictions, fetchSummary, refreshPredictions } from ".
 import type { DateRangeValue, PredictionsPayload, SummaryResponse } from "../types";
 import { currency } from "../format";
 import { ExportLink } from "./ExportLink";
+import { BudgetsCard } from "./BudgetsCard";
 
 interface Props {
   accountId: number | null;
@@ -152,6 +153,10 @@ export function Dashboard({ accountId, range }: Props) {
               sub={generatedAt ? `as of ${new Date(generatedAt).toLocaleDateString()}` : "not generated yet"}
             />
           </div>
+
+          {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
+              for anyone not using them. */}
+          <BudgetsCard accountId={accountId} range={range} />
 
           <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between">

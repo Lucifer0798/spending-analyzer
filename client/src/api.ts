@@ -1,6 +1,8 @@
 import type {
   Account,
   AccountType,
+  Budget,
+  BudgetSummary,
   CategorizeResult,
   CategoryDetail,
   DateBounds,
@@ -144,6 +146,25 @@ export function deleteCategory(id: number) {
     `/categories/${id}`,
     { method: "DELETE" }
   );
+}
+
+// --- budgets ----------------------------------------------------------------
+
+/** Omit `month` to get the newest month on record, which is what the dashboard shows. */
+export function fetchBudgets(accountId: number | null, month?: string) {
+  return request<BudgetSummary>(`/budgets${qs({ accountId, month })}`);
+}
+
+/** Upsert: sets the target for a category whether or not one already exists. */
+export function setBudget(category: string, monthlyLimit: number) {
+  return request<Budget>("/budgets", {
+    method: "POST",
+    body: JSON.stringify({ category, monthly_limit: monthlyLimit }),
+  });
+}
+
+export function deleteBudget(id: number) {
+  return request<{ ok: true }>(`/budgets/${id}`, { method: "DELETE" });
 }
 
 // --- insights ---------------------------------------------------------------
