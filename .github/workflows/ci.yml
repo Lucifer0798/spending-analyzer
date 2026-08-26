@@ -56,10 +56,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Matches the JDK in the Dockerfile: the tests should run on the runtime that ships,
+      # not one major behind it. The compile target stays at 21 (see pom.xml), so the jar
+      # still runs on a 21 JRE for anyone not using the image.
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: maven
 
       - name: Build and test

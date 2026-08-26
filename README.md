@@ -153,7 +153,7 @@ compose.yaml                Runs that image with a volume for the database
 
 ## Tech stack
 
-**Backend** — Java 21, Spring Boot 4.1, SQLite (`sqlite-jdbc`), Flyway for schema migrations,
+**Backend** — Java 21 (built and shipped on 25), Spring Boot 4.1, SQLite (`sqlite-jdbc`), Flyway for schema migrations,
 Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-java` SDK
 (`claude-opus-5`, using structured JSON output so responses match a fixed schema).
 

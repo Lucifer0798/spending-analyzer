@@ -12,7 +12,7 @@ how to work on it.
 
 | | |
 |---|---|
-| Java | 21+ installed. No Maven — use `./mvnw` (`mvnw.cmd` on Windows) |
+| Java | 21+ installed. No Maven — use `./mvnw` (`mvnw.cmd` on Windows). CI and the image use 25; the compile target stays 21, so any JDK from 21 up builds and runs it |
 | Node | 22 |
 | Shell | Git Bash and PowerShell both available |
 | `gh` CLI | Installed at `C:\Program Files\GitHub CLI`, **not on PATH**. Prefix commands with `export PATH="$PATH:/c/Program Files/GitHub CLI"` |

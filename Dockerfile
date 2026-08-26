@@ -5,7 +5,7 @@
 # profile rather than a separate Node stage, so there is a single definition of how the client
 # is built and `./mvnw -Pfrontend package` produces the same artifact outside Docker.
 
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 
 COPY client client
@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     ./mvnw -B -ntp -Pfrontend -DskipTests clean package
 
 
-FROM eclipse-temurin:21-jre AS runtime
+FROM eclipse-temurin:25-jre AS runtime
 
 # Runs unprivileged: nothing in the app needs root, and the only writable path it wants is /data.
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
