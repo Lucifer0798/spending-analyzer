@@ -73,16 +73,23 @@ public class CategoryRepository {
     }
 
     /**
-     * Renames a category and cascades the new name onto transactions. Transactions store
-     * the category name rather than an id, so the rename has to be applied in both places
-     * inside one transaction or the two fall out of sync.
+     * Renames a category and cascades the new name everywhere it is stored. Three other tables
+     * reference a category by name rather than by id, so the rename has to reach all of them
+     * inside one transaction or they fall out of sync: transactions would keep the old label,
+     * merchant memory would re-apply a category that no longer exists on the next import, and
+     * the budget would silently stop matching any spend.
      */
     @Transactional
     public void rename(long id, String oldName, String newName) {
+        MapSqlParameterSource names = new MapSqlParameterSource()
+                .addValue("newName", newName)
+                .addValue("oldName", oldName);
+
         jdbc.update("UPDATE categories SET name = :newName WHERE id = :id",
                 new MapSqlParameterSource().addValue("newName", newName).addValue("id", id));
-        jdbc.update("UPDATE transactions SET category = :newName WHERE category = :oldName",
-                new MapSqlParameterSource().addValue("newName", newName).addValue("oldName", oldName));
+        jdbc.update("UPDATE transactions SET category = :newName WHERE category = :oldName", names);
+        jdbc.update("UPDATE merchant_categories SET category = :newName WHERE category = :oldName", names);
+        jdbc.update("UPDATE budgets SET category = :newName WHERE category = :oldName", names);
     }
 
     public boolean updateFlags(long id, Boolean isIncome, Boolean isTransfer) {
@@ -107,13 +114,22 @@ public class CategoryRepository {
     }
 
     /**
-     * Deletes a category and moves any transactions using it to {@code reassignTo},
-     * so no transaction is left pointing at a category that no longer exists.
+     * Deletes a category and moves any transactions using it to {@code reassignTo}, so nothing
+     * is left pointing at a category that no longer exists. Merchant memory moves with them —
+     * left behind, it would re-apply the deleted category on the next import.
+     *
+     * <p>The budget is dropped rather than moved: folding one category's target into another's
+     * would quietly change a number the user set deliberately.
      */
     @Transactional
     public void deleteAndReassign(long id, String name, String reassignTo) {
-        jdbc.update("UPDATE transactions SET category = :reassignTo WHERE category = :name",
-                new MapSqlParameterSource().addValue("reassignTo", reassignTo).addValue("name", name));
+        MapSqlParameterSource reassign = new MapSqlParameterSource()
+                .addValue("reassignTo", reassignTo)
+                .addValue("name", name);
+
+        jdbc.update("UPDATE transactions SET category = :reassignTo WHERE category = :name", reassign);
+        jdbc.update("UPDATE merchant_categories SET category = :reassignTo WHERE category = :name", reassign);
+        jdbc.update("DELETE FROM budgets WHERE category = :name", new MapSqlParameterSource("name", name));
         jdbc.update("DELETE FROM categories WHERE id = :id", new MapSqlParameterSource("id", id));
     }
 }
