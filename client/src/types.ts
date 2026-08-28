@@ -136,6 +136,13 @@ export interface SummaryResponse {
   monthlyByCategory: CategoryMonthlySeries[];
 }
 
+export interface AuthStatus {
+  /** False when no password is configured, in which case the app is open by design. */
+  authRequired: boolean;
+  /** Always true when authRequired is false — there is nothing to be signed in to. */
+  authenticated: boolean;
+}
+
 export interface Budget {
   id: number;
   category: string;

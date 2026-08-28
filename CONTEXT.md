@@ -124,6 +124,25 @@ Maven stage, which caches better — but then "how the client is built" is defin
 drift. The image runs `./mvnw -Pfrontend` instead, so `docker build` and a local release build
 produce the same jar by the same path.
 
+**Authentication is one shared password, and its default depends on how you run it.** No user
+model: one person's data in one SQLite file, so accounts would mean an owner column on six
+tables and a scoping clause in every query for a problem the app does not have. `AuthSettings`
+holds the secret; blank means the gate is open and logs a warning, which is right for a local
+run. The Dockerfile sets `APP_AUTH_REQUIRED=true`, so the *image* throws `MissingPasswordException`
+at startup rather than coming up open — with a `FailureAnalyzer` so the operator sees a readable
+block instead of sixty lines of stack trace. CI asserts both: 401 to an unauthenticated caller,
+and a non-zero exit with no password.
+
+> **A CSRF rejection reads as 401, not 403, when the caller is not signed in yet.** Spring routes
+> `AccessDeniedException` for an anonymous user to the *authentication* entry point, which is
+> ours and returns 401. So a stale `XSRF-TOKEN` cookie — from a redeploy, or another instance on
+> the same port — looks exactly like a wrong password. `login()` in `api.ts` refreshes the token
+> before submitting for precisely this reason; do not "optimise" that call away.
+
+> **A `@SpringBootTest` that writes through MockMvc needs `@Transactional`.** The test database is
+> a file, so anything not rolled back leaks into whichever test asserts on it next. `AuthGateTest`
+> broke `BudgetControllerTest` this way before the annotation was added.
+
 **CORS defaults to loopback on any port, not `*`.** Once the app is one artifact the frontend is
 same-origin and needs no CORS at all; the only real caller from another origin is the dev server.
 The port has to be a wildcard (`http://localhost:[*]`) rather than a pinned 5173: Vite moves to
