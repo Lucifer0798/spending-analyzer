@@ -138,14 +138,15 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V5)
+    db/migration/           Versioned schema migrations (V1–V6)
   src/test/                 113 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
 compose.yaml                Runs that image with a volume for the database
 
-.github/workflows/ci.yml    Runs on every push and pull request
+.github/workflows/ci.yml    Client, server and Docker image, on every push and pull request
+.github/workflows/codeql.yml  CodeQL security scanning
 .github/dependabot.yml      Weekly dependency updates
 ```
 
@@ -163,7 +164,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Five tables, all created automatically:
+Six tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -175,7 +176,7 @@ Five tables, all created automatically:
 | `predictions_cache` | The most recent AI forecast |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V6__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V7__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -288,12 +289,19 @@ application with no API key, which is how CI runs it, and catches broken wiring 
 migration that a compile-only check would miss.
 
 **CI.** Every push and pull request runs three jobs in parallel on GitHub Actions: the client, the
-server, and the Docker image. The image job doesn't just build — it starts the container and
-checks that both the API and the packaged frontend respond, since an image that builds and then
-fails to boot would otherwise pass unnoticed.
+server, and the Docker image. All three are required to merge. The image job doesn't just build —
+it starts the container and checks that both the API and the packaged frontend respond, since an
+image that builds and then fails to boot would otherwise pass unnoticed.
+
+**Security scanning.** CodeQL analyses the Java and the TypeScript on every change, and again
+weekly — new queries ship over time, so a scheduled run finds problems in code nobody has touched.
+Results land in the repository's Security tab. It is not a required check: a scanner's opinion is
+worth reading, not worth blocking a merge on.
 
 **Dependencies.** Dependabot checks npm, Maven, the base images, and the CI actions weekly. Small
 updates are grouped into one pull request; major ones arrive separately so they get a proper look.
+One thing it can't see: the Node version in the `frontend` profile is a Maven property, not a
+dependency, so that line is bumped by hand.
 
 ---
 
@@ -352,16 +360,15 @@ and its recommendations do not, and a PDF of the dashboard is still worth having
 **3. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
 
-**4. CodeQL.** Free security scanning for public repositories, roughly ten minutes to set up.
-
-**5. Predictions per date range.** Forecasts currently always use an account's full history and
+**4. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
-**6. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
+**5. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
 building it there. Worth doing after (1).
 
 ### Done
 
+- ~~CodeQL~~ — security scanning of the Java and the TypeScript, on every change and weekly
 - ~~Budgets~~ — a monthly target per category, tracked on the dashboard
 - ~~CSV export~~ — transactions, category totals and monthly totals, honouring the active filters
 - ~~Deployable as one thing~~ — frontend packaged into the jar, Docker image, CI builds and boots it

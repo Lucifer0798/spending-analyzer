@@ -112,7 +112,14 @@
     <profile>
       <id>frontend</id>
       <properties>
-        <!-- Vite 8 requires ^20.19 || >=22.12, so this floor is not arbitrary. -->
+        <!--
+          Vite 8 requires ^20.19 || >=22.12, so this floor is not arbitrary.
+
+          Bump this by hand. It is a Maven property rather than a dependency, so Dependabot
+          cannot see it — unlike everything else in this repo, nothing will tell you when it
+          has gone stale. The CI client job tracks Node 22 by major and will drift ahead of
+          it; that mismatch is the signal to update this line.
+        -->
         <node.version>v22.23.2</node.version>
         <client.dir>${project.basedir}/../client</client.dir>
       </properties>
