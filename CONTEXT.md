@@ -59,9 +59,13 @@ debugging further.
 to date with `main` before merging. Enforced for admins, so there is no bypass without turning
 protection off in **Settings → Branches**.
 
-> The **Docker image** job runs on every PR but is *not* in the required-checks list — adding a
-> job to the workflow does not make it required. Add it in **Settings → Branches** if it should
-> block merges.
+Required checks are **Client (React + Vite)**, **Server (Spring Boot)** and **Docker image**.
+Adding a job to the workflow does not make it required — that is a separate setting under
+**Settings → Branches**.
+
+> **CodeQL is deliberately not required.** It runs on every change and weekly, and its findings
+> belong in the Security tab. Blocking a merge on a scanner's opinion trades a real cost for a
+> judgement call that a human should be making.
 
 - Branch names: `feat/*`, `chore/*`, `docs/*`
 - Squash merge, delete the branch
