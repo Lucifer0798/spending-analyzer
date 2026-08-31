@@ -124,6 +124,15 @@ Maven stage, which caches better — but then "how the client is built" is defin
 drift. The image runs `./mvnw -Pfrontend` instead, so `docker build` and a local release build
 produce the same jar by the same path.
 
+**The image is published from the job that tested it, not a separate one.** The `image` job
+builds, boots and probes the container, and only then — on `main` only — tags and pushes it to
+GHCR as `latest` and `sha-<commit>`. A separate publish job would rebuild, and would be free to
+push something the smoke test never saw. Pull requests build and test but never push.
+
+> GHCR rejects uppercase in a repository path and this owner has some, hence the `tr` in that
+> step. Also: the first push creates the package as **private** — it has to be made public by
+> hand in the repository's Packages settings before an anonymous `docker pull` works.
+
 **Authentication is one shared password, and its default depends on how you run it.** No user
 model: one person's data in one SQLite file, so accounts would mean an owner column on six
 tables and a scoping clause in every query for a problem the app does not have. `AuthSettings`
