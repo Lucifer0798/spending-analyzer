@@ -88,13 +88,17 @@ jobs:
       - name: Build image
         run: docker build -t spending-analyzer:ci .
 
+      # The image sets APP_AUTH_REQUIRED=true, so this also proves that a password is enough
+      # to start it — the refusal path is covered by the step below.
       - name: Start container
-        run: docker run -d --name app -p 4000:4000 spending-analyzer:ci
+        run: docker run -d --name app -p 4000:4000 -e APP_PASSWORD=ci-smoke-test spending-analyzer:ci
 
       - name: Wait for it to come up
         run: |
+          # /api/auth/status is the one endpoint outside the gate, so it is what a health
+          # check or a load balancer should poll. Everything else answers 401 until sign-in.
           for _ in $(seq 1 60); do
-            if curl -sf -o /dev/null http://localhost:4000/api/health; then
+            if curl -sf -o /dev/null http://localhost:4000/api/auth/status; then
               echo "up"; exit 0
             fi
             sleep 2
@@ -103,10 +107,28 @@ jobs:
           docker logs app
           exit 1
 
-      - name: Check the API and the packaged frontend both respond
+      - name: Check the packaged frontend is served and the API is locked
         run: |
-          curl -sf http://localhost:4000/api/health | grep -q '"ok":true'
           curl -sf http://localhost:4000/ | grep -qi '<div id="root">'
+          curl -sf http://localhost:4000/api/auth/status | grep -q '"authRequired":true'
+
+          # The whole point of shipping with a password: data endpoints must refuse a caller
+          # who has not signed in. A 200 here would mean the image ships wide open.
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/summary)
+          if [ "$status" != "401" ]; then
+            echo "::error::/api/summary answered $status to an unauthenticated caller, expected 401"
+            exit 1
+          fi
+
+      - name: Check it refuses to start with no password
+        run: |
+          # Silently falling back to an open instance is the failure this guards against, so
+          # the container must exit rather than come up.
+          if docker run --rm --name no-password spending-analyzer:ci; then
+            echo "::error::container started without APP_PASSWORD, expected it to refuse"
+            exit 1
+          fi
+          echo "refused to start without a password, as intended"
 
       - name: Container logs
         if: always()

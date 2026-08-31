@@ -12,6 +12,10 @@ services:
     environment:
       # Same-origin once packaged, so the Vite dev-server exception is not wanted here.
       - CORS_ALLOWED_ORIGINS=
+      # The password guarding this instance. The image sets APP_AUTH_REQUIRED=true, so if this
+      # is unset the container stops with an explanatory message instead of starting open.
+      # Put APP_PASSWORD in server-springboot/.env, or export it before `docker compose up`.
+      - APP_PASSWORD
       # Listed without a value so the host's variable is passed through when set and left
       # alone when not — writing `ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}` would override
       # whatever .env supplied with an empty string.

@@ -1,0 +1,4 @@
+# Failure analyzers are still registered here rather than in AutoConfiguration.imports — they
+# run before the application context exists, so they cannot be auto-configuration.
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+com.spendinganalyzer.config.MissingPasswordFailureAnalyzer
