@@ -61,24 +61,26 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, AuthSettings auth) throws Exception {
+        // CSRF applies in both modes. The tempting argument for switching it off when there is
+        // no password — no login, so no ambient authority to ride — leans entirely on CORS to
+        // stop a cross-site write, and CORS here is configurable. A page the user happens to
+        // have open should not be able to reach a local instance and empty it. The frontend
+        // already sends the token in both modes, so this costs nothing.
+        //
+        // The SPA reads the token from the cookie and echoes it in a header, so the cookie must
+        // be readable by script, and the plain handler is required — the default XOR one gives
+        // the client a value the server will not accept back.
+        http.csrf(csrf -> csrf
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));
+
         if (!auth.enabled()) {
-            // No password means no login, so CSRF has nothing to protect and would only turn
-            // every write into a 403 for an app that is deliberately open.
             return http
-                    .csrf(csrf -> csrf.disable())
                     .authorizeHttpRequests(rules -> rules.anyRequest().permitAll())
                     .build();
         }
 
-        // The SPA reads the token from the cookie and echoes it in a header, so the cookie must
-        // be readable by script, and the plain handler is required — the default XOR one gives
-        // the client a value the server will not accept back.
-        var csrfHandler = new CsrfTokenRequestAttributeHandler();
-
         return http
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(csrfHandler))
                 .authorizeHttpRequests(rules -> rules
                         .requestMatchers(SHELL).permitAll()
                         // Signing in cannot itself require being signed in.
