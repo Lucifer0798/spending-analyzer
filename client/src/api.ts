@@ -1,6 +1,7 @@
 import type {
   Account,
   AccountType,
+  AuthStatus,
   Budget,
   BudgetSummary,
   CategorizeResult,
@@ -16,13 +17,60 @@ import type {
 } from "./types";
 import { ALL_TIME } from "./types";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+function readCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Called whenever the server says we are not signed in, including when a session expires
+ * mid-use. App registers this so a stale session sends you back to the login screen rather
+ * than showing a wall of failed requests.
+ */
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
+interface RequestOptions extends RequestInit {
+  /**
+   * Skips the "session ended, go back to the login screen" reaction to a 401. Set for the
+   * sign-in call itself, where a 401 means the password was wrong, not that a session lapsed.
+   */
+  ownsAuthFailure?: boolean;
+}
+
+async function request<T>(path: string, options?: RequestOptions): Promise<T> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  const headers: Record<string, string> = {};
+
+  if (!(options?.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  // Spring hands the CSRF token out as a readable cookie; anything that changes state has to
+  // echo it back in this header or the request is refused as cross-site. Reads don't need it.
+  if (method !== "GET" && method !== "HEAD") {
+    const token = readCookie("XSRF-TOKEN");
+    if (token) headers["X-XSRF-TOKEN"] = token;
+  }
+
   const res = await fetch(`/api${path}`, {
-    headers: options?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
     ...options,
+    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
   });
+
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
+    const body = await res.json().catch(() => ({}) as { error?: string });
+
+    if (res.status === 401 && !options?.ownsAuthFailure) {
+      onUnauthorized?.();
+      throw new Error("Your session has ended. Please sign in again.");
+    }
+
+    // Otherwise pass the server's own wording through — "Incorrect password." is far more use
+    // to someone signing in than a generic failure would be.
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
   return res.json() as Promise<T>;
@@ -38,6 +86,36 @@ function qs(params: Record<string, string | number | boolean | null | undefined>
   }
   const s = search.toString();
   return s ? `?${s}` : "";
+}
+
+// --- auth -------------------------------------------------------------------
+
+/**
+ * Whether this instance has a password at all, and whether this browser is past it.
+ *
+ * <p>Call this before anything else: it is also what causes the server to issue the CSRF
+ * cookie, which every later write depends on.
+ */
+export function fetchAuthStatus() {
+  return request<AuthStatus>("/auth/status");
+}
+
+export async function login(password: string) {
+  // Refresh the CSRF token first. A cookie left over from a previous run of the server — a
+  // redeploy, or a different instance on the same port — is no longer valid, and because the
+  // caller is not signed in yet the rejection comes back as a 401 that reads like a wrong
+  // password. One extra GET removes the whole confusing class of failure.
+  await fetchAuthStatus();
+
+  return request<{ ok: true }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+    ownsAuthFailure: true,
+  });
+}
+
+export function logout() {
+  return request<{ ok: true }>("/auth/logout", { method: "POST" });
 }
 
 // --- upload -----------------------------------------------------------------

@@ -31,6 +31,11 @@ USER app
 
 # The SQLite file lives on a volume so the database survives `docker rm`.
 ENV SPENDING_ANALYZER_DB=/data/spending-analyzer.sqlite
+
+# An image exists to be run somewhere reachable, so it refuses to start without a password
+# rather than coming up open on a network. Set APP_PASSWORD when you run it. A local
+# `mvnw spring-boot:run` is unaffected and stays open by default.
+ENV APP_AUTH_REQUIRED=true
 VOLUME ["/data"]
 
 EXPOSE 4000

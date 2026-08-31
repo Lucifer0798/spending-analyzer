@@ -86,11 +86,15 @@ already in memory all work offline. Only fresh AI categorization and predictions
 **You'll need:** Docker.
 
 ```bash
-docker compose up --build
+APP_PASSWORD=pick-something docker compose up --build
 ```
 
-Open **http://localhost:4000**. That's the whole app: the React frontend is built into the jar
-and served by Spring Boot, so there's one process and one port.
+Open **http://localhost:4000** and sign in with that password. That's the whole app: the React
+frontend is built into the jar and served by Spring Boot, so there's one process and one port.
+
+The password isn't optional here. The image refuses to start without one, because an image
+exists to be run somewhere reachable and coming up open on a network is the mistake nobody
+notices. Put `APP_PASSWORD` in `server-springboot/.env` if you'd rather not type it each time.
 
 Your database lives in a named volume, so it survives `docker compose down` and any rebuild. The
 `.env` above is picked up automatically if it exists.
@@ -121,6 +125,9 @@ Open **http://localhost:5173**. Vite proxies `/api` to the backend and reloads o
 Windows use `mvnw.cmd`; no Maven install is needed, the wrapper fetches it. The database and its
 tables are created automatically on first run.
 
+No password is needed for this — a local run is open by default, and the server says so in its
+startup log. Set `APP_PASSWORD` if you want to exercise the login screen.
+
 ---
 
 ## Project layout
@@ -139,7 +146,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V6)
-  src/test/                 113 tests
+  src/test/                 128 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -154,7 +161,8 @@ compose.yaml                Runs that image with a volume for the database
 
 ## Tech stack
 
-**Backend** — Java 21 (built and shipped on 25), Spring Boot 4.1, SQLite (`sqlite-jdbc`), Flyway for schema migrations,
+**Backend** — Java 21 (built and shipped on 25), Spring Boot 4.1, Spring Security for the
+password gate, SQLite (`sqlite-jdbc`), Flyway for schema migrations,
 Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-java` SDK
 (`claude-opus-5`, using structured JSON output so responses match a fixed schema).
 
@@ -192,6 +200,8 @@ none of them set.
 
 | Variable | Default | What it does |
 |---|---|---|
+| `APP_PASSWORD` | *(empty)* | The password guarding this instance. Empty means no authentication at all — fine on localhost, not anywhere else |
+| `APP_AUTH_REQUIRED` | `false` | When true, the app refuses to start without a password. The Docker image sets this, so a container can never come up open |
 | `ANTHROPIC_API_KEY` | *(empty)* | Enables AI categorization and predictions |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Which model to ask |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
@@ -224,6 +234,8 @@ All endpoints live under `/api`.
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
 | `GET` `DELETE` | `/merchants` | View or forget merchant memory |
 | `DELETE` | `/reset` | Delete all transactions (keeps accounts and categories) |
+| `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
+| `POST` | `/auth/login` `/auth/logout` | Sign in and out |
 | `GET` | `/health` | Liveness, and whether an API key is configured |
 
 ---
@@ -239,6 +251,23 @@ supermarket, since you shop there regularly — but for a different amount each 
 is what separates "Netflix, £15.49 every month" from "groceries, roughly fortnightly, £60–£100".
 Charges on the same date are treated as one billing event, so two cards billed by the same
 merchant on the same day don't confuse the rhythm.
+
+**One password, and no user accounts.** There is exactly one secret, read from the environment.
+That isn't a shortcut — this app holds one person's statements in a local SQLite file, so per-user
+accounts would mean an owner column on all six tables and a scoping clause in every query, to
+solve a problem it doesn't have. What it does need is a lock on the door once it's reachable from
+anywhere but localhost.
+
+Which is why the default differs by how you run it. A local `mvnw spring-boot:run` is open, and
+says so loudly in its startup log. The Docker image sets `APP_AUTH_REQUIRED=true` and **refuses
+to start** without a password, because an image exists to be run somewhere reachable, and coming
+up open on a network is the failure nobody notices. CI asserts both halves: that the container
+answers 401 to an unauthenticated caller, and that it exits when given no password.
+
+Sessions are cookie-based, so writes carry a CSRF token. One consequence worth knowing: because
+a rejected token from a not-yet-signed-in caller comes back through the authentication entry
+point, it surfaces as a 401 rather than a 403 — so the frontend refreshes its token immediately
+before signing in, rather than showing you "incorrect password" when the password was fine.
 
 **Budgets measure a month, and pick the month that has data in it.** A budget is monthly, so a
 date filter is reduced to the month it ends in. With no filter, the default is the newest month
@@ -282,7 +311,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (113).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (128).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -350,24 +379,21 @@ If you ever genuinely need to bypass this, turn protection off in
 
 The running to-do list, roughly in the order worth tackling. Updated as things get done.
 
-**1. Authentication.** There is none — anyone who can reach the port can read and delete
-everything. Origins are no longer wide open, but that is not access control. This is the one
-thing standing between the container above and running it anywhere public.
-
-**2. Export the predictions.** Transactions, categories and months export as CSV; the AI forecast
+**1. Export the predictions.** Transactions, categories and months export as CSV; the AI forecast
 and its recommendations do not, and a PDF of the dashboard is still worth having.
 
-**3. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
+**2. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
 
-**4. Predictions per date range.** Forecasts currently always use an account's full history and
+**3. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
-**5. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
+**4. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
 building it there. Worth doing after (1).
 
 ### Done
 
+- ~~Authentication~~ — one shared password, session cookie, CSRF; the image will not start without it
 - ~~CodeQL~~ — security scanning of the Java and the TypeScript, on every change and weekly
 - ~~Budgets~~ — a monthly target per category, tracked on the dashboard
 - ~~CSV export~~ — transactions, category totals and monthly totals, honouring the active filters

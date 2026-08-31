@@ -5,8 +5,16 @@ import { TransactionsTable } from "./components/TransactionsTable";
 import { RecurringPage } from "./components/RecurringPage";
 import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
-import { fetchAccounts, fetchDateBounds, resetAllData } from "./api";
-import type { Account, DateBounds, DateRangeValue } from "./types";
+import { LoginScreen } from "./components/LoginScreen";
+import {
+  fetchAccounts,
+  fetchAuthStatus,
+  fetchDateBounds,
+  logout,
+  resetAllData,
+  setUnauthorizedHandler,
+} from "./api";
+import type { Account, AuthStatus, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
 type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "manage";
@@ -27,10 +35,28 @@ function App() {
   const [range, setRange] = useState<DateRangeValue>(ALL_TIME);
   const [bounds, setBounds] = useState<DateBounds | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // null while we are still asking the server whether there is a password at all.
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+
+  const signedIn = auth?.authenticated ?? false;
+
+  useEffect(() => {
+    // A session can expire while the app is open; this sends the user back to the login screen
+    // instead of leaving them looking at a page of failed requests.
+    setUnauthorizedHandler(() => setAuth({ authRequired: true, authenticated: false }));
+
+    // Also what makes the server issue the CSRF cookie, which every later write needs.
+    fetchAuthStatus()
+      .then(setAuth)
+      .catch(() => setAuth({ authRequired: true, authenticated: false }));
+
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const loadAccounts = useCallback(() => {
+    if (!signedIn) return;
     fetchAccounts().then((r) => setAccounts(r.accounts)).catch(() => setAccounts([]));
-  }, []);
+  }, [signedIn]);
 
   useEffect(() => {
     loadAccounts();
@@ -38,8 +64,9 @@ function App() {
 
   // Bounds anchor the date presets, and shift when the account filter changes.
   useEffect(() => {
+    if (!signedIn) return;
     fetchDateBounds(accountId).then(setBounds).catch(() => setBounds(null));
-  }, [accountId, refreshKey]);
+  }, [accountId, refreshKey, signedIn]);
 
   const handleReset = async () => {
     if (!confirm("This will delete all imported transactions. Accounts and categories are kept. Continue?")) {
@@ -52,8 +79,29 @@ function App() {
     setTab("upload");
   };
 
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      // Sign out locally even if the request failed — the session is unusable either way.
+      setAuth({ authRequired: true, authenticated: false });
+    }
+  };
+
   // The filters only apply to views that show transaction data.
   const showFilters = tab !== "manage" && tab !== "upload";
+
+  if (!auth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!auth.authenticated) {
+    return <LoginScreen onSignedIn={() => setAuth({ authRequired: true, authenticated: true })} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -104,6 +152,17 @@ function App() {
             >
               Reset
             </button>
+
+            {/* Only meaningful when there is a password; an open instance has nothing to sign out of. */}
+            {auth.authRequired && (
+              <button
+                onClick={handleSignOut}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                title="Sign out"
+              >
+                Sign out
+              </button>
+            )}
           </nav>
         </div>
       </header>
