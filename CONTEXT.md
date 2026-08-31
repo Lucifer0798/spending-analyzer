@@ -130,8 +130,8 @@ GHCR as `latest` and `sha-<commit>`. A separate publish job would rebuild, and w
 push something the smoke test never saw. Pull requests build and test but never push.
 
 > GHCR rejects uppercase in a repository path and this owner has some, hence the `tr` in that
-> step. Also: the first push creates the package as **private** — it has to be made public by
-> hand in the repository's Packages settings before an anonymous `docker pull` works.
+> step. The package inherited the repository's public visibility on first push — an anonymous
+> `docker pull` worked immediately, with no manual step in Packages settings.
 
 **Authentication is one shared password, and its default depends on how you run it.** No user
 model: one person's data in one SQLite file, so accounts would mean an owner column on six
