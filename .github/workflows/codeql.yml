@@ -52,7 +52,7 @@ jobs:
 
       - name: Set up Java
         if: matrix.build-mode == 'manual'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           # Matches the CI server job and the Dockerfile, so CodeQL analyses the code as it
