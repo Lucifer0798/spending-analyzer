@@ -83,21 +83,35 @@ already in memory all work offline. Only fresh AI categorization and predictions
 
 ### Option A: Docker — one thing to run
 
-**You'll need:** Docker.
+**You'll need:** Docker. Nothing else — not Java, not Node, not this repository.
+
+```bash
+docker run -p 4000:4000 -v spending-data:/data \
+  -e APP_PASSWORD=pick-something \
+  ghcr.io/lucifer0798/spending-analyzer:latest
+```
+
+Every merge to `main` publishes an image, tagged `latest` and with the commit it was built from.
+Only images that passed the smoke test are pushed, so `latest` is always one that booted and
+served. Pin the commit tag instead of `latest` if you want to control when you move.
+
+To build it yourself from a checkout instead:
 
 ```bash
 APP_PASSWORD=pick-something docker compose up --build
 ```
 
-Open **http://localhost:4000** and sign in with that password. That's the whole app: the React
-frontend is built into the jar and served by Spring Boot, so there's one process and one port.
+Either way, open **http://localhost:4000** and sign in with that password. That's the whole app:
+the React frontend is built into the jar and served by Spring Boot, so there's one process and
+one port.
 
 The password isn't optional here. The image refuses to start without one, because an image
 exists to be run somewhere reachable and coming up open on a network is the mistake nobody
-notices. Put `APP_PASSWORD` in `server-springboot/.env` if you'd rather not type it each time.
+notices. With compose you can put `APP_PASSWORD` in `server-springboot/.env` rather than typing
+it each time; that file also supplies your API key if it has one.
 
-Your database lives in a named volume, so it survives `docker compose down` and any rebuild. The
-`.env` above is picked up automatically if it exists.
+Your database lives in a named volume either way, so it survives `docker compose down`, a
+`docker rm`, and any rebuild or image upgrade.
 
 To build the same single artifact without Docker:
 
@@ -146,13 +160,13 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V6)
-  src/test/                 128 tests
+  src/test/                 133 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
 compose.yaml                Runs that image with a volume for the database
 
-.github/workflows/ci.yml    Client, server and Docker image, on every push and pull request
+.github/workflows/ci.yml    Client, server and Docker image; publishes the image on main
 .github/workflows/codeql.yml  CodeQL security scanning
 .github/dependabot.yml      Weekly dependency updates
 ```
@@ -311,7 +325,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (128).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (133).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -319,8 +333,9 @@ migration that a compile-only check would miss.
 
 **CI.** Every push and pull request runs three jobs in parallel on GitHub Actions: the client, the
 server, and the Docker image. All three are required to merge. The image job doesn't just build —
-it starts the container and checks that both the API and the packaged frontend respond, since an
-image that builds and then fails to boot would otherwise pass unnoticed.
+it starts the container and checks that the packaged frontend responds, that an unauthenticated
+caller is refused, and that it exits rather than starting without a password. On `main` that same
+job then publishes the image it just tested, so nothing reaches the registry unproven.
 
 **Security scanning.** CodeQL analyses the Java and the TypeScript on every change, and again
 weekly — new queries ship over time, so a scheduled run finds problems in code nobody has touched.
@@ -388,11 +403,9 @@ description detail, for cases like Amazon that genuinely span several.
 **3. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
-**4. Publish the image.** Push tagged builds to a registry so running it somewhere doesn't mean
-building it there. Worth doing after (1).
-
 ### Done
 
+- ~~Publish the image~~ — every merge to `main` pushes to GHCR, tagged `latest` and by commit
 - ~~Authentication~~ — one shared password, session cookie, CSRF; the image will not start without it
 - ~~CodeQL~~ — security scanning of the Java and the TypeScript, on every change and weekly
 - ~~Budgets~~ — a monthly target per category, tracked on the dashboard

@@ -82,6 +82,10 @@ jobs:
   image:
     name: Docker image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # For the publish steps at the end, which run on main only.
+      packages: write
     steps:
       - uses: actions/checkout@v7
 
@@ -129,6 +133,32 @@ jobs:
             exit 1
           fi
           echo "refused to start without a password, as intended"
+
+      # Publishing comes after the checks above and runs only on main, so what reaches the
+      # registry is exactly the image that was just proved to boot, serve the frontend, refuse
+      # an unauthenticated caller, and refuse to start without a password. A pull request builds
+      # and tests the image but never pushes one.
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # GHCR rejects uppercase in a repository path, and this owner has some.
+          image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          sha="${GITHUB_SHA::7}"
+
+          # Two tags on purpose: latest for "just run it", the commit for pinning and for
+          # working out afterwards which code a running container actually came from.
+          docker tag spending-analyzer:ci "$image:latest"
+          docker tag spending-analyzer:ci "$image:$sha"
+          docker push "$image:latest"
+          docker push "$image:$sha"
+
+          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`docker pull $image:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`docker pull $image:$sha\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Container logs
         if: always()
