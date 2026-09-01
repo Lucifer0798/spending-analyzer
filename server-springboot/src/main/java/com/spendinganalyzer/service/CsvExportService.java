@@ -2,6 +2,8 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.CategoryTotal;
 import com.spendinganalyzer.dto.MonthlyTotal;
+import com.spendinganalyzer.dto.Prediction;
+import com.spendinganalyzer.dto.Recommendation;
 import com.spendinganalyzer.model.Transaction;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -89,6 +91,53 @@ public class CsvExportService {
             for (CategoryTotal c : totals) {
                 double share = grandTotal == 0 ? 0 : (c.total() / grandTotal) * 100;
                 printer.printRecord(c.category(), c.total(), c.count(), round2(share));
+            }
+        });
+    }
+
+    /**
+     * The AI forecast, one row per category.
+     *
+     * <p>{@code generated_at} is repeated on every row rather than being stated once: a forecast
+     * is only meaningful next to the moment it was made, and a spreadsheet has nowhere to put a
+     * fact that belongs to the file rather than a row.
+     *
+     * <p>The payload's free-text summary is deliberately not here. It is a paragraph about the
+     * whole forecast, so it would either be duplicated down every row or sit in a column that is
+     * empty except once — neither of which is a table.
+     */
+    public byte[] predictions(List<Prediction> predictions, String generatedAt) {
+        String[] header = {
+                "category", "predicted_next_month", "trend", "confidence", "rationale", "generated_at"
+        };
+        return toCsv(header, printer -> {
+            for (Prediction p : predictions) {
+                printer.printRecord(
+                        p.category(),
+                        p.predictedNextMonth(),
+                        p.trend(),
+                        p.confidence(),
+                        p.rationale(),
+                        generatedAt == null ? "" : generatedAt
+                );
+            }
+        });
+    }
+
+    /** The savings suggestions that come back with the forecast, one row each. */
+    public byte[] recommendations(List<Recommendation> recommendations, String generatedAt) {
+        String[] header = {
+                "category", "insight", "suggested_action", "potential_monthly_savings", "generated_at"
+        };
+        return toCsv(header, printer -> {
+            for (Recommendation r : recommendations) {
+                printer.printRecord(
+                        r.category(),
+                        r.insight(),
+                        r.suggestedAction(),
+                        r.potentialMonthlySavings(),
+                        generatedAt == null ? "" : generatedAt
+                );
             }
         });
     }

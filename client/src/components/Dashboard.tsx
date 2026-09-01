@@ -209,7 +209,11 @@ export function Dashboard({ accountId, range }: Props) {
               </div>
 
               <div className="mt-8">
-                <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Next month predictions</h2>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Next month predictions</h2>
+                  {/* No filters on this one — there is a single forecast, built from full history. */}
+                  <ExportLink compact href={exportUrl("predictions")} label="Export CSV" />
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {predictions.predictions.map((p) => (
                     <div key={p.category} className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -226,7 +230,10 @@ export function Dashboard({ accountId, range }: Props) {
               </div>
 
               <div className="mt-8">
-                <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Where you could cut back</h2>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Where you could cut back</h2>
+                  <ExportLink compact href={exportUrl("recommendations")} label="Export CSV" />
+                </div>
                 <div className="space-y-3">
                   {predictions.recommendations.map((r, i) => (
                     <div key={i} className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
