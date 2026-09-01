@@ -2,6 +2,8 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.CategoryTotal;
 import com.spendinganalyzer.dto.MonthlyTotal;
+import com.spendinganalyzer.dto.Prediction;
+import com.spendinganalyzer.dto.Recommendation;
 import com.spendinganalyzer.model.Transaction;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -116,6 +118,53 @@ class CsvExportServiceTest {
         byte[] csv = service.categoryTotals(List.of(new CategoryTotal("Groceries", 0.0, 0)));
 
         assertThat(parse(csv).get(0).get("share_percent")).isEqualTo("0.0");
+    }
+
+    // --- forecast ---------------------------------------------------------------
+
+    @Test
+    @DisplayName("writes the forecast with the moment it was made on every row")
+    void writesPredictions() throws IOException {
+        byte[] csv = service.predictions(List.of(
+                new Prediction("Groceries", 412.50, "increasing", "high", "Up in each of the last three months."),
+                new Prediction("Travel", 0.0, "stable", "low", "Nothing since March.")),
+                "2026-08-31T10:15:00Z");
+
+        List<CSVRecord> rows = parse(csv);
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0).get("predicted_next_month")).isEqualTo("412.5");
+        assertThat(rows.get(0).get("trend")).isEqualTo("increasing");
+        assertThat(rows.get(0).get("rationale")).isEqualTo("Up in each of the last three months.");
+        // A forecast without its date is not much use, and a spreadsheet has nowhere else to put it.
+        assertThat(rows.get(0).get("generated_at")).isEqualTo("2026-08-31T10:15:00Z");
+        assertThat(rows.get(1).get("generated_at")).isEqualTo("2026-08-31T10:15:00Z");
+    }
+
+    @Test
+    @DisplayName("writes recommendations, escaping the prose in them")
+    void writesRecommendations() throws IOException {
+        byte[] csv = service.recommendations(List.of(
+                new Recommendation("Dining & Coffee", "You spent £120, up 40%.",
+                        "Try cooking twice a week, and cancel what you don't use.", 48.00)),
+                "2026-08-31T10:15:00Z");
+
+        CSVRecord row = parse(csv).get(0);
+        assertThat(row.get("category")).isEqualTo("Dining & Coffee");
+        assertThat(row.get("insight")).isEqualTo("You spent £120, up 40%.");
+        assertThat(row.get("suggested_action")).isEqualTo("Try cooking twice a week, and cancel what you don't use.");
+        assertThat(row.get("potential_monthly_savings")).isEqualTo("48.0");
+    }
+
+    @Test
+    @DisplayName("handles a forecast that was never generated")
+    void handlesNoForecast() throws IOException {
+        byte[] predictions = service.predictions(List.of(), null);
+        byte[] recommendations = service.recommendations(List.of(), null);
+
+        assertThat(parse(predictions)).isEmpty();
+        assertThat(parse(recommendations)).isEmpty();
+        // Still a valid table, so a spreadsheet opens it rather than complaining.
+        assertThat(new String(predictions, StandardCharsets.UTF_8)).contains("predicted_next_month");
     }
 
     // --- monthly totals ---------------------------------------------------------

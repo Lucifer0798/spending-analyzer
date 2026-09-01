@@ -160,7 +160,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V6)
-  src/test/                 133 tests
+  src/test/                 138 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -244,6 +244,8 @@ All endpoints live under `/api`.
 | `GET` | `/export/transactions.csv` | Download transactions, filters and all |
 | `GET` | `/export/categories.csv` | Download spend per category |
 | `GET` | `/export/monthly.csv` | Download spend per month |
+| `GET` | `/export/predictions.csv` | Download the forecast |
+| `GET` | `/export/recommendations.csv` | Download the savings suggestions |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
 | `GET` `DELETE` | `/merchants` | View or forget merchant memory |
@@ -293,6 +295,14 @@ Targets are stored per category name, which means a category rename or delete ha
 A rename carries the budget across; a delete drops it rather than folding it into whichever
 category the transactions moved to, since that would silently change a number you set.
 
+**The forecast exports carry no filters, and no summary.** Every other export mirrors the filters
+on screen; these two don't, because there is only ever one cached forecast, built from full
+history on purpose — there is no filtered version of it to export. Each row repeats the moment the
+forecast was made, since a projection means little without its date and a spreadsheet has nowhere
+to put a fact belonging to the file rather than a row. The payload's free-text summary is left
+out: it's a paragraph about the whole forecast, so it would either be duplicated down every row or
+sit in a column that's empty except once, and neither of those is a table.
+
 **CSV exports carry the filters you're looking at, and a signed amount.** Exporting a filtered
 view gives you the filtered rows — but *all* of them, not the page on screen, because a silently
 truncated export is worse than none. Amounts are stored unsigned with direction in a separate
@@ -325,7 +335,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (133).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (138).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -394,17 +404,15 @@ If you ever genuinely need to bypass this, turn protection off in
 
 The running to-do list, roughly in the order worth tackling. Updated as things get done.
 
-**1. Export the predictions.** Transactions, categories and months export as CSV; the AI forecast
-and its recommendations do not, and a PDF of the dashboard is still worth having.
-
-**2. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
+**1. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
 description detail, for cases like Amazon that genuinely span several.
 
-**3. Predictions per date range.** Forecasts currently always use an account's full history and
+**2. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
 ### Done
 
+- ~~Export the forecast~~ — predictions and recommendations as CSV, alongside the spend exports
 - ~~Publish the image~~ — every merge to `main` pushes to GHCR, tagged `latest` and by commit
 - ~~Authentication~~ — one shared password, session cookie, CSRF; the image will not start without it
 - ~~CodeQL~~ — security scanning of the Java and the TypeScript, on every change and weekly

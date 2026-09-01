@@ -136,6 +136,34 @@ class ExportControllerTest {
         assertThat(months).contains("2026-05", "2026-06");
     }
 
+    // --- forecast exports -------------------------------------------------------
+
+    @Test
+    @DisplayName("forecast exports are a valid empty table when nothing has been generated")
+    void forecastExportsSurviveNoForecast() throws IOException {
+        // No API key in tests, so no forecast has ever been generated — the case a first-time
+        // user is in, and the one where a null payload would throw.
+        ResponseEntity<byte[]> predictions = controller.predictions();
+        ResponseEntity<byte[]> recommendations = controller.recommendations();
+
+        assertThat(predictions.getStatusCode().value()).isEqualTo(200);
+        assertThat(recommendations.getStatusCode().value()).isEqualTo(200);
+        assertThat(parse(predictions)).isEmpty();
+        assertThat(parse(recommendations)).isEmpty();
+        assertThat(new String(predictions.getBody(), StandardCharsets.UTF_8))
+                .contains("predicted_next_month");
+    }
+
+    @Test
+    @DisplayName("forecast exports are named and typed like the rest")
+    void forecastAttachmentHeaders() {
+        assertThat(controller.predictions().getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                .contains("attachment")
+                .contains("predictions-" + LocalDate.now() + ".csv");
+        assertThat(controller.recommendations().getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                .contains("recommendations-" + LocalDate.now() + ".csv");
+    }
+
     @Test
     @DisplayName("rejects a malformed date instead of silently exporting everything")
     void rejectsBadDates() {
