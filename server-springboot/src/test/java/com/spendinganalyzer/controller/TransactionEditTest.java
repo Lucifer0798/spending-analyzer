@@ -97,8 +97,9 @@ class TransactionEditTest {
 
         assertThat(reload().categorySource()).isEqualTo("user");
         // Store number stripped, matching how memory keys merchants.
-        assertThat(merchants.findByKey("EDIT ME LTD")).isPresent()
-                .get().extracting("category").isEqualTo("Groceries");
+        // findByKey returns every band for the merchant; a correction writes one catch-all.
+        assertThat(merchants.findByKey("EDIT ME LTD")).singleElement()
+                .extracting("category").isEqualTo("Groceries");
     }
 
     @Test
@@ -108,7 +109,7 @@ class TransactionEditTest {
                 "description", "PROPER MERCHANT NAME",
                 "category", "Shopping"));
 
-        assertThat(merchants.findByKey("PROPER MERCHANT NAME")).isPresent();
+        assertThat(merchants.findByKey("PROPER MERCHANT NAME")).isNotEmpty();
         assertThat(merchants.findByKey("EDIT ME LTD")).isEmpty();
     }
 

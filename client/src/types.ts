@@ -68,6 +68,12 @@ export interface MerchantMemory {
   id: number;
   merchant_key: string;
   category: string;
+  /** Inclusive lower bound on the transaction amount. */
+  min_amount: number;
+  /** Exclusive upper bound; effectively infinite for a catch-all. */
+  max_amount: number;
+  /** True when the rule covers every amount, which is what a correction writes. */
+  is_catch_all: boolean;
   source: "ai" | "user";
   hit_count: number;
   created_at: string;

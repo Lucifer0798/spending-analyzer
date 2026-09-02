@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 /**
@@ -72,7 +73,12 @@ public class SecurityConfig {
         // the client a value the server will not accept back.
         http.csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));
+                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                // The token is deferred: nothing writes the cookie until someone reads its
+                // value. Reading it in a controller is too late and too easy to forget — this
+                // renders it on every request, so the frontend always has a token before its
+                // first write. Without it every write is refused and nothing says why.
+                .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
 
         if (!auth.enabled()) {
             return http

@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V6)
-  src/test/                 138 tests
+    db/migration/           Versioned schema migrations (V1–V7)
+  src/test/                 155 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -198,7 +198,7 @@ Six tables, all created automatically:
 | `predictions_cache` | The most recent AI forecast |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V7__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V8__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -248,7 +248,7 @@ All endpoints live under `/api`.
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
-| `GET` `DELETE` | `/merchants` | View or forget merchant memory |
+| `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
 | `DELETE` | `/reset` | Delete all transactions (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
 | `POST` | `/auth/login` `/auth/logout` | Sign in and out |
@@ -315,10 +315,18 @@ per visit (`WHOLE FOODS MARKET #123`, `AMAZON.COM*AB123`), so they're stripped b
 That means one entry covers every branch of a chain. The same cleanup is shared with recurring
 detection, so both agree on what counts as one merchant.
 
-A trade worth knowing: memory assumes one merchant maps to one category. For somewhere like Amazon
-that spans Shopping and Subscriptions, the first answer sticks until you correct it. Correcting a
-transaction updates the entry, and **Manage → Merchant memory** lets you forget any entry so it's
-asked about fresh.
+**One merchant can map to two categories, split by amount.** Descriptions that differ already
+sort themselves out — `AMAZON PRIME` and `AMAZON.COM` normalise to separate keys and always
+could. The case that needed solving is a merchant whose description never varies whatever you
+bought: a £9.99 subscription and a £60 order both arriving as `AMAZON.COM`, where the amount is
+the only signal left.
+
+So a memory entry can carry an amount range. A rule for £0–15 beats the merchant's general
+category, because it says more about that particular transaction. Bounds are inclusive at the
+bottom and exclusive at the top, so adjacent ranges meet without overlapping and £15.00 belongs
+to exactly one of them. Correcting a transaction still writes a plain entry covering every
+amount — correcting one charge says nothing about which amounts you meant. Ranges are set
+explicitly in **Manage → Merchant memory**, which is also where you can forget any entry.
 
 ---
 
@@ -335,7 +343,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (138).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (155).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -404,14 +412,12 @@ If you ever genuinely need to bypass this, turn protection off in
 
 The running to-do list, roughly in the order worth tackling. Updated as things get done.
 
-**1. Smarter merchant memory.** Allow a merchant to map to different categories based on amount or
-description detail, for cases like Amazon that genuinely span several.
-
-**2. Predictions per date range.** Forecasts currently always use an account's full history and
+**1. Predictions per date range.** Forecasts currently always use an account's full history and
 the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
 
 ### Done
 
+- ~~Smarter merchant memory~~ — a merchant can map to different categories by amount range
 - ~~Export the forecast~~ — predictions and recommendations as CSV, alongside the spend exports
 - ~~Publish the image~~ — every merge to `main` pushes to GHCR, tagged `latest` and by commit
 - ~~Authentication~~ — one shared password, session cookie, CSRF; the image will not start without it
