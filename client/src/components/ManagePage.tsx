@@ -11,6 +11,7 @@ import {
   fetchMerchants,
   forgetAllMerchants,
   forgetMerchant,
+  saveMerchantRule,
   setBudget,
   updateAccount,
   updateCategory,
@@ -45,6 +46,10 @@ export function ManagePage({ onAccountsChanged }: Props) {
   const [newAccountType, setNewAccountType] = useState<AccountType>("checking");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryKind, setNewCategoryKind] = useState<"spending" | "income" | "transfer">("spending");
+  const [ruleMerchant, setRuleMerchant] = useState("");
+  const [ruleCategory, setRuleCategory] = useState("");
+  const [ruleMin, setRuleMin] = useState("");
+  const [ruleMax, setRuleMax] = useState("");
 
   const reload = async () => {
     const [accountsRes, categoriesRes, merchantsRes, budgetsRes] = await Promise.all([
@@ -422,6 +427,12 @@ export function ManagePage({ onAccountsChanged }: Props) {
                         </div>
                         <div className="text-xs text-slate-500">
                           {m.category}
+                          {/* A band is the whole reason one merchant can appear more than once. */}
+                          {!m.is_catch_all && (
+                            <span className="ml-1 text-indigo-600 dark:text-indigo-400">
+                              when {currency(m.min_amount)}–{currency(m.max_amount)}
+                            </span>
+                          )}
                           {m.hit_count > 0 && ` · reused ${m.hit_count}×`}
                         </div>
                       </td>
@@ -441,6 +452,76 @@ export function ManagePage({ onAccountsChanged }: Props) {
             </div>
           </>
         )}
+
+        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
+          <h3 className="text-sm font-medium text-slate-800 dark:text-slate-200">
+            Split a merchant by amount
+          </h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            For a merchant whose description never changes whatever you bought — a subscription
+            and an order both arriving as the same text. A rule with an amount range wins over the
+            merchant's general category, so smaller charges can go somewhere else. Leave the range
+            empty to set the general category instead.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              value={ruleMerchant}
+              onChange={(e) => setRuleMerchant(e.target.value)}
+              placeholder="Merchant, e.g. AMAZON.COM"
+              className="min-w-48 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <select
+              value={ruleCategory}
+              onChange={(e) => setRuleCategory(e.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            >
+              <option value="">Category…</option>
+              {spendingCategories.map((c) => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="0"
+              value={ruleMin}
+              onChange={(e) => setRuleMin(e.target.value)}
+              placeholder="from"
+              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <input
+              type="number"
+              min="0"
+              value={ruleMax}
+              onChange={(e) => setRuleMax(e.target.value)}
+              placeholder="to"
+              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <button
+              disabled={!ruleMerchant.trim() || !ruleCategory}
+              onClick={() =>
+                run(
+                  () =>
+                    saveMerchantRule({
+                      merchant_key: ruleMerchant.trim(),
+                      category: ruleCategory,
+                      // Blank means unbounded on that side; the server fills in the default.
+                      ...(ruleMin.trim() ? { min_amount: Number(ruleMin) } : {}),
+                      ...(ruleMax.trim() ? { max_amount: Number(ruleMax) } : {}),
+                    }),
+                  `Rule saved for ${ruleMerchant.trim().toUpperCase()}.`
+                ).then(() => {
+                  setRuleMerchant("");
+                  setRuleMin("");
+                  setRuleMax("");
+                })
+              }
+              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Save rule
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   );

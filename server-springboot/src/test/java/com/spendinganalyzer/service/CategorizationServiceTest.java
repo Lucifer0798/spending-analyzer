@@ -45,8 +45,10 @@ class CategorizationServiceTest {
                 null, null, "batch", "2026-05-01", 1L, "Default");
     }
 
-    private static MerchantCategory remembered(String key, String category, String source) {
-        return new MerchantCategory(1, key, category, source, 0, "2026-01-01", "2026-01-01");
+    /** A catch-all rule, which is what memory held before amount bands existed. */
+    private static List<MerchantCategory> remembered(String key, String category, String source) {
+        return List.of(new MerchantCategory(1, key, category,
+                0, MerchantCategory.UNBOUNDED, source, 0, "2026-01-01", "2026-01-01"));
     }
 
     private void modelAnswers(Map<Long, String> answers) {
@@ -201,8 +203,9 @@ class CategorizationServiceTest {
 
         service.categorizeAll();
 
-        ArgumentCaptor<Map<String, Integer>> hits = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<Long, Integer>> hits = ArgumentCaptor.forClass(Map.class);
         verify(memory).recordHits(hits.capture());
-        assertThat(hits.getValue()).containsEntry("STARBUCKS STORE", 2);
+        // Keyed by the rule that answered, so a merchant with several bands credits only one.
+        assertThat(hits.getValue()).containsEntry(1L, 2);
     }
 }

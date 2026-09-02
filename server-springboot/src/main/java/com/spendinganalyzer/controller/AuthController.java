@@ -37,12 +37,16 @@ public class AuthController {
      * What the frontend needs before it renders anything: whether there is a lock at all, and
      * whether this browser is past it.
      *
-     * <p>Injecting {@link CsrfToken} is not decoration. The token is generated lazily, so
-     * touching it here is what causes the cookie to be written — and the frontend calls this
-     * endpoint on load, before any write it might make.
+     * <p>Injecting {@link CsrfToken} is not enough on its own: the token is deferred, and only
+     * reading its value materialises it and writes the cookie. Merely declaring the parameter
+     * leaves the client with no token and every later write refused — so the {@code getToken()}
+     * call below is load-bearing, not a leftover.
      */
     @GetMapping("/status")
     public Map<String, Object> status(CsrfToken csrfToken) {
+        // Deliberate: this is what issues the cookie the frontend needs before any write.
+        csrfToken.getToken();
+
         Authentication current = SecurityContextHolder.getContext().getAuthentication();
         boolean signedIn = current != null && current.isAuthenticated()
                 && SecurityConfig.USERNAME.equals(current.getName());

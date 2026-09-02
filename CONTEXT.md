@@ -148,6 +148,14 @@ and a non-zero exit with no password.
 > the same port — looks exactly like a wrong password. `login()` in `api.ts` refreshes the token
 > before submitting for precisely this reason; do not "optimise" that call away.
 
+> **The CSRF cookie needs `CsrfCookieFilter` to exist at all.** Spring defers the token, so
+> nothing writes the cookie until something reads its value — injecting a `CsrfToken` into a
+> controller is not enough. Without the filter a client that has only made GETs holds no token
+> and its first write is refused, as a 403 or, when not signed in, a 401 that reads exactly like
+> a wrong password. `CsrfCookieTest` guards it, deliberately in its own class: the `csrf()`
+> request post-processor primes a token for the request it decorates, which masks whether the
+> app would have issued one on its own.
+
 > **A `@SpringBootTest` that writes through MockMvc needs `@Transactional`.** The test database is
 > a file, so anything not rolled back leaks into whichever test asserts on it next. `AuthGateTest`
 > broke `BudgetControllerTest` this way before the annotation was added.
@@ -160,6 +168,16 @@ The port has to be a wildcard (`http://localhost:[*]`) rather than a pinned 5173
 already happened here. `CorsConfigTest` covers both the fallback port and the rejection cases.
 `CORS_ALLOWED_ORIGINS` widens it, and the container sets it blank. This is *not* access control —
 there is still no authentication, which is the top item on the README roadmap.
+
+**Merchant memory is one row per amount band, not one per merchant.** `merchant_key` is no
+longer unique; `MerchantCategory.bestMatch` picks the narrowest band containing the amount, with
+source as the tie-break. Two consequences that bit during the change: `remember`'s upsert conflict
+target is the whole band, and `recordHits` is keyed by row id — keyed by merchant it would credit
+every band for a hit only one of them answered.
+
+> Bounds are stored numbers with `1e12` standing in for "unbounded", **not** NULL. SQLite treats
+> NULLs as distinct in a UNIQUE index, so NULL bounds would let duplicate catch-all rows through
+> the upsert instead of updating.
 
 **Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops

@@ -56,22 +56,29 @@ public class CategorizationService {
         }
 
         Set<String> validCategories = new HashSet<>(categoryRepository.findAllNames());
-        Map<String, MerchantCategory> memory = merchantCategoryRepository.loadAll();
+        Map<String, List<MerchantCategory>> memory = merchantCategoryRepository.loadAll();
 
         int fromMemory = 0;
-        Map<String, Integer> memoryHits = new HashMap<>();
+        // Keyed by rule id, not merchant: a merchant with several bands should only credit the
+        // band that actually answered.
+        Map<Long, Integer> memoryHits = new HashMap<>();
         // Preserves encounter order so the first transaction of each merchant represents it.
         Map<String, List<Transaction>> unknownByMerchant = new LinkedHashMap<>();
 
         for (Transaction t : uncategorized) {
             String merchantKey = MerchantNormalizer.normalize(t.description());
-            MerchantCategory remembered = memory.get(merchantKey);
+
+            // Which rule applies depends on the amount, so this is resolved per transaction
+            // rather than per merchant.
+            MerchantCategory remembered = MerchantCategory
+                    .bestMatch(memory.getOrDefault(merchantKey, List.of()), t.amount())
+                    .orElse(null);
 
             // A remembered category is only usable while that category still exists; it can
             // have been deleted or renamed since the entry was written.
             if (remembered != null && validCategories.contains(remembered.category())) {
                 transactionRepository.updateCategory(t.id(), remembered.category(), "cache");
-                memoryHits.merge(merchantKey, 1, Integer::sum);
+                memoryHits.merge(remembered.id(), 1, Integer::sum);
                 fromMemory++;
             } else {
                 unknownByMerchant.computeIfAbsent(merchantKey, k -> new ArrayList<>()).add(t);

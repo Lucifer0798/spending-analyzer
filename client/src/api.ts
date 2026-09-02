@@ -8,6 +8,7 @@ import type {
   CategoryDetail,
   DateBounds,
   DateRangeValue,
+  MerchantMemory,
   MerchantsResponse,
   PredictionsResponse,
   RecurringResponse,
@@ -255,6 +256,22 @@ export function runCategorization() {
 
 export function fetchMerchants() {
   return request<MerchantsResponse>("/merchants");
+}
+
+/**
+ * Creates or replaces one memory rule. Omit the bounds for a catch-all; supply them to make the
+ * rule apply only within an amount band, which is how one merchant maps to two categories.
+ */
+export function saveMerchantRule(rule: {
+  merchant_key: string;
+  category: string;
+  min_amount?: number;
+  max_amount?: number;
+}) {
+  return request<{ ok: true; merchants: MerchantMemory[] }>("/merchants", {
+    method: "POST",
+    body: JSON.stringify(rule),
+  });
 }
 
 export function forgetMerchant(id: number) {
