@@ -153,7 +153,9 @@ export function Dashboard({ accountId, range }: Props) {
             <StatTile
               label="Predicted next month"
               value={predictedTotal !== null ? currency(predictedTotal) : "—"}
-              sub={generatedAt ? `as of ${new Date(generatedAt).toLocaleDateString()}` : "not generated yet"}
+              // Always says "full history" — the forecast doesn't move when the date filter
+              // does, and the tile should never look like it silently disagrees with it.
+              sub={generatedAt ? `as of ${new Date(generatedAt).toLocaleDateString()} · full history` : "not generated yet"}
             />
           </div>
 
@@ -212,11 +214,14 @@ export function Dashboard({ accountId, range }: Props) {
               </div>
 
               <div className="mt-8">
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-1 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Next month predictions</h2>
                   {/* No filters on this one — there is a single forecast, built from full history. */}
                   <ExportLink compact href={exportUrl("predictions")} label="Export CSV" />
                 </div>
+                <p className="mb-3 text-xs text-slate-500">
+                  Built from this account's full history, not the date range selected above.
+                </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {predictions.predictions.map((p) => (
                     <div key={p.category} className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
