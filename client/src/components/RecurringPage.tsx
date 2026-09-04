@@ -28,6 +28,10 @@ export function RecurringPage({ accountId, range }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // This effect synchronizes with an external system (the API); resetting loading/error
+    // before the fetch has no render-time equivalent, unlike the derived-state case the rule
+    // exists to catch.
+    // oxlint-disable-next-line react/set-state-in-effect
     setLoading(true);
     setError(null);
     fetchRecurring(accountId, range)
