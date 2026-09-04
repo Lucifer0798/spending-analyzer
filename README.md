@@ -295,7 +295,14 @@ Targets are stored per category name, which means a category rename or delete ha
 A rename carries the budget across; a delete drops it rather than folding it into whichever
 category the transactions moved to, since that would silently change a number you set.
 
-**The forecast exports carry no filters, and no summary.** Every other export mirrors the filters
+**Predictions are always full-history, and the dashboard says so.** The forecast is generated
+once per account and covers every transaction on it, never just the date range currently
+selected — a projection built from a narrow window would be a worse one, so this is deliberate.
+Before the labeling caught up to that, the stat tile and the forecast cards gave no sign of it,
+so the numbers could silently disagree with whatever the date filter implied. Both now say
+"full history" outright, so they can't.
+
+For the same reason, **the forecast exports carry no filters, and no summary.** Every other export mirrors the filters
 on screen; these two don't, because there is only ever one cached forecast, built from full
 history on purpose — there is no filtered version of it to export. Each row repeats the moment the
 forecast was made, since a projection means little without its date and a spreadsheet has nowhere
@@ -412,11 +419,13 @@ If you ever genuinely need to bypass this, turn protection off in
 
 The running to-do list, roughly in the order worth tackling. Updated as things get done.
 
-**1. Predictions per date range.** Forecasts currently always use an account's full history and
-the cached result is not keyed by range, so the dashboard's date filter does not apply to them.
+Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Predictions per date range~~ — full history was always the deliberate design, not a bug;
+  what was missing was saying so. The dashboard's stat tile and forecast cards now both say
+  "full history" outright, so a filtered view can't quietly look like it disagrees with them
 - ~~Smarter merchant memory~~ — a merchant can map to different categories by amount range
 - ~~Export the forecast~~ — predictions and recommendations as CSV, alongside the spend exports
 - ~~Publish the image~~ — every merge to `main` pushes to GHCR, tagged `latest` and by commit
