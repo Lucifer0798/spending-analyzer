@@ -41,12 +41,24 @@ export function TransactionsTable({ accountId, range }: Props) {
     fetchCategories().then((r) => setCategories(r.categories));
   }, []);
 
-  // Any filter change invalidates the current page number.
-  useEffect(() => {
+  // A filter change invalidates the current page number. Reset it during render rather than
+  // in a follow-up effect: an effect would commit the stale page first and only fix it a
+  // render later, so the fetch below would run once for the old page and again for page 0.
+  // Comparing against the previous key and calling setState in this branch is React's own
+  // pattern for adjusting state in response to a prop change — see "You Might Not Need an
+  // Effect" in the React docs.
+  const filterKey = `${accountId}|${categoryFilter}|${range.from}|${range.to}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
     setPage(0);
-  }, [accountId, categoryFilter, range]);
+  }
 
   const load = () => {
+    // load() is this effect's whole body (see useEffect(load, ...) below); marking loading
+    // before an API fetch is synchronizing with an external system, not adjusting state
+    // derived from a prop.
+    // oxlint-disable-next-line react/set-state-in-effect
     setLoading(true);
     fetchTransactions({
       category: categoryFilter || undefined,

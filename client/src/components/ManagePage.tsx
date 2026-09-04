@@ -66,6 +66,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
   };
 
   useEffect(() => {
+    // reload() fetches from the API on mount; effects are exactly where that belongs, and
+    // there is no render-time value to derive instead.
+    // oxlint-disable-next-line react/set-state-in-effect
     reload().catch((e) => setError(e instanceof Error ? e.message : "Failed to load."));
   }, []);
 

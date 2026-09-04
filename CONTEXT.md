@@ -20,7 +20,7 @@ how to work on it.
 
 | Docker | Desktop 4.87 / engine 29.7.2, WSL2 backend. Must be **running** — start `Docker Desktop.exe` first, the daemon does not start on demand |
 
-### Three traps that cost time
+### Four traps that cost time
 
 **A running app locks the jar.** If `./mvnw clean` fails with *"The process cannot access the
 file because it is being used by another process"*, a Spring Boot process is still holding
@@ -45,6 +45,18 @@ Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
 
 Docker builds are immune — they run against a clean copy inside the container, which is a good
 reason to reach for `docker build` when only checking that packaging still works.
+
+**`oxlint-disable-next-line` means the literal next line, not the next line of code.** A
+multi-line explanatory comment placed between the directive and the statement it's meant to
+cover breaks it silently — the warning stays, pointing at the same line, with no error telling
+you the comment did nothing. Put the directive on the line immediately above the flagged
+statement; if you want a longer explanation, put that comment *above* the directive instead:
+
+```tsx
+// Longer reason can go here, across as many lines as it needs.
+// oxlint-disable-next-line react/set-state-in-effect
+setLoading(true);
+```
 
 **Stale `target/test-classes` can mask a fix.** Maven does not remove deleted resources on an
 incremental build, so a config file you deleted can still be on the test classpath and make a

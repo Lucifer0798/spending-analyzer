@@ -76,6 +76,9 @@ export function Dashboard({ accountId, range }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Clearing stale data before refetching from the API is synchronizing with an external
+    // system, not a value that could instead be derived during render.
+    // oxlint-disable-next-line react/set-state-in-effect
     setSummary(null);
     fetchSummary(accountId, range).then(setSummary);
   }, [accountId, range]);
