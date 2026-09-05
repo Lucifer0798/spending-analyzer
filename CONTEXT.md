@@ -172,6 +172,20 @@ and a non-zero exit with no password.
 > a file, so anything not rolled back leaks into whichever test asserts on it next. `AuthGateTest`
 > broke `BudgetControllerTest` this way before the annotation was added.
 
+**Login lockouts are tracked per caller address, in memory, not in the database.** One account
+means one thing to guess, so `LoginAttemptLimiter` locks a caller out after
+`app.auth.max-attempts` consecutive wrong passwords, for `app.auth.lockout-minutes`. Per-address
+rather than global, so guessing from one network never blocks the owner signing in from another.
+In-memory rather than persisted: a restart already drops every other piece of session state, and
+a table plus a cleanup job would be solving a problem that already resets itself for free.
+
+> `LoginAttemptLimiter` takes a `Clock` via a package-private constructor specifically so
+> `LoginAttemptLimiterTest` can advance time without a real sleep to prove a lockout expires.
+> `LoginRateLimitTest` covers the HTTP-level wiring instead (status, `Retry-After`, per-caller
+> isolation) against the real endpoint, and clears the shared limiter bean's state in
+> `@BeforeEach` — it is a singleton that outlives each `@Test` method, so a lockout left behind by
+> one case would otherwise leak into the next.
+
 **CORS defaults to loopback on any port, not `*`.** Once the app is one artifact the frontend is
 same-origin and needs no CORS at all; the only real caller from another origin is the dev server.
 The port has to be a wildcard (`http://localhost:[*]`) rather than a pinned 5173: Vite moves to
