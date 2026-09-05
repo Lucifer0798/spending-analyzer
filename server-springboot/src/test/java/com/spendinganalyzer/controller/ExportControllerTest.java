@@ -143,8 +143,8 @@ class ExportControllerTest {
     void forecastExportsSurviveNoForecast() throws IOException {
         // No API key in tests, so no forecast has ever been generated — the case a first-time
         // user is in, and the one where a null payload would throw.
-        ResponseEntity<byte[]> predictions = controller.predictions();
-        ResponseEntity<byte[]> recommendations = controller.recommendations();
+        ResponseEntity<byte[]> predictions = controller.predictions(null);
+        ResponseEntity<byte[]> recommendations = controller.recommendations(null);
 
         assertThat(predictions.getStatusCode().value()).isEqualTo(200);
         assertThat(recommendations.getStatusCode().value()).isEqualTo(200);
@@ -157,10 +157,10 @@ class ExportControllerTest {
     @Test
     @DisplayName("forecast exports are named and typed like the rest")
     void forecastAttachmentHeaders() {
-        assertThat(controller.predictions().getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+        assertThat(controller.predictions(null).getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .contains("attachment")
                 .contains("predictions-" + LocalDate.now() + ".csv");
-        assertThat(controller.recommendations().getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+        assertThat(controller.recommendations(null).getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .contains("recommendations-" + LocalDate.now() + ".csv");
     }
 
