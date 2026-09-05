@@ -120,7 +120,15 @@ every total that sums the column, which is why the edit endpoint rejects one.
 the fact, so "last 3 months" from today shows nothing for data ending a few months back.
 
 **Forecasts ignore the date filter.** A projection from a narrow window would be worse, and the
-prediction cache is a single row not keyed by range. Listed in the README roadmap.
+prediction cache is a single row not keyed by range.
+
+**Period comparison needs both bounds of the range set, not just one.** A half-open filter (only
+`from` or only `to`) has no defined length, so `StatsService.computeComparison` returns
+`Optional.empty()` for it exactly as it does for "all time" — treating a missing bound as "use
+the account's earliest/latest date instead" would produce a comparison window nobody asked for
+and that changes size every time new data is imported. `ComparisonResponse.applicable` carries
+that decision to the frontend explicitly, rather than the client having to infer "not applicable"
+from an empty-looking payload.
 
 **Flyway owns the schema.** Never edit an applied migration — add `V6__*.sql`. SQLite cannot
 alter a CHECK constraint in place, so widening one means the copy-and-swap rebuild used in `V5`.

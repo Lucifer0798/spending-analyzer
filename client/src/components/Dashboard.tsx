@@ -15,6 +15,7 @@ import type { DateRangeValue, PredictionsPayload, SummaryResponse } from "../typ
 import { currency } from "../format";
 import { ExportLink } from "./ExportLink";
 import { BudgetsCard } from "./BudgetsCard";
+import { ComparisonCard } from "./ComparisonCard";
 
 interface Props {
   accountId: number | null;
@@ -158,6 +159,10 @@ export function Dashboard({ accountId, range }: Props) {
               sub={generatedAt ? `as of ${new Date(generatedAt).toLocaleDateString()} · full history` : "not generated yet"}
             />
           </div>
+
+          {/* Renders nothing for "all time" or a half-open filter -- there's no defined-length
+              period to compare against. */}
+          <ComparisonCard accountId={accountId} range={range} />
 
           {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
               for anyone not using them. */}
