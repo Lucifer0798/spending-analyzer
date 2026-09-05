@@ -295,8 +295,9 @@ export function fetchDateBounds(accountId: number | null) {
   return request<DateBounds>(`/date-bounds${qs({ accountId })}`);
 }
 
-export function fetchPredictions() {
-  return request<PredictionsResponse>("/predictions");
+/** The cached forecast for this account, or for every account combined when null. */
+export function fetchPredictions(accountId: number | null) {
+  return request<PredictionsResponse>(`/predictions${qs({ accountId })}`);
 }
 
 export function refreshPredictions(accountId: number | null) {

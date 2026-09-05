@@ -19,10 +19,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * CSV downloads of whatever the user is currently looking at. The transaction and spend exports
- * take the same account and date-range filters as the screen they mirror, so exporting a filtered
- * view gives exactly the filtered rows rather than everything on record. The two forecast exports
- * take no filters, because there is only ever one cached forecast to export.
+ * CSV downloads of whatever the user is currently looking at. Every export takes the same
+ * account filter as the screen it mirrors. The transaction and spend exports also take a date
+ * range; the two forecast exports don't, because a forecast is always built from full history —
+ * there is no filtered-by-date version of it to export, only a filtered-by-account one.
  *
  * <p>These are plain GETs returning an attachment, so the frontend can link straight to them
  * and let the browser handle the download.
@@ -90,15 +90,14 @@ public class ExportController {
     }
 
     /**
-     * The forecast and its savings suggestions, as two tables.
-     *
-     * <p>These take no account or date parameters, unlike every other export here. That is not an
-     * oversight: there is one cached forecast, built from an account's full history on purpose,
-     * so there is no filtered version of it to export.
+     * The forecast and its savings suggestions, as two tables. No date range — unlike every
+     * other export here — because a forecast is always built from full history; there is no
+     * filtered-by-date version to export. Account scoping still applies: this exports whichever
+     * account's cached forecast the dashboard is currently showing.
      */
     @GetMapping("/predictions.csv")
-    public ResponseEntity<byte[]> predictions() {
-        var cached = insightsService.getCachedPredictions();
+    public ResponseEntity<byte[]> predictions(@RequestParam(required = false) Long accountId) {
+        var cached = insightsService.getCachedPredictions(accountId);
         var payload = cached.predictions();
 
         // Nothing generated yet gives a header-only file rather than a 404 — the frontend hides
@@ -108,8 +107,8 @@ public class ExportController {
     }
 
     @GetMapping("/recommendations.csv")
-    public ResponseEntity<byte[]> recommendations() {
-        var cached = insightsService.getCachedPredictions();
+    public ResponseEntity<byte[]> recommendations(@RequestParam(required = false) Long accountId) {
+        var cached = insightsService.getCachedPredictions(accountId);
         var payload = cached.predictions();
 
         return attachment("recommendations", csv.recommendations(
