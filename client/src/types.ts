@@ -142,6 +142,33 @@ export interface SummaryResponse {
   monthlyByCategory: CategoryMonthlySeries[];
 }
 
+export interface CategoryComparison {
+  category: string;
+  currentTotal: number;
+  previousTotal: number;
+  changeAmount: number;
+  /** Null when previousTotal is zero -- there is no meaningful percentage change from nothing. */
+  changePercent: number | null;
+}
+
+export interface PeriodComparison {
+  currentRange: DateRangeValue;
+  previousRange: DateRangeValue;
+  currentTotal: number;
+  previousTotal: number;
+  changeAmount: number;
+  changePercent: number | null;
+  /** Biggest increase first, biggest decrease last. */
+  categories: CategoryComparison[];
+}
+
+/** False for "all time" or a half-open filter -- a comparison needs two well-defined,
+ *  equal-length windows, which neither has. */
+export interface ComparisonResponse {
+  applicable: boolean;
+  comparison: PeriodComparison | null;
+}
+
 export interface AuthStatus {
   /** False when no password is configured, in which case the app is open by design. */
   authRequired: boolean;

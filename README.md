@@ -239,6 +239,7 @@ All endpoints live under `/api`.
 | `PATCH` | `/transactions/{id}` | Change a category — also teaches merchant memory |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
+| `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it, per category |
 | `GET` | `/recurring` | Detected recurring charges |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
@@ -303,6 +304,17 @@ being measured is always named on the card, so it can't quietly disagree with yo
 Targets are stored per category name, which means a category rename or delete has to reach them.
 A rename carries the budget across; a delete drops it rather than folding it into whichever
 category the transactions moved to, since that would silently change a number you set.
+
+**Period comparison mirrors the active filter's own length, whatever that is.** "This month vs
+last month" and "this quarter vs last quarter" are the same feature — the length of the current
+range is measured, then a period of that same length immediately before it is computed, so the
+comparison never needs to know which preset produced the range. "All time" and a half-open
+filter (only a `from` or only a `to`) have no defined length to mirror, so the card simply doesn't
+render rather than comparing against something arbitrary; `/summary/comparison` says
+`applicable: false` outright, the same honesty the "full history" forecast labelling below
+already applies. A category can appear in only one of the two periods — a subscription just
+started, or one that ended — in which case its missing side is zero and the percentage change is
+left out rather than reported as an infinite or invented number.
 
 **Predictions are always full-history, and the dashboard says so.** The forecast covers every
 transaction on an account, never just the date range currently selected — a projection built
@@ -442,6 +454,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Period-over-period comparison~~ — the dashboard shows the active range against the
+  equal-length period immediately before it, per category, whatever preset produced the range
 - ~~Login rate limiting~~ — the shared password locks a caller out after too many consecutive
   wrong guesses, tracked per caller address rather than globally
 - ~~Predictions ignored which account was selected~~ — the cache was one global row; switching

@@ -1,5 +1,6 @@
 package com.spendinganalyzer.controller;
 
+import com.spendinganalyzer.dto.ComparisonResponse;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.dto.RecurringSeries;
@@ -52,6 +53,23 @@ public class InsightsController {
                 statsService.computeMonthlyTotals(accountId, range),
                 statsService.computeMonthlyCategorySeries(accountId, range)
         );
+    }
+
+    /**
+     * The active range against the period immediately before it, of the same length. Only
+     * meaningful for a fully-bounded range -- {@code applicable} is false for "all time" or a
+     * half-open filter, rather than the endpoint guessing at a period nobody asked for.
+     */
+    @GetMapping("/summary/comparison")
+    public ComparisonResponse comparison(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        DateRange range = DateRange.of(from, to);
+        return statsService.computeComparison(accountId, range)
+                .map(ComparisonResponse::of)
+                .orElse(ComparisonResponse.NOT_APPLICABLE);
     }
 
     /** Earliest and latest dates on record, so the UI can bound its date pickers. */

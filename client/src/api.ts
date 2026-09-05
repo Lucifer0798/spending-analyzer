@@ -6,6 +6,7 @@ import type {
   BudgetSummary,
   CategorizeResult,
   CategoryDetail,
+  ComparisonResponse,
   DateBounds,
   DateRangeValue,
   MerchantMemory,
@@ -284,6 +285,11 @@ export function forgetAllMerchants() {
 
 export function fetchSummary(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<SummaryResponse>(`/summary${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/** applicable is false for "all time" or a half-open range -- see ComparisonResponse. */
+export function fetchComparison(accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<ComparisonResponse>(`/summary/comparison${qs({ accountId, from: range.from, to: range.to })}`);
 }
 
 export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {

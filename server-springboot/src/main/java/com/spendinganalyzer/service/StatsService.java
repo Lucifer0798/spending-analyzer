@@ -1,18 +1,24 @@
 package com.spendinganalyzer.service;
 
+import com.spendinganalyzer.dto.CategoryComparison;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.CategoryTotal;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.MonthlyTotal;
+import com.spendinganalyzer.dto.PeriodComparison;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 @Service
 public class StatsService {
@@ -60,6 +66,67 @@ public class StatsService {
 
         return jdbc.query(sql, params(accountId, range), (rs, rowNum) ->
                 new CategoryTotal(rs.getString("category"), rs.getDouble("total"), rs.getInt("count")));
+    }
+
+    /**
+     * The active range against the period immediately before it, of the same length. Needs both
+     * bounds set: an unbounded or half-open range has no defined length to mirror, and comparing
+     * something arbitrary would be worse than not comparing at all.
+     */
+    public Optional<PeriodComparison> computeComparison(Long accountId, DateRange range) {
+        if (range.from() == null || range.to() == null) {
+            return Optional.empty();
+        }
+
+        LocalDate from = LocalDate.parse(range.from());
+        LocalDate to = LocalDate.parse(range.to());
+        long lengthInDays = ChronoUnit.DAYS.between(from, to) + 1;
+
+        LocalDate previousTo = from.minusDays(1);
+        LocalDate previousFrom = previousTo.minusDays(lengthInDays - 1);
+        DateRange previousRange = new DateRange(previousFrom.toString(), previousTo.toString());
+
+        Map<String, Double> current = totalsByCategory(accountId, range);
+        Map<String, Double> previous = totalsByCategory(accountId, previousRange);
+
+        TreeSet<String> allCategories = new TreeSet<>();
+        allCategories.addAll(current.keySet());
+        allCategories.addAll(previous.keySet());
+
+        List<CategoryComparison> categories = new ArrayList<>();
+        for (String category : allCategories) {
+            double currentTotal = current.getOrDefault(category, 0.0);
+            double previousTotal = previous.getOrDefault(category, 0.0);
+            categories.add(new CategoryComparison(category, currentTotal, previousTotal,
+                    round2(currentTotal - previousTotal), changePercent(currentTotal, previousTotal)));
+        }
+        // Biggest increase first, biggest decrease last -- the two ends of the list are what a
+        // "what changed" view exists to show.
+        categories.sort((a, b) -> Double.compare(b.changeAmount(), a.changeAmount()));
+
+        double currentTotal = current.values().stream().mapToDouble(Double::doubleValue).sum();
+        double previousTotal = previous.values().stream().mapToDouble(Double::doubleValue).sum();
+
+        return Optional.of(new PeriodComparison(
+                range, previousRange,
+                round2(currentTotal), round2(previousTotal),
+                round2(currentTotal - previousTotal),
+                changePercent(currentTotal, previousTotal),
+                categories));
+    }
+
+    private Map<String, Double> totalsByCategory(Long accountId, DateRange range) {
+        Map<String, Double> byCategory = new LinkedHashMap<>();
+        for (CategoryTotal total : computeCategoryTotals(accountId, range)) {
+            byCategory.put(total.category(), total.total());
+        }
+        return byCategory;
+    }
+
+    /** Null rather than an infinite or made-up percentage when there was nothing to grow from. */
+    private static Double changePercent(double current, double previous) {
+        if (previous == 0) return null;
+        return round2(((current - previous) / previous) * 100.0);
     }
 
     public List<MonthlyTotal> computeMonthlyTotals(Long accountId, DateRange range) {
