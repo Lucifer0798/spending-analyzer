@@ -180,6 +180,20 @@ and a non-zero exit with no password.
 > a file, so anything not rolled back leaks into whichever test asserts on it next. `AuthGateTest`
 > broke `BudgetControllerTest` this way before the annotation was added.
 
+**Login lockouts are tracked per caller address, in memory, not in the database.** One account
+means one thing to guess, so `LoginAttemptLimiter` locks a caller out after
+`app.auth.max-attempts` consecutive wrong passwords, for `app.auth.lockout-minutes`. Per-address
+rather than global, so guessing from one network never blocks the owner signing in from another.
+In-memory rather than persisted: a restart already drops every other piece of session state, and
+a table plus a cleanup job would be solving a problem that already resets itself for free.
+
+> `LoginAttemptLimiter` takes a `Clock` via a package-private constructor specifically so
+> `LoginAttemptLimiterTest` can advance time without a real sleep to prove a lockout expires.
+> `LoginRateLimitTest` covers the HTTP-level wiring instead (status, `Retry-After`, per-caller
+> isolation) against the real endpoint, and clears the shared limiter bean's state in
+> `@BeforeEach` — it is a singleton that outlives each `@Test` method, so a lockout left behind by
+> one case would otherwise leak into the next.
+
 **CORS defaults to loopback on any port, not `*`.** Once the app is one artifact the frontend is
 same-origin and needs no CORS at all; the only real caller from another origin is the dev server.
 The port has to be a wildcard (`http://localhost:[*]`) rather than a pinned 5173: Vite moves to
@@ -203,6 +217,22 @@ every band for a hit only one of them answered.
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
 the budget rather than folding it into the fallback category. Anything else that starts storing
 a category name belongs in those two methods too.
+
+**`predictions_cache` is keyed by account id, same 0-sentinel trick as the merchant bands.**
+It used to be one global row (`id = 1`) with no account attached — generate a forecast while
+looking at one account, switch to another, and the dashboard kept showing the first account's
+numbers with nothing to say they didn't belong. `PredictionsCacheRepository.key()` maps a null
+`accountId` to `0` before it ever reaches SQL, for the same reason as `MerchantCategory.UNBOUNDED`:
+`account_id` is `NOT NULL PRIMARY KEY`, so a real `NULL` couldn't be inserted at all, and even if
+it could, SQLite treats every `NULL` as distinct in a key column — two "all accounts" upserts
+would insert two rows instead of the second replacing the first. Real accounts start at 1
+(`AUTOINCREMENT`), so `0` can never collide with one.
+
+> `V8__predictions_cache_per_account.sql` drops the old single row rather than migrating it.
+> There is no account recorded on it, so there is no honest guess at which account it belonged
+> to — carrying it forward under an assumed scope would just be a different flavour of the same
+> mismatch the migration exists to fix. Unlike the merchant-memory and transaction migrations,
+> this one is fine to lose: regenerating a forecast is one click.
 
 **Exports are links, not fetches.** `/api/export/*.csv` are plain GETs returning an attachment,
 so the frontend renders an `<a download>` and the browser does the rest. Fetching them into a blob

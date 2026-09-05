@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V7)
-  src/test/                 155 tests
+    db/migration/           Versioned schema migrations (V1–V8)
+  src/test/                 167 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -195,10 +195,10 @@ Six tables, all created automatically:
 | `categories` | The 16 built-in categories plus any you add |
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
 | `budgets` | A monthly spending target per category |
-| `predictions_cache` | The most recent AI forecast |
+| `predictions_cache` | The most recent AI forecast, one row per account |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V8__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V9__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -216,6 +216,8 @@ none of them set.
 |---|---|---|
 | `APP_PASSWORD` | *(empty)* | The password guarding this instance. Empty means no authentication at all — fine on localhost, not anywhere else |
 | `APP_AUTH_REQUIRED` | `false` | When true, the app refuses to start without a password. The Docker image sets this, so a container can never come up open |
+| `APP_AUTH_MAX_ATTEMPTS` | `5` | Consecutive wrong passwords from the same caller before it's locked out |
+| `APP_AUTH_LOCKOUT_MINUTES` | `15` | How long that lockout lasts |
 | `ANTHROPIC_API_KEY` | *(empty)* | Enables AI categorization and predictions |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Which model to ask |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
@@ -281,6 +283,13 @@ to start** without a password, because an image exists to be run somewhere reach
 up open on a network is the failure nobody notices. CI asserts both halves: that the container
 answers 401 to an unauthenticated caller, and that it exits when given no password.
 
+**One password also means one thing worth guessing, so the login endpoint locks out a caller
+after too many wrong ones** (`APP_AUTH_MAX_ATTEMPTS`, `APP_AUTH_LOCKOUT_MINUTES`) — a `429` with
+a `Retry-After` header, not another `401` that reads the same as a typo. Tracked per caller
+address rather than globally, so someone guessing from one network never locks out the owner
+signing in from another; and in memory rather than in the database, since a restart already
+clears every other piece of session state and this is no different.
+
 Sessions are cookie-based, so writes carry a CSRF token. One consequence worth knowing: because
 a rejected token from a not-yet-signed-in caller comes back through the authentication entry
 point, it surfaces as a 401 rather than a 403 — so the frontend refreshes its token immediately
@@ -307,20 +316,30 @@ already applies. A category can appear in only one of the two periods — a subs
 started, or one that ended — in which case its missing side is zero and the percentage change is
 left out rather than reported as an infinite or invented number.
 
-**Predictions are always full-history, and the dashboard says so.** The forecast is generated
-once per account and covers every transaction on it, never just the date range currently
-selected — a projection built from a narrow window would be a worse one, so this is deliberate.
-Before the labeling caught up to that, the stat tile and the forecast cards gave no sign of it,
-so the numbers could silently disagree with whatever the date filter implied. Both now say
-"full history" outright, so they can't.
+**Predictions are always full-history, and the dashboard says so.** The forecast covers every
+transaction on an account, never just the date range currently selected — a projection built
+from a narrow window would be a worse one, so this is deliberate. Before the labeling caught up
+to that, the stat tile and the forecast cards gave no sign of it, so the numbers could silently
+disagree with whatever the date filter implied. Both now say "full history" outright, so they
+can't.
 
-For the same reason, **the forecast exports carry no filters, and no summary.** Every other export mirrors the filters
-on screen; these two don't, because there is only ever one cached forecast, built from full
-history on purpose — there is no filtered version of it to export. Each row repeats the moment the
-forecast was made, since a projection means little without its date and a spreadsheet has nowhere
-to put a fact belonging to the file rather than a row. The payload's free-text summary is left
-out: it's a paragraph about the whole forecast, so it would either be duplicated down every row or
-sit in a column that's empty except once, and neither of those is a table.
+**The forecast is cached per account, so switching accounts can't show someone else's numbers.**
+The cache used to be a single global row: generate a forecast while looking at one account, then
+switch to another, and the dashboard kept showing the first account's forecast with nothing to
+say it didn't belong to the one on screen — a stale-account bug wearing the same "full history"
+label as a correct one. `predictions_cache` is now keyed by account id, with `0` standing in for
+"all accounts combined" so a `NULL` never has to — SQLite treats every `NULL` as distinct in a
+primary key, which would have let two "all accounts" rows coexist instead of one replacing the
+other. Real account ids start at 1, so `0` can never collide with one.
+
+For the same reason, **the forecast exports take an account filter, but no date range.** Every
+other export mirrors the filters on screen; these two only take one of the two, because a
+forecast is always full-history — there is no filtered-by-date version to export, only a
+filtered-by-account one. Each row repeats the moment the forecast was made, since a projection
+means little without its date and a spreadsheet has nowhere to put a fact belonging to the file
+rather than a row. The payload's free-text summary is left out: it's a paragraph about the whole
+forecast, so it would either be duplicated down every row or sit in a column that's empty except
+once, and neither of those is a table.
 
 **CSV exports carry the filters you're looking at, and a signed amount.** Exporting a filtered
 view gives you the filtered rows — but *all* of them, not the page on screen, because a silently
@@ -362,7 +381,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (155).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (167).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -437,6 +456,11 @@ Nothing open right now — see Done below.
 
 - ~~Period-over-period comparison~~ — the dashboard shows the active range against the
   equal-length period immediately before it, per category, whatever preset produced the range
+- ~~Login rate limiting~~ — the shared password locks a caller out after too many consecutive
+  wrong guesses, tracked per caller address rather than globally
+- ~~Predictions ignored which account was selected~~ — the cache was one global row; switching
+  accounts after generating a forecast kept showing the previous account's numbers with nothing
+  to say so. Now keyed by account id, so each account keeps its own
 - ~~Predictions per date range~~ — full history was always the deliberate design, not a bug;
   what was missing was saying so. The dashboard's stat tile and forecast cards now both say
   "full history" outright, so a filtered view can't quietly look like it disagrees with them
