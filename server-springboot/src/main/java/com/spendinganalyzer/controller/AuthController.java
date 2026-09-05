@@ -1,11 +1,14 @@
 package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.config.AuthSettings;
+import com.spendinganalyzer.config.LoginAttemptLimiter;
 import com.spendinganalyzer.config.SecurityConfig;
 import com.spendinganalyzer.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -18,7 +21,9 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -26,11 +31,14 @@ public class AuthController {
 
     private final AuthSettings auth;
     private final AuthenticationManager authenticationManager;
+    private final LoginAttemptLimiter attemptLimiter;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
 
-    public AuthController(AuthSettings auth, AuthenticationManager authenticationManager) {
+    public AuthController(AuthSettings auth, AuthenticationManager authenticationManager,
+                           LoginAttemptLimiter attemptLimiter) {
         this.auth = auth;
         this.authenticationManager = authenticationManager;
+        this.attemptLimiter = attemptLimiter;
     }
 
     /**
@@ -70,6 +78,15 @@ public class AuthController {
                     .body(new ErrorResponse("This instance has no password set, so there is nothing to sign in to."));
         }
 
+        String caller = request.getRemoteAddr();
+        Optional<Duration> locked = attemptLimiter.lockedFor(caller);
+        if (locked.isPresent()) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .header(HttpHeaders.RETRY_AFTER, String.valueOf(Math.max(1, locked.get().toSeconds())))
+                    .body(new ErrorResponse("Too many failed attempts. Try again in "
+                            + humanize(locked.get()) + "."));
+        }
+
         String password = body.get("password") instanceof String s ? s : "";
         if (password.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Password is required."));
@@ -80,10 +97,13 @@ public class AuthController {
             authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(SecurityConfig.USERNAME, password));
         } catch (AuthenticationException e) {
+            attemptLimiter.recordFailure(caller);
             // Deliberately vague: there is one account, so the only thing a caller can be told
             // apart is whether they guessed the password.
             return ResponseEntity.status(401).body(new ErrorResponse("Incorrect password."));
         }
+
+        attemptLimiter.recordSuccess(caller);
 
         // Rotate the session id on login, so one an attacker planted beforehand does not become
         // an authenticated session. Only when a session already exists — changeSessionId throws
@@ -107,5 +127,12 @@ public class AuthController {
         if (session != null) session.invalidate();
         SecurityContextHolder.clearContext();
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    /** Rounded up to whole minutes: a caller doesn't need finer precision than "try again in
+     *  ~N minutes", and rounding up means it never reads as sooner than it actually is. */
+    private static String humanize(Duration remaining) {
+        long minutes = Math.max(1, (remaining.toSeconds() + 59) / 60);
+        return minutes == 1 ? "1 minute" : minutes + " minutes";
     }
 }

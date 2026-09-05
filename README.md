@@ -216,6 +216,8 @@ none of them set.
 |---|---|---|
 | `APP_PASSWORD` | *(empty)* | The password guarding this instance. Empty means no authentication at all — fine on localhost, not anywhere else |
 | `APP_AUTH_REQUIRED` | `false` | When true, the app refuses to start without a password. The Docker image sets this, so a container can never come up open |
+| `APP_AUTH_MAX_ATTEMPTS` | `5` | Consecutive wrong passwords from the same caller before it's locked out |
+| `APP_AUTH_LOCKOUT_MINUTES` | `15` | How long that lockout lasts |
 | `ANTHROPIC_API_KEY` | *(empty)* | Enables AI categorization and predictions |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Which model to ask |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
@@ -279,6 +281,13 @@ says so loudly in its startup log. The Docker image sets `APP_AUTH_REQUIRED=true
 to start** without a password, because an image exists to be run somewhere reachable, and coming
 up open on a network is the failure nobody notices. CI asserts both halves: that the container
 answers 401 to an unauthenticated caller, and that it exits when given no password.
+
+**One password also means one thing worth guessing, so the login endpoint locks out a caller
+after too many wrong ones** (`APP_AUTH_MAX_ATTEMPTS`, `APP_AUTH_LOCKOUT_MINUTES`) — a `429` with
+a `Retry-After` header, not another `401` that reads the same as a typo. Tracked per caller
+address rather than globally, so someone guessing from one network never locks out the owner
+signing in from another; and in memory rather than in the database, since a restart already
+clears every other piece of session state and this is no different.
 
 Sessions are cookie-based, so writes carry a CSRF token. One consequence worth knowing: because
 a rejected token from a not-yet-signed-in caller comes back through the authentication entry
@@ -433,6 +442,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Login rate limiting~~ — the shared password locks a caller out after too many consecutive
+  wrong guesses, tracked per caller address rather than globally
 - ~~Predictions ignored which account was selected~~ — the cache was one global row; switching
   accounts after generating a forecast kept showing the previous account's numbers with nothing
   to say so. Now keyed by account id, so each account keeps its own
