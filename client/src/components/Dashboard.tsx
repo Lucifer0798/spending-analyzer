@@ -84,11 +84,17 @@ export function Dashboard({ accountId, range }: Props) {
   }, [accountId, range]);
 
   useEffect(() => {
-    fetchPredictions().then((r) => {
+    // The forecast is cached per account, so switching accounts can show a stale one from the
+    // previous account for a moment unless it's cleared first — the same reason the summary
+    // effect above resets before refetching.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setPredictions(null);
+    setGeneratedAt(null);
+    fetchPredictions(accountId).then((r) => {
       setPredictions(r.predictions);
       setGeneratedAt(r.generatedAt);
     });
-  }, []);
+  }, [accountId]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -217,7 +223,7 @@ export function Dashboard({ accountId, range }: Props) {
                 <div className="mb-1 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Next month predictions</h2>
                   {/* No filters on this one — there is a single forecast, built from full history. */}
-                  <ExportLink compact href={exportUrl("predictions")} label="Export CSV" />
+                  <ExportLink compact href={exportUrl("predictions", { accountId })} label="Export CSV" />
                 </div>
                 <p className="mb-3 text-xs text-slate-500">
                   Built from this account's full history, not the date range selected above.
@@ -240,7 +246,7 @@ export function Dashboard({ accountId, range }: Props) {
               <div className="mt-8">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Where you could cut back</h2>
-                  <ExportLink compact href={exportUrl("recommendations")} label="Export CSV" />
+                  <ExportLink compact href={exportUrl("recommendations", { accountId })} label="Export CSV" />
                 </div>
                 <div className="space-y-3">
                   {predictions.recommendations.map((r, i) => (

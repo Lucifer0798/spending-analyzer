@@ -210,6 +210,22 @@ owns that: `rename` carries the budget (and merchant memory) across, `deleteAndR
 the budget rather than folding it into the fallback category. Anything else that starts storing
 a category name belongs in those two methods too.
 
+**`predictions_cache` is keyed by account id, same 0-sentinel trick as the merchant bands.**
+It used to be one global row (`id = 1`) with no account attached — generate a forecast while
+looking at one account, switch to another, and the dashboard kept showing the first account's
+numbers with nothing to say they didn't belong. `PredictionsCacheRepository.key()` maps a null
+`accountId` to `0` before it ever reaches SQL, for the same reason as `MerchantCategory.UNBOUNDED`:
+`account_id` is `NOT NULL PRIMARY KEY`, so a real `NULL` couldn't be inserted at all, and even if
+it could, SQLite treats every `NULL` as distinct in a key column — two "all accounts" upserts
+would insert two rows instead of the second replacing the first. Real accounts start at 1
+(`AUTOINCREMENT`), so `0` can never collide with one.
+
+> `V8__predictions_cache_per_account.sql` drops the old single row rather than migrating it.
+> There is no account recorded on it, so there is no honest guess at which account it belonged
+> to — carrying it forward under an assumed scope would just be a different flavour of the same
+> mismatch the migration exists to fix. Unlike the merchant-memory and transaction migrations,
+> this one is fine to lose: regenerating a forecast is one click.
+
 **Exports are links, not fetches.** `/api/export/*.csv` are plain GETs returning an attachment,
 so the frontend renders an `<a download>` and the browser does the rest. Fetching them into a blob
 would discard the `Content-Disposition` filename and force the client to invent one. They are also

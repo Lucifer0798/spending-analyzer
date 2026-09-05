@@ -33,15 +33,22 @@ public class InsightsService {
         this.objectMapper = objectMapper;
     }
 
-    public PredictionsResponse getCachedPredictions() {
-        return cacheRepository.find()
+    /**
+     * The cached forecast for one account, or for every account combined when {@code accountId}
+     * is null — the same meaning null carries everywhere else in this app. Scoped by account so
+     * switching accounts on the dashboard can never surface a forecast generated for a different
+     * one.
+     */
+    public PredictionsResponse getCachedPredictions(Long accountId) {
+        return cacheRepository.find(accountId)
                 .map(entry -> new PredictionsResponse(parsePayload(entry.payload()), entry.generatedAt()))
                 .orElse(new PredictionsResponse(null, null));
     }
 
     public PredictionsResponse refreshPredictions(Long accountId) {
         // Forecasts use the full history for the account: a projection built from a narrow
-        // window would be worse, and the cached result is not keyed by date range.
+        // window would be worse. They are scoped by account but not by date range — the cache
+        // key is accountId alone.
         List<CategoryMonthlySeries> series =
                 statsService.computeMonthlyCategorySeries(accountId, DateRange.ALL);
         List<MonthlyTotal> monthlyTotals = statsService.computeMonthlyTotals(accountId, DateRange.ALL);
@@ -54,7 +61,7 @@ public class InsightsService {
         }
 
         String generatedAt = Instant.now().toString();
-        cacheRepository.upsert(writeJson(payload), generatedAt);
+        cacheRepository.upsert(accountId, writeJson(payload), generatedAt);
         return new PredictionsResponse(payload, generatedAt);
     }
 

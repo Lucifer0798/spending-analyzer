@@ -83,14 +83,16 @@ public class InsightsController {
         );
     }
 
+    /** The cached forecast for the given account, or for every account combined if omitted. */
     @GetMapping("/predictions")
-    public ResponseEntity<?> getPredictions() {
-        return ResponseEntity.ok(insightsService.getCachedPredictions());
+    public ResponseEntity<?> getPredictions(@RequestParam(required = false) Long accountId) {
+        return ResponseEntity.ok(insightsService.getCachedPredictions(accountId));
     }
 
     /**
-     * Forecasts deliberately ignore any date filter: a projection built from a narrow
-     * window would be worse, and the cached result is not keyed by range.
+     * Forecasts deliberately ignore any date filter: a projection built from a narrow window
+     * would be worse. They are scoped by account, so generating one while looking at a single
+     * account never overwrites — or gets shown under — a different account's forecast.
      */
     @PostMapping("/predictions/refresh")
     public ResponseEntity<?> refreshPredictions(@RequestParam(required = false) Long accountId) {
