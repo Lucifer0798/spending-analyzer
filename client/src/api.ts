@@ -175,17 +175,22 @@ export function deleteTransaction(id: number) {
 // --- accounts ---------------------------------------------------------------
 
 export function fetchAccounts(includeArchived = false) {
-  return request<{ accounts: Account[]; types: AccountType[] }>(`/accounts${qs({ includeArchived })}`);
+  return request<{ accounts: Account[]; types: AccountType[]; currencies: string[] }>(
+    `/accounts${qs({ includeArchived })}`
+  );
 }
 
-export function createAccount(name: string, type: AccountType) {
+export function createAccount(name: string, type: AccountType, currency = "USD") {
   return request<Account>("/accounts", {
     method: "POST",
-    body: JSON.stringify({ name, type }),
+    body: JSON.stringify({ name, type, currency }),
   });
 }
 
-export function updateAccount(id: number, changes: { name?: string; type?: AccountType; archived?: boolean }) {
+export function updateAccount(
+  id: number,
+  changes: { name?: string; type?: AccountType; archived?: boolean; currency?: string }
+) {
   return request<Account>(`/accounts/${id}`, {
     method: "PATCH",
     body: JSON.stringify(changes),

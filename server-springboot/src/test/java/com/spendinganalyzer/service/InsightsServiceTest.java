@@ -92,7 +92,7 @@ class InsightsServiceTest {
     void refreshStoresUnderTheAccountItWasGeneratedFor() {
         when(stats.computeMonthlyCategorySeries(eq(3L), any())).thenReturn(List.of(series("Groceries")));
         when(stats.computeMonthlyTotals(eq(3L), any())).thenReturn(List.of(new MonthlyTotal("2026-06", 100.0)));
-        when(anthropic.generatePredictions(any(), any()))
+        when(anthropic.generatePredictions(any(), any(), any()))
                 .thenReturn(new PredictionsPayload("summary", List.of(), List.of()));
 
         service.refreshPredictions(3L);
@@ -107,7 +107,7 @@ class InsightsServiceTest {
     void refreshForAllAccountsStoresNull() {
         when(stats.computeMonthlyCategorySeries(isNull(), any())).thenReturn(List.of(series("Groceries")));
         when(stats.computeMonthlyTotals(isNull(), any())).thenReturn(List.of(new MonthlyTotal("2026-06", 100.0)));
-        when(anthropic.generatePredictions(any(), any()))
+        when(anthropic.generatePredictions(any(), any(), any()))
                 .thenReturn(new PredictionsPayload("summary", List.of(), List.of()));
 
         service.refreshPredictions(null);
@@ -120,7 +120,7 @@ class InsightsServiceTest {
     void alwaysUsesFullHistory() {
         when(stats.computeMonthlyCategorySeries(eq(5L), eq(DateRange.ALL))).thenReturn(List.of(series("Groceries")));
         when(stats.computeMonthlyTotals(eq(5L), eq(DateRange.ALL))).thenReturn(List.of());
-        when(anthropic.generatePredictions(any(), any()))
+        when(anthropic.generatePredictions(any(), any(), any()))
                 .thenReturn(new PredictionsPayload("summary", List.of(), List.of()));
 
         service.refreshPredictions(5L);
@@ -137,7 +137,7 @@ class InsightsServiceTest {
 
         PredictionsResponse response = service.refreshPredictions(2L);
 
-        verify(anthropic, never()).generatePredictions(any(), any());
+        verify(anthropic, never()).generatePredictions(any(), any(), any());
         assertThat(response.predictions().predictions()).isEmpty();
         verify(cache).upsert(eq(2L), any(), any());
     }

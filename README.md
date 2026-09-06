@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V8)
-  src/test/                 167 tests
+    db/migration/           Versioned schema migrations (V1–V9)
+  src/test/                 212 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -191,14 +191,14 @@ Six tables, all created automatically:
 | Table | Holds |
 |---|---|
 | `transactions` | Every imported transaction |
-| `accounts` | Your accounts; everything belongs to one, defaulting to "Default" |
+| `accounts` | Your accounts; everything belongs to one, defaulting to "Default". Each has its own currency |
 | `categories` | The 16 built-in categories plus any you add |
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
 | `budgets` | A monthly spending target per category |
 | `predictions_cache` | The most recent AI forecast, one row per account |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V9__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V10__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -332,6 +332,22 @@ label as a correct one. `predictions_cache` is now keyed by account id, with `0`
 primary key, which would have let two "all accounts" rows coexist instead of one replacing the
 other. Real account ids start at 1, so `0` can never collide with one.
 
+**Each account has its own currency, and "all accounts" refuses to add two of them together.**
+An account picks a currency (defaulting to USD) when it's created, and every amount on screen for
+that account — transactions, the dashboard, budgets, the forecast — is formatted in it. Changing
+an account's currency later only changes the label on its numbers; there's no exchange-rate
+history to redo the math with, so past amounts keep whatever number they already had.
+
+The harder question is what "all accounts" means once two of them disagree. Summing €40 and $100
+into "$140" would be a wrong number wearing a confident font, so the dashboard doesn't: once the
+accounts in view use more than one currency, the combined total, chart and forecast are replaced
+by one section per currency instead, each totaled and charted on its own. Budgets and the AI
+forecast go further and simply ask you to pick one account — a budget target is one number that
+can't be compared against two currencies of spend at once, and a forecast has to be generated in
+a single currency in the first place. The transactions list and its CSV export are the exception:
+each row already carries its own account, so it carries that account's currency too and never
+needs to total anything.
+
 For the same reason, **the forecast exports take an account filter, but no date range.** Every
 other export mirrors the filters on screen; these two only take one of the two, because a
 forecast is always full-history — there is no filtered-by-date version to export, only a
@@ -381,7 +397,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (167).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (212).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -454,6 +470,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Multi-currency support~~ — each account now has its own currency. "All accounts" refuses to
+  sum two currencies together; it shows one section per currency instead, and budgets, the AI
+  forecast, and the period comparison all ask you to pick a single account
 - ~~Period-over-period comparison~~ — the dashboard shows the active range against the
   equal-length period immediately before it, per category, whatever preset produced the range
 - ~~Login rate limiting~~ — the shared password locks a caller out after too many consecutive

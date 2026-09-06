@@ -57,7 +57,8 @@ public class InsightsService {
         if (series.isEmpty()) {
             payload = new PredictionsPayload("Not enough categorized spending data yet.", List.of(), List.of());
         } else {
-            payload = anthropicService.generatePredictions(series, monthlyTotals);
+            String currency = statsService.resolveCurrency(accountId);
+            payload = anthropicService.generatePredictions(series, monthlyTotals, currency);
         }
 
         String generatedAt = Instant.now().toString();

@@ -11,6 +11,7 @@ export interface Transaction {
   created_at: string;
   account_id: number;
   account_name: string | null;
+  account_currency: string | null;
 }
 
 export type AccountType =
@@ -27,6 +28,7 @@ export interface Account {
   type: AccountType;
   archived: boolean;
   created_at: string;
+  currency: string;
   transactionCount: number;
 }
 
@@ -114,6 +116,9 @@ export interface RecurringResponse {
   recurring: RecurringSeries[];
   totalAnnualizedCost: number;
   totalMonthlyEquivalent: number;
+  currency: string;
+  /** True when "all accounts" spans more than one currency — recurring is left empty above. */
+  mixedCurrencies: boolean;
 }
 
 export interface CategoryTotal {
@@ -136,10 +141,20 @@ export interface CategoryMonthlySeries {
   lastMonthTotal: number;
 }
 
+/** One currency's slice of a {@link SummaryResponse} whose accounts don't all share one. */
+export interface CurrencyBreakdown {
+  currency: string;
+  categoryTotals: CategoryTotal[];
+  monthlyTotals: MonthlyTotal[];
+}
+
 export interface SummaryResponse {
   categoryTotals: CategoryTotal[];
   monthlyTotals: MonthlyTotal[];
   monthlyByCategory: CategoryMonthlySeries[];
+  /** Null when "all accounts" spans more than one currency — see `perCurrency` instead. */
+  currency: string | null;
+  perCurrency: CurrencyBreakdown[] | null;
 }
 
 export interface CategoryComparison {
@@ -163,10 +178,12 @@ export interface PeriodComparison {
 }
 
 /** False for "all time" or a half-open filter -- a comparison needs two well-defined,
- *  equal-length windows, which neither has. */
+ *  equal-length windows, which neither has -- or when "all accounts" spans more than one
+ *  currency, since a comparison would mix them. `currency` is null exactly when this is. */
 export interface ComparisonResponse {
   applicable: boolean;
   comparison: PeriodComparison | null;
+  currency: string | null;
 }
 
 export interface AuthStatus {
@@ -204,6 +221,9 @@ export interface BudgetSummary {
   budgets: BudgetProgress[];
   totalLimit: number;
   totalSpent: number;
+  /** Null when "all accounts" spans more than one currency — budgets is empty in that case. */
+  currency: string | null;
+  mixedCurrencies: boolean;
 }
 
 export interface Prediction {

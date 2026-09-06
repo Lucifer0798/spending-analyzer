@@ -23,7 +23,8 @@ public class AccountRepository {
             rs.getString("name"),
             rs.getString("type"),
             rs.getInt("archived") == 1,
-            rs.getString("created_at")
+            rs.getString("created_at"),
+            rs.getString("currency")
     );
 
     public List<Account> findAll(boolean includeArchived) {
@@ -55,14 +56,17 @@ public class AccountRepository {
         return n != null && n > 0;
     }
 
-    public Account create(String name, String type) {
-        jdbc.update("INSERT INTO accounts (name, type) VALUES (:name, :type)",
-                new MapSqlParameterSource().addValue("name", name).addValue("type", type));
+    public Account create(String name, String type, String currency) {
+        jdbc.update("INSERT INTO accounts (name, type, currency) VALUES (:name, :type, :currency)",
+                new MapSqlParameterSource()
+                        .addValue("name", name)
+                        .addValue("type", type)
+                        .addValue("currency", currency));
         Long id = jdbc.getJdbcTemplate().queryForObject("SELECT last_insert_rowid()", Long.class);
         return findById(id != null ? id : 0).orElseThrow();
     }
 
-    public boolean update(long id, String name, String type, Boolean archived) {
+    public boolean update(long id, String name, String type, Boolean archived, String currency) {
         StringBuilder sql = new StringBuilder("UPDATE accounts SET ");
         MapSqlParameterSource params = new MapSqlParameterSource("id", id);
         List<String> sets = new java.util.ArrayList<>();
@@ -79,10 +83,24 @@ public class AccountRepository {
             sets.add("archived = :archived");
             params.addValue("archived", archived ? 1 : 0);
         }
+        if (currency != null) {
+            sets.add("currency = :currency");
+            params.addValue("currency", currency);
+        }
         if (sets.isEmpty()) return false;
 
         sql.append(String.join(", ", sets)).append(" WHERE id = :id");
         return jdbc.update(sql.toString(), params) > 0;
+    }
+
+    /**
+     * Every distinct currency in use across all accounts, archived included — an archived
+     * account's past transactions still count toward an "all accounts" total. Used to decide
+     * whether that total means anything: one entry means every account agrees, more than one
+     * means summing across accounts would mix currencies.
+     */
+    public List<String> distinctCurrencies() {
+        return jdbc.getJdbcTemplate().queryForList("SELECT DISTINCT currency FROM accounts", String.class);
     }
 
     /** Number of transactions currently assigned to this account. */

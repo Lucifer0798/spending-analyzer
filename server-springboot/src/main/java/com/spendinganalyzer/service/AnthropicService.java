@@ -103,7 +103,8 @@ public class AnthropicService {
         }
     }
 
-    public PredictionsPayload generatePredictions(List<CategoryMonthlySeries> series, List<MonthlyTotal> monthlyTotals) {
+    public PredictionsPayload generatePredictions(
+            List<CategoryMonthlySeries> series, List<MonthlyTotal> monthlyTotals, String currency) {
         List<Map<String, Object>> statsForModel = series.stream()
                 .map(s -> Map.<String, Object>of(
                         "category", s.category(),
@@ -153,7 +154,7 @@ public class AnthropicService {
                 .build();
 
         String prompt = """
-                You are a personal finance analyst. Below is a user's spending history broken down by category and month, plus two statistical baselines (a linear trend projection and a 3-month moving average) already computed from the data.
+                You are a personal finance analyst. Below is a user's spending history broken down by category and month, plus two statistical baselines (a linear trend projection and a 3-month moving average) already computed from the data. All amounts are in %s.
 
                 Overall monthly spend totals: %s
 
@@ -163,7 +164,7 @@ public class AnthropicService {
                 1. For each category, predict next month's spend. Ground your prediction in the statistical baselines provided, but use judgment (e.g. smooth out one-off spikes, weight recent months more if there's a clear trend).
                 2. Identify the categories with the strongest growth trend or the biggest waste/reduction opportunity, and write specific, actionable recommendations for reducing spending. Reference actual amounts from the data. Only include recommendations grounded in the data shown — do not invent categories or numbers.
                 3. Write a short overall summary of the spending picture.
-                """.formatted(monthlyTotalsJson, statsJson);
+                """.formatted(currency, monthlyTotalsJson, statsJson);
 
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)

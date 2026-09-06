@@ -16,7 +16,7 @@ class RecurringDetectionServiceTest {
 
     private static Transaction tx(String date, String description, double amount, String category) {
         return new Transaction(0, date, description, amount, "debit", category,
-                "ai", "batch", "2026-01-01", 1L, "Default");
+                "ai", "batch", "2026-01-01", 1L, "Default", "USD");
     }
 
     private static List<Transaction> monthly(String description, double amount, String category, String... dates) {

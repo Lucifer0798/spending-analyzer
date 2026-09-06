@@ -62,7 +62,7 @@ public class CsvExportService {
     public byte[] transactions(List<Transaction> transactions) {
         String[] header = {
                 "date", "description", "category", "type",
-                "amount", "signed_amount", "account", "category_source"
+                "amount", "signed_amount", "account", "currency", "category_source"
         };
         return toCsv(header, printer -> {
             for (Transaction t : transactions) {
@@ -74,6 +74,7 @@ public class CsvExportService {
                         t.amount(),
                         "debit".equals(t.type()) ? -t.amount() : t.amount(),
                         t.accountName() == null ? "" : t.accountName(),
+                        t.accountCurrency() == null ? "" : t.accountCurrency(),
                         t.categorySource() == null ? "" : t.categorySource()
                 );
             }
@@ -83,14 +84,17 @@ public class CsvExportService {
     /**
      * Spend per category, matching the dashboard's category chart. The share column is what the
      * chart conveys visually and is tedious to recompute in a spreadsheet from a filtered export.
+     * {@code currency} is repeated on every row for the same reason the transactions export
+     * carries one per row — every total here is scoped to a single currency by the time it
+     * reaches this method, so there is exactly one value to repeat.
      */
-    public byte[] categoryTotals(List<CategoryTotal> totals) {
+    public byte[] categoryTotals(List<CategoryTotal> totals, String currency) {
         double grandTotal = totals.stream().mapToDouble(CategoryTotal::total).sum();
 
-        return toCsv(new String[]{"category", "total", "transactions", "share_percent"}, printer -> {
+        return toCsv(new String[]{"category", "total", "currency", "transactions", "share_percent"}, printer -> {
             for (CategoryTotal c : totals) {
                 double share = grandTotal == 0 ? 0 : (c.total() / grandTotal) * 100;
-                printer.printRecord(c.category(), c.total(), c.count(), round2(share));
+                printer.printRecord(c.category(), c.total(), currency, c.count(), round2(share));
             }
         });
     }
@@ -106,15 +110,16 @@ public class CsvExportService {
      * whole forecast, so it would either be duplicated down every row or sit in a column that is
      * empty except once — neither of which is a table.
      */
-    public byte[] predictions(List<Prediction> predictions, String generatedAt) {
+    public byte[] predictions(List<Prediction> predictions, String generatedAt, String currency) {
         String[] header = {
-                "category", "predicted_next_month", "trend", "confidence", "rationale", "generated_at"
+                "category", "predicted_next_month", "currency", "trend", "confidence", "rationale", "generated_at"
         };
         return toCsv(header, printer -> {
             for (Prediction p : predictions) {
                 printer.printRecord(
                         p.category(),
                         p.predictedNextMonth(),
+                        currency,
                         p.trend(),
                         p.confidence(),
                         p.rationale(),
@@ -125,9 +130,9 @@ public class CsvExportService {
     }
 
     /** The savings suggestions that come back with the forecast, one row each. */
-    public byte[] recommendations(List<Recommendation> recommendations, String generatedAt) {
+    public byte[] recommendations(List<Recommendation> recommendations, String generatedAt, String currency) {
         String[] header = {
-                "category", "insight", "suggested_action", "potential_monthly_savings", "generated_at"
+                "category", "insight", "suggested_action", "potential_monthly_savings", "currency", "generated_at"
         };
         return toCsv(header, printer -> {
             for (Recommendation r : recommendations) {
@@ -136,6 +141,7 @@ public class CsvExportService {
                         r.insight(),
                         r.suggestedAction(),
                         r.potentialMonthlySavings(),
+                        currency,
                         generatedAt == null ? "" : generatedAt
                 );
             }
@@ -143,10 +149,10 @@ public class CsvExportService {
     }
 
     /** Spend per month, matching the dashboard's trend line. */
-    public byte[] monthlyTotals(List<MonthlyTotal> totals) {
-        return toCsv(new String[]{"month", "total"}, printer -> {
+    public byte[] monthlyTotals(List<MonthlyTotal> totals, String currency) {
+        return toCsv(new String[]{"month", "total", "currency"}, printer -> {
             for (MonthlyTotal m : totals) {
-                printer.printRecord(m.month(), m.total());
+                printer.printRecord(m.month(), m.total(), currency);
             }
         });
     }

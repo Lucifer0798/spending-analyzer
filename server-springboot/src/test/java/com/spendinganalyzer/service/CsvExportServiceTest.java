@@ -25,7 +25,7 @@ class CsvExportServiceTest {
     private static Transaction transaction(
             String date, String description, double amount, String type, String category, String account) {
         return new Transaction(
-                1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account);
+                1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD");
     }
 
     /** Reads an export back the way a spreadsheet would, so escaping is exercised rather than assumed. */
@@ -104,18 +104,19 @@ class CsvExportServiceTest {
     void computesCategoryShare() throws IOException {
         byte[] csv = service.categoryTotals(List.of(
                 new CategoryTotal("Groceries", 750.00, 30),
-                new CategoryTotal("Travel", 250.00, 2)));
+                new CategoryTotal("Travel", 250.00, 2)), "EUR");
 
         List<CSVRecord> rows = parse(csv);
         assertThat(rows.get(0).get("share_percent")).isEqualTo("75.0");
         assertThat(rows.get(1).get("share_percent")).isEqualTo("25.0");
         assertThat(rows.get(0).get("transactions")).isEqualTo("30");
+        assertThat(rows.get(0).get("currency")).isEqualTo("EUR");
     }
 
     @Test
     @DisplayName("does not divide by zero when every total is zero")
     void survivesZeroTotals() throws IOException {
-        byte[] csv = service.categoryTotals(List.of(new CategoryTotal("Groceries", 0.0, 0)));
+        byte[] csv = service.categoryTotals(List.of(new CategoryTotal("Groceries", 0.0, 0)), "USD");
 
         assertThat(parse(csv).get(0).get("share_percent")).isEqualTo("0.0");
     }
@@ -128,7 +129,7 @@ class CsvExportServiceTest {
         byte[] csv = service.predictions(List.of(
                 new Prediction("Groceries", 412.50, "increasing", "high", "Up in each of the last three months."),
                 new Prediction("Travel", 0.0, "stable", "low", "Nothing since March.")),
-                "2026-08-31T10:15:00Z");
+                "2026-08-31T10:15:00Z", "USD");
 
         List<CSVRecord> rows = parse(csv);
         assertThat(rows).hasSize(2);
@@ -146,7 +147,7 @@ class CsvExportServiceTest {
         byte[] csv = service.recommendations(List.of(
                 new Recommendation("Dining & Coffee", "You spent £120, up 40%.",
                         "Try cooking twice a week, and cancel what you don't use.", 48.00)),
-                "2026-08-31T10:15:00Z");
+                "2026-08-31T10:15:00Z", "USD");
 
         CSVRecord row = parse(csv).get(0);
         assertThat(row.get("category")).isEqualTo("Dining & Coffee");
@@ -158,8 +159,8 @@ class CsvExportServiceTest {
     @Test
     @DisplayName("handles a forecast that was never generated")
     void handlesNoForecast() throws IOException {
-        byte[] predictions = service.predictions(List.of(), null);
-        byte[] recommendations = service.recommendations(List.of(), null);
+        byte[] predictions = service.predictions(List.of(), null, "USD");
+        byte[] recommendations = service.recommendations(List.of(), null, "USD");
 
         assertThat(parse(predictions)).isEmpty();
         assertThat(parse(recommendations)).isEmpty();
@@ -174,7 +175,7 @@ class CsvExportServiceTest {
     void writesMonthlyTotals() throws IOException {
         byte[] csv = service.monthlyTotals(List.of(
                 new MonthlyTotal("2026-05", 1200.50),
-                new MonthlyTotal("2026-06", 980.25)));
+                new MonthlyTotal("2026-06", 980.25)), "USD");
 
         List<CSVRecord> rows = parse(csv);
         assertThat(rows).hasSize(2);

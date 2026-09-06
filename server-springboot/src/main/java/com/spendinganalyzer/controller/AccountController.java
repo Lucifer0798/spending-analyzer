@@ -7,6 +7,7 @@ import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Currency;
 import java.util.List;
 import java.util.Map;
 
@@ -24,22 +25,23 @@ public class AccountController {
 
     public record AccountWithCount(
             long id, String name, String type, boolean archived,
-            String created_at, int transactionCount
+            String created_at, String currency, int transactionCount
     ) {}
 
     @GetMapping("/accounts")
     public Map<String, Object> list(@RequestParam(defaultValue = "false") boolean includeArchived) {
         List<AccountWithCount> accounts = accountRepository.findAll(includeArchived).stream()
                 .map(a -> new AccountWithCount(a.id(), a.name(), a.type(), a.archived(), a.createdAt(),
-                        accountRepository.transactionCount(a.id())))
+                        a.currency(), accountRepository.transactionCount(a.id())))
                 .toList();
-        return Map.of("accounts", accounts, "types", Account.TYPES);
+        return Map.of("accounts", accounts, "types", Account.TYPES, "currencies", Account.CURRENCIES);
     }
 
     @PostMapping("/accounts")
     public ResponseEntity<?> create(@RequestBody Map<String, String> body) {
         String name = body.get("name") == null ? "" : body.get("name").trim();
         String type = body.getOrDefault("type", "checking");
+        String currency = body.getOrDefault("currency", "USD");
 
         if (name.isEmpty()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("name is required."));
@@ -48,11 +50,14 @@ public class AccountController {
             return ResponseEntity.badRequest()
                     .body(new ErrorResponse("type must be one of: " + String.join(", ", Account.TYPES)));
         }
+        if (!isValidCurrency(currency)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("currency must be a valid ISO 4217 code."));
+        }
         if (accountRepository.nameExists(name, null)) {
             return ResponseEntity.status(409).body(new ErrorResponse("An account named '" + name + "' already exists."));
         }
 
-        return ResponseEntity.ok(accountRepository.create(name, type));
+        return ResponseEntity.ok(accountRepository.create(name, type, currency.toUpperCase()));
     }
 
     @PatchMapping("/accounts/{id}")
@@ -64,17 +69,30 @@ public class AccountController {
         String name = body.get("name") instanceof String s && !s.isBlank() ? s.trim() : null;
         String type = body.get("type") instanceof String s ? s : null;
         Boolean archived = body.get("archived") instanceof Boolean b ? b : null;
+        String currency = body.get("currency") instanceof String s ? s : null;
 
         if (type != null && !Account.TYPES.contains(type)) {
             return ResponseEntity.badRequest()
                     .body(new ErrorResponse("type must be one of: " + String.join(", ", Account.TYPES)));
         }
+        if (currency != null && !isValidCurrency(currency)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("currency must be a valid ISO 4217 code."));
+        }
         if (name != null && accountRepository.nameExists(name, id)) {
             return ResponseEntity.status(409).body(new ErrorResponse("An account named '" + name + "' already exists."));
         }
 
-        accountRepository.update(id, name, type, archived);
+        accountRepository.update(id, name, type, archived, currency != null ? currency.toUpperCase() : null);
         return ResponseEntity.ok(accountRepository.findById(id).orElseThrow());
+    }
+
+    private static boolean isValidCurrency(String code) {
+        try {
+            Currency.getInstance(code.toUpperCase());
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**

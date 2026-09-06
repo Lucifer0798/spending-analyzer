@@ -1,13 +1,13 @@
-export function currency(n: number, maximumFractionDigits = 0) {
+export function currency(n: number, maximumFractionDigits = 0, currencyCode = "USD") {
   return n.toLocaleString(undefined, {
     style: "currency",
-    currency: "USD",
+    currency: currencyCode,
     maximumFractionDigits,
   });
 }
 
-export function currencyPrecise(n: number) {
-  return currency(n, 2);
+export function currencyPrecise(n: number, currencyCode = "USD") {
+  return currency(n, 2, currencyCode);
 }
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {

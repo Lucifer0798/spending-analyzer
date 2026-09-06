@@ -25,23 +25,23 @@ function formatDate(iso: string): string {
   });
 }
 
-function ChangeBadge({ amount, percent }: { amount: number; percent: number | null }) {
+function ChangeBadge({ amount, percent, currencyCode }: { amount: number; percent: number | null; currencyCode: string }) {
   // Spending more is the "bad" direction here, the reverse of a trend chart where up is good.
   const color = amount > 0 ? BAD : amount < 0 ? GOOD : undefined;
   const arrow = amount > 0 ? "↑" : amount < 0 ? "↓" : "→";
   return (
     <span className="text-sm font-semibold" style={{ color }}>
-      {arrow} {currency(Math.abs(amount))}
+      {arrow} {currency(Math.abs(amount), 0, currencyCode)}
       {percent !== null && <span className="ml-1 font-normal opacity-80">({Math.abs(percent).toFixed(0)}%)</span>}
     </span>
   );
 }
 
-function CategoryRow({ category }: { category: CategoryComparison }) {
+function CategoryRow({ category, currencyCode }: { category: CategoryComparison; currencyCode: string }) {
   return (
     <div className="flex items-center justify-between gap-2 py-1 text-sm">
       <span className="text-slate-700 dark:text-slate-300">{category.category}</span>
-      <ChangeBadge amount={category.changeAmount} percent={category.changePercent} />
+      <ChangeBadge amount={category.changeAmount} percent={category.changePercent} currencyCode={currencyCode} />
     </div>
   );
 }
@@ -54,10 +54,11 @@ export function ComparisonCard({ accountId, range }: Props) {
   }, [accountId, range]);
 
   // Nothing to show for "all time" or a half-open filter -- there is no defined-length period
-  // to mirror, and the comparison endpoint says so explicitly rather than this guessing.
-  if (!response?.applicable || !response.comparison) return null;
+  // to mirror, and the comparison endpoint says so explicitly rather than this guessing. Also
+  // nothing to show once "all accounts" spans more than one currency, for the same reason.
+  if (!response?.applicable || !response.comparison || !response.currency) return null;
 
-  const { comparison } = response;
+  const { comparison, currency: currencyCode } = response;
   const visible = comparison.categories.slice(0, VISIBLE_CATEGORIES);
   const remaining = comparison.categories.length - visible.length;
 
@@ -74,16 +75,16 @@ export function ComparisonCard({ accountId, range }: Props) {
 
       <div className="flex items-baseline gap-3">
         <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-          {currency(comparison.currentTotal)}
+          {currency(comparison.currentTotal, 0, currencyCode)}
         </span>
-        <ChangeBadge amount={comparison.changeAmount} percent={comparison.changePercent} />
-        <span className={`text-xs ${MUTED_TEXT}`}>was {currency(comparison.previousTotal)}</span>
+        <ChangeBadge amount={comparison.changeAmount} percent={comparison.changePercent} currencyCode={currencyCode} />
+        <span className={`text-xs ${MUTED_TEXT}`}>was {currency(comparison.previousTotal, 0, currencyCode)}</span>
       </div>
 
       {visible.length > 0 && (
         <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
           {visible.map((c) => (
-            <CategoryRow key={c.category} category={c} />
+            <CategoryRow key={c.category} category={c} currencyCode={currencyCode} />
           ))}
         </div>
       )}
