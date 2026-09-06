@@ -1,6 +1,7 @@
 package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.dto.DateRange;
+import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.CsvExportService;
 import com.spendinganalyzer.service.InsightsService;
@@ -23,6 +24,11 @@ import java.util.List;
  * account filter as the screen it mirrors. The transaction and spend exports also take a date
  * range; the two forecast exports don't, because a forecast is always built from full history —
  * there is no filtered-by-date version of it to export, only a filtered-by-account one.
+ *
+ * <p>The three exports that total across transactions (categories, monthly, and implicitly the
+ * forecast) are all denominated in one currency. Categories and monthly refuse to export when
+ * "all accounts" spans more than one — the transactions export never needs to, since it carries
+ * each row's own account and currency rather than summing anything.
  *
  * <p>These are plain GETs returning an attachment, so the frontend can link straight to them
  * and let the browser handle the download.
@@ -68,25 +74,33 @@ public class ExportController {
     }
 
     @GetMapping("/categories.csv")
-    public ResponseEntity<byte[]> categories(
+    public ResponseEntity<?> categories(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to
     ) {
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return mixedCurrenciesError();
+        }
         DateRange range = DateRange.of(from, to);
         return attachment("spend-by-category", csv.categoryTotals(
-                statsService.computeCategoryTotals(accountId, range)));
+                statsService.computeCategoryTotals(accountId, range), currency));
     }
 
     @GetMapping("/monthly.csv")
-    public ResponseEntity<byte[]> monthly(
+    public ResponseEntity<?> monthly(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to
     ) {
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return mixedCurrenciesError();
+        }
         DateRange range = DateRange.of(from, to);
         return attachment("spend-by-month", csv.monthlyTotals(
-                statsService.computeMonthlyTotals(accountId, range)));
+                statsService.computeMonthlyTotals(accountId, range), currency));
     }
 
     /**
@@ -100,19 +114,32 @@ public class ExportController {
         var cached = insightsService.getCachedPredictions(accountId);
         var payload = cached.predictions();
 
+        // A forecast can only ever have been generated for a single currency — refreshing one
+        // is blocked while "all accounts" is mixed — so nothing cached yet defaults the column
+        // to USD rather than leaving it blank.
+        String currency = statsService.resolveCurrency(accountId);
+
         // Nothing generated yet gives a header-only file rather than a 404 — the frontend hides
         // the link in that case, and an empty table is a truthful answer to "export the forecast".
         return attachment("predictions", csv.predictions(
-                payload == null ? List.of() : payload.predictions(), cached.generatedAt()));
+                payload == null ? List.of() : payload.predictions(), cached.generatedAt(),
+                currency != null ? currency : "USD"));
     }
 
     @GetMapping("/recommendations.csv")
     public ResponseEntity<byte[]> recommendations(@RequestParam(required = false) Long accountId) {
         var cached = insightsService.getCachedPredictions(accountId);
         var payload = cached.predictions();
+        String currency = statsService.resolveCurrency(accountId);
 
         return attachment("recommendations", csv.recommendations(
-                payload == null ? List.of() : payload.recommendations(), cached.generatedAt()));
+                payload == null ? List.of() : payload.recommendations(), cached.generatedAt(),
+                currency != null ? currency : "USD"));
+    }
+
+    private static ResponseEntity<ErrorResponse> mixedCurrenciesError() {
+        return ResponseEntity.badRequest().body(new ErrorResponse(
+                "Accounts use different currencies — select one account to export this."));
     }
 
     /** Dated filename so repeated exports land beside each other instead of overwriting. */

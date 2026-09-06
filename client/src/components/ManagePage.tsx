@@ -32,6 +32,7 @@ interface Props {
 export function ManagePage({ onAccountsChanged }: Props) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [types, setTypes] = useState<AccountType[]>([]);
+  const [currencies, setCurrencies] = useState<string[]>([]);
   const [categories, setCategories] = useState<CategoryDetail[]>([]);
   const [memory, setMemory] = useState<MerchantsResponse | null>(null);
   const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
@@ -44,6 +45,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
 
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState<AccountType>("checking");
+  const [newAccountCurrency, setNewAccountCurrency] = useState("USD");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryKind, setNewCategoryKind] = useState<"spending" | "income" | "transfer">("spending");
   const [ruleMerchant, setRuleMerchant] = useState("");
@@ -60,6 +62,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
     ]);
     setAccounts(accountsRes.accounts);
     setTypes(accountsRes.types);
+    setCurrencies(accountsRes.currencies);
     setCategories(categoriesRes.detailed);
     setMemory(merchantsRes);
     setBudgets(budgetsRes);
@@ -89,6 +92,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
   // Budgeting income or transfers is meaningless — neither counts as spending anywhere else.
   const spendingCategories = categories.filter((c) => !c.is_income && !c.is_transfer);
   const budgetByCategory = new Map((budgets?.budgets ?? []).map((b) => [b.category, b]));
+  // Null when accounts use different currencies — budgets is empty in that case too, so this
+  // only matters for formatting the (necessarily present) saved rows below.
+  const budgetCurrency = budgets?.currency ?? "USD";
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -129,9 +135,19 @@ export function ManagePage({ onAccountsChanged }: Props) {
                     </div>
                   </td>
                   <td className="px-4 py-2 text-right">
+                    <select
+                      value={a.currency}
+                      onChange={(e) => run(() => updateAccount(a.id, { currency: e.target.value }))}
+                      title="Changes only how amounts are displayed — past transactions keep their stored numbers"
+                      className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      {(currencies.includes(a.currency) ? currencies : [a.currency, ...currencies]).map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
                     <button
                       onClick={() => run(() => updateAccount(a.id, { archived: !a.archived }))}
-                      className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      className="ml-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
                       {a.archived ? "Unarchive" : "Archive"}
                     </button>
@@ -175,10 +191,19 @@ export function ManagePage({ onAccountsChanged }: Props) {
               </option>
             ))}
           </select>
+          <select
+            value={newAccountCurrency}
+            onChange={(e) => setNewAccountCurrency(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            {currencies.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
           <button
             disabled={!newAccountName.trim()}
             onClick={() =>
-              run(() => createAccount(newAccountName.trim(), newAccountType)).then(() =>
+              run(() => createAccount(newAccountName.trim(), newAccountType, newAccountCurrency)).then(() =>
                 setNewAccountName("")
               )
             }
@@ -319,7 +344,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                       <div className="text-sm text-slate-800 dark:text-slate-200">{c.name}</div>
                       {saved && (
                         <div className="text-xs text-slate-500">
-                          {currency(saved.spent)} spent of {currency(saved.monthlyLimit)} this month
+                          {currency(saved.spent, 0, budgetCurrency)} spent of {currency(saved.monthlyLimit, 0, budgetCurrency)} this month
                         </div>
                       )}
                     </td>
@@ -374,7 +399,13 @@ export function ManagePage({ onAccountsChanged }: Props) {
 
         {budgets && budgets.budgets.length > 0 && (
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-            {currency(budgets.totalSpent)} spent against {currency(budgets.totalLimit)} budgeted.
+            {currency(budgets.totalSpent, 0, budgetCurrency)} spent against {currency(budgets.totalLimit, 0, budgetCurrency)} budgeted.
+          </p>
+        )}
+        {budgets?.mixedCurrencies && (
+          <p className="mt-3 text-sm text-slate-500">
+            Accounts use different currencies, so budget progress isn't shown here — targets can
+            still be set below.
           </p>
         )}
       </section>

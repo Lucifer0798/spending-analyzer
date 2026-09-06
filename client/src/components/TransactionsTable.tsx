@@ -139,7 +139,7 @@ export function TransactionsTable({ accountId, range }: Props) {
   };
 
   const handleDelete = async (t: Transaction) => {
-    if (!confirm(`Delete "${t.description}" (${currencyPrecise(t.amount)}) on ${t.date}?`)) return;
+    if (!confirm(`Delete "${t.description}" (${currencyPrecise(t.amount, t.account_currency ?? undefined)}) on ${t.date}?`)) return;
     setError(null);
     try {
       await deleteTransaction(t.id);
@@ -296,7 +296,7 @@ export function TransactionsTable({ accountId, range }: Props) {
                     }`}
                   >
                     {t.type === "credit" ? "+" : "-"}
-                    {currencyPrecise(t.amount)}
+                    {currencyPrecise(t.amount, t.account_currency ?? undefined)}
                   </td>
                   <td className="px-4 py-2 text-sm">
                     <select

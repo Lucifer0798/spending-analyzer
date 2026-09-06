@@ -1,6 +1,7 @@
 package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.model.ParsedTransaction;
+import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -39,6 +40,9 @@ class ExportControllerTest {
 
     @Autowired
     private TransactionRepository transactions;
+
+    @Autowired
+    private AccountRepository accounts;
 
     @BeforeEach
     void seed() {
@@ -113,8 +117,10 @@ class ExportControllerTest {
 
     @Test
     @DisplayName("category export totals the seeded spend under its category")
+    @SuppressWarnings("unchecked")
     void exportsCategoryTotals() throws IOException {
-        ResponseEntity<byte[]> response = controller.categories(null, "2026-05-01", "2026-06-30");
+        ResponseEntity<byte[]> response =
+                (ResponseEntity<byte[]>) (ResponseEntity<?>) controller.categories(null, "2026-05-01", "2026-06-30");
 
         CSVRecord groceries = parse(response).stream()
                 .filter(r -> r.get("category").equals("Groceries"))
@@ -125,15 +131,34 @@ class ExportControllerTest {
 
         assertThat(Double.parseDouble(groceries.get("total"))).isEqualTo(expected);
         assertThat(Integer.parseInt(groceries.get("transactions"))).isEqualTo(SEEDED_ROWS);
+        assertThat(groceries.get("currency")).isEqualTo("USD");
     }
 
     @Test
     @DisplayName("monthly export has a row per month in the range")
+    @SuppressWarnings("unchecked")
     void exportsMonthlyTotals() throws IOException {
-        ResponseEntity<byte[]> response = controller.monthly(null, "2026-05-01", "2026-06-30");
+        ResponseEntity<byte[]> response =
+                (ResponseEntity<byte[]>) (ResponseEntity<?>) controller.monthly(null, "2026-05-01", "2026-06-30");
 
         List<String> months = parse(response).stream().map(r -> r.get("month")).toList();
         assertThat(months).contains("2026-05", "2026-06");
+    }
+
+    @Test
+    @DisplayName("refuses to total across accounts once they use different currencies")
+    void refusesMixedCurrencyAggregateExports() {
+        accounts.create("Euro account", "checking", "EUR");
+        transactions.insertBatch(
+                List.of(new ParsedTransaction("2026-06-15", MARKER + " EUR", 20.00, "debit", "Groceries")),
+                "export-test-eur-batch", accounts.findAll(false).stream()
+                        .filter(a -> a.name().equals("Euro account")).findFirst().orElseThrow().id());
+
+        assertThat(controller.categories(null, null, null).getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.monthly(null, null, null).getStatusCode().value()).isEqualTo(400);
+
+        // A single account is unaffected — the mismatch only exists across "all accounts".
+        assertThat(controller.categories(1L, null, null).getStatusCode().value()).isEqualTo(200);
     }
 
     // --- forecast exports -------------------------------------------------------

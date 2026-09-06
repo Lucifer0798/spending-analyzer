@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.BudgetProgress;
 import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.model.Category;
 import com.spendinganalyzer.model.ParsedTransaction;
+import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
@@ -40,6 +41,9 @@ class BudgetControllerTest {
 
     @Autowired
     private TransactionRepository transactions;
+
+    @Autowired
+    private AccountRepository accounts;
 
     @BeforeEach
     void seed() {
@@ -199,6 +203,26 @@ class BudgetControllerTest {
         BudgetService.BudgetSummary summary = controller.list(null, "2026-06");
         assertThat(summary.totalLimit()).isEqualTo(800.0);
         assertThat(summary.totalSpent()).isEqualTo(400.0);
+        assertThat(summary.currency()).isEqualTo("USD");
+        assertThat(summary.mixedCurrencies()).isFalse();
+    }
+
+    @Test
+    @DisplayName("shows nothing for \"all accounts\" once they use different currencies, rather than mixing them")
+    void hidesProgressWhenCurrenciesMix() {
+        controller.set(body("Groceries", 500));
+        var euroAccount = accounts.create("Euro account", "checking", "EUR");
+        transactions.insertBatch(
+                List.of(new ParsedTransaction("2026-06-10", "EURO SHOP", 50.00, "debit", "Groceries")),
+                "budget-test-eur-batch", euroAccount.id());
+
+        BudgetService.BudgetSummary summary = controller.list(null, "2026-06");
+        assertThat(summary.budgets()).isEmpty();
+        assertThat(summary.currency()).isNull();
+        assertThat(summary.mixedCurrencies()).isTrue();
+
+        // A single account is unaffected — the mismatch only exists across "all accounts".
+        assertThat(controller.list(1L, "2026-06").mixedCurrencies()).isFalse();
     }
 
     @Test

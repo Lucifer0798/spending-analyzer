@@ -234,6 +234,27 @@ would insert two rows instead of the second replacing the first. Real accounts s
 > mismatch the migration exists to fix. Unlike the merchant-memory and transaction migrations,
 > this one is fine to lose: regenerating a forecast is one click.
 
+**`StatsService.resolveCurrency` is the single source of truth for whether "all accounts" means
+anything.** It returns a specific account's own currency when `accountId` is given, the shared
+currency when every account agrees, or `null` when they don't — `null` is the signal every caller
+branches on. `InsightsController.summary` uses it to decide between the normal combined
+`SummaryResponse` and a `perCurrency` breakdown (a second pass over `computeCategoryTotals` /
+`computeMonthlyTotals`, now with an optional `currency` filter joined against `accounts.currency`
+in `SPEND_FILTER`); `BudgetService.progress` and `InsightsController.recurring` use the same null
+check to return an empty, `mixedCurrencies: true` result rather than a total that mixes units;
+`InsightsController.refreshPredictions` and the `categories.csv`/`monthly.csv` exports use it to
+refuse outright (400) rather than generate or export something wrong. Anything new that sums
+across accounts needs to run this same check first — nothing enforces it structurally.
+
+**`accounts.currency` has no sentinel; it's a plain column, unlike the two above.** There's no
+NULL-collision problem here because there's no cache row keyed by it — currency is just an
+attribute of a row that already has a real primary key. `V9__account_currency.sql` adds it with
+`DEFAULT 'USD'`, so every account and every transaction imported before this migration keeps
+meaning exactly what it meant. Changing an account's currency later (`AccountController.update`)
+only relabels its numbers going forward; nothing recomputes past amounts, since there's no
+exchange rate to recompute them with. Validation accepts any code `java.util.Currency` recognizes,
+not just `Account.CURRENCIES` — that list is the dropdown's curated shortlist, not the whole rule.
+
 **Exports are links, not fetches.** `/api/export/*.csv` are plain GETs returning an attachment,
 so the frontend renders an `<a download>` and the browser does the rest. Fetching them into a blob
 would discard the `Content-Disposition` filename and force the client to invent one. They are also

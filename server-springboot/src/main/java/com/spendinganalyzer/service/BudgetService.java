@@ -33,11 +33,21 @@ public class BudgetService {
             String month,
             List<BudgetProgress> budgets,
             double totalLimit,
-            double totalSpent
+            double totalSpent,
+            String currency,
+            boolean mixedCurrencies
     ) {}
 
     public BudgetSummary progress(Long accountId, String requestedMonth) {
         String month = resolveMonth(accountId, requestedMonth);
+        String currency = stats.resolveCurrency(accountId);
+
+        // "All accounts" spanning more than one currency has no single unit for a target or a
+        // total spent — a limit set once can't be compared against spend in two currencies at
+        // once, so this asks for one account instead of showing a number that mixes them.
+        if (currency == null) {
+            return new BudgetSummary(month, List.of(), 0, 0, null, true);
+        }
 
         // Reuses the dashboard's own spend query, so a budget counts exactly what the category
         // chart counts — income and transfer categories excluded, same account filter.
@@ -68,7 +78,7 @@ public class BudgetService {
             totalSpent += used;
         }
 
-        return new BudgetSummary(month, rows, round2(totalLimit), round2(totalSpent));
+        return new BudgetSummary(month, rows, round2(totalLimit), round2(totalSpent), currency, false);
     }
 
     private static String status(double percentUsed) {

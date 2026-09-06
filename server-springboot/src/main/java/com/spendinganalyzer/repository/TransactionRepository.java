@@ -23,7 +23,7 @@ public class TransactionRepository {
     }
 
     private static final String SELECT_WITH_ACCOUNT = """
-            SELECT t.*, a.name AS account_name
+            SELECT t.*, a.name AS account_name, a.currency AS account_currency
             FROM transactions t
             LEFT JOIN accounts a ON a.id = t.account_id
             """;
@@ -39,7 +39,8 @@ public class TransactionRepository {
             rs.getString("upload_batch_id"),
             rs.getString("created_at"),
             rs.getLong("account_id"),
-            rs.getString("account_name")
+            rs.getString("account_name"),
+            rs.getString("account_currency")
     );
 
     public void insertBatch(List<ParsedTransaction> transactions, String batchId, long accountId) {
