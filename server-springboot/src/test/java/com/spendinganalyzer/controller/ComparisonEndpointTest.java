@@ -2,6 +2,7 @@ package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.dto.ComparisonResponse;
 import com.spendinganalyzer.model.ParsedTransaction;
+import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +31,9 @@ class ComparisonEndpointTest {
     @Autowired
     private TransactionRepository transactions;
 
+    @Autowired
+    private AccountRepository accounts;
+
     @BeforeEach
     void seed() {
         transactions.insertBatch(List.of(
@@ -47,6 +51,22 @@ class ComparisonEndpointTest {
         assertThat(response.comparison()).isNotNull();
         assertThat(response.comparison().currentTotal()).isEqualTo(150.00);
         assertThat(response.comparison().previousTotal()).isEqualTo(100.00);
+        assertThat(response.currency()).isEqualTo("USD");
+    }
+
+    @Test
+    @DisplayName("not applicable once \"all accounts\" spans more than one currency, even with a bounded range")
+    void mixedCurrenciesIsNotApplicable() {
+        accounts.create("Euro account", "checking", "EUR");
+
+        ComparisonResponse response = controller.comparison(null, "2026-03-01", "2026-03-31");
+
+        assertThat(response.applicable()).isFalse();
+        assertThat(response.comparison()).isNull();
+        assertThat(response.currency()).isNull();
+
+        // A single account is unaffected -- the mismatch only exists across "all accounts".
+        assertThat(controller.comparison(1L, "2026-03-01", "2026-03-31").applicable()).isTrue();
     }
 
     @Test
