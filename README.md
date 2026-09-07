@@ -305,6 +305,15 @@ Targets are stored per category name, which means a category rename or delete ha
 A rename carries the budget across; a delete drops it rather than folding it into whichever
 category the transactions moved to, since that would silently change a number you set.
 
+**The header's over-budget badge fetches independently of the Dashboard.** It has to: the badge
+is meant to be visible from Upload, Transactions, Manage — everywhere, not just the one screen
+that happens to render `BudgetsCard`. So `App` calls `/api/budgets` itself, on the same
+`accountId`/`refreshKey` triggers as everything else in the header, and counts `status === "over"`.
+Only "over" counts as alert-worthy, not "near" — that stays a quieter color on the progress bars,
+same as before this existed. Once accounts disagree on currency, `/api/budgets` already returns
+no rows for "all accounts" (see multi-currency above), so the badge simply has nothing to count —
+an existing limitation, not a new one.
+
 **Period comparison mirrors the active filter's own length, whatever that is.** "This month vs
 last month" and "this quarter vs last quarter" are the same feature — the length of the current
 range is measured, then a period of that same length immediately before it is computed, so the
@@ -470,6 +479,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Budget alerts~~ — a blown budget now shows as a badge in the header, visible from every tab
+  rather than only when the Dashboard happens to be open. Clicking it jumps to the Dashboard
 - ~~Multi-currency support~~ — each account now has its own currency. "All accounts" refuses to
   sum two currencies together; it shows one section per currency instead, and budgets, the AI
   forecast, and the period comparison all ask you to pick a single account
