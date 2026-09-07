@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchRecurring } from "../api";
-import type { DateRangeValue, RecurringResponse } from "../types";
+import { clearRecurringOverride, fetchRecurring, saveRecurringOverride } from "../api";
+import type { DateRangeValue, RecurringResponse, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
 
 interface Props {
@@ -22,15 +22,72 @@ const CONFIDENCE_STYLES: Record<string, string> = {
   low: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
 };
 
+function RecurringActions({
+  series,
+  onChanged,
+}: {
+  series: RecurringSeries;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await action();
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (series.flagged_for_cancellation) {
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+          Cancelling
+        </span>
+        <button
+          disabled={busy}
+          onClick={() => run(() => clearRecurringOverride(series.override_id!))}
+          className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800"
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <button
+        disabled={busy}
+        onClick={() => run(() => saveRecurringOverride(series.merchant, "cancel"))}
+        className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800"
+        title="Mark that you're cancelling this, as a reminder until the charges stop"
+      >
+        Flag to cancel
+      </button>
+      <button
+        disabled={busy}
+        onClick={() => run(() => saveRecurringOverride(series.merchant, "exclude"))}
+        className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-600 disabled:opacity-40 dark:hover:bg-slate-800"
+        title="This isn't really a subscription — hide it from this list for good"
+      >
+        Not recurring
+      </button>
+    </div>
+  );
+}
+
 export function RecurringPage({ accountId, range }: Props) {
   const [data, setData] = useState<RecurringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // This effect synchronizes with an external system (the API); resetting loading/error
-    // before the fetch has no render-time equivalent, unlike the derived-state case the rule
-    // exists to catch.
+  const load = () => {
+    // Synchronizing with an external system (the API) on mount and on every filter change;
+    // resetting loading/error here has no render-time equivalent.
     // oxlint-disable-next-line react/set-state-in-effect
     setLoading(true);
     setError(null);
@@ -38,7 +95,9 @@ export function RecurringPage({ accountId, range }: Props) {
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load recurring charges."))
       .finally(() => setLoading(false));
-  }, [accountId, range]);
+  };
+
+  useEffect(load, [accountId, range]);
 
   if (loading) {
     return <div className="px-4 py-10 text-center text-sm text-slate-500">Finding recurring charges…</div>;
@@ -111,6 +170,7 @@ export function RecurringPage({ accountId, range }: Props) {
                   <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500">Per year</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Next due</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Seen</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
@@ -141,6 +201,9 @@ export function RecurringPage({ accountId, range }: Props) {
                       >
                         {r.confidence}
                       </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right">
+                      <RecurringActions series={r} onChanged={load} />
                     </td>
                   </tr>
                 ))}

@@ -213,6 +213,25 @@ every band for a hit only one of them answered.
 > NULLs as distinct in a UNIQUE index, so NULL bounds would let duplicate catch-all rows through
 > the upsert instead of updating.
 
+**`RecurringSeries` carries override fields it never sets itself.** `RecurringDetectionService`
+always constructs one with `flaggedForCancellation=false, overrideId=null` — it has no dependency
+on `RecurringOverrideRepository` and never will, the same separation `MerchantCategory`'s bands
+keep from the categorization that reads them. `InsightsController.recurring()` is what actually
+applies overrides, in two passes over the detected list: a `filter` drops any merchant with an
+`exclude` row before the totals are summed (so an excluded merchant contributes nothing, not just
+disappears from the visible list), then a `map` calls `RecurringSeries.withOverride(...)` — a
+hand-written wither, since records don't get one for free — to layer in a `cancel` row's flag.
+Both look the override up by `s.merchant()`, which is already the normalized key
+`MerchantNormalizer.normalize()` produces, so there's no re-normalizing on the way in.
+
+> A "cancel" flag is deliberately just a note that survives past the moment it stops being true.
+> If the subscription is actually cancelled, the charges stop, and eventually the series ages out
+> of the window and stops being detected at all — but the override row lingers, un-cleared, until
+> someone visits Manage and removes it. That's accepted: cleaning it up automatically would need
+> to guess whether "no longer detected" meant "cancelled as planned" or "range too narrow to see
+> it," and guessing wrong silently would be worse than a stale row sitting in a list built
+> specifically so stale rows have somewhere to be found and removed.
+
 **Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
 the budget rather than folding it into the fallback category. Anything else that starts storing

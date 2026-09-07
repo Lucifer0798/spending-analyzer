@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V9)
-  src/test/                 212 tests
+    db/migration/           Versioned schema migrations (V1–V10)
+  src/test/                 226 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Six tables, all created automatically:
+Seven tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -196,9 +196,10 @@ Six tables, all created automatically:
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
 | `budgets` | A monthly spending target per category |
 | `predictions_cache` | The most recent AI forecast, one row per account |
+| `recurring_overrides` | A "cancel" reminder or "exclude" flag per merchant, set from the Recurring page |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V10__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V11__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -241,6 +242,7 @@ All endpoints live under `/api`.
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it, per category |
 | `GET` | `/recurring` | Detected recurring charges |
+| `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
 | `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them |
@@ -270,6 +272,15 @@ supermarket, since you shop there regularly — but for a different amount each 
 is what separates "Netflix, £15.49 every month" from "groceries, roughly fortnightly, £60–£100".
 Charges on the same date are treated as one billing event, so two cards billed by the same
 merchant on the same day don't confuse the rhythm.
+
+**Detection is fully derived, so acting on a recurring charge needs somewhere else to live.**
+Nothing about a `RecurringSeries` is stored — it's recomputed from transactions on every request,
+so there's no row to attach "I'm cancelling this" or "this was never really a subscription" to.
+`recurring_overrides` gives merchants exactly those two flags, keyed by the same normalized
+merchant name recurring detection and merchant memory already agree on. "Cancel" is a reminder
+that stays next to the series until you clear it; "exclude" hides the merchant from the list for
+good. Both are set from the Recurring page, in context next to the charge they apply to, but
+listed and cleared from Manage — the same split merchant memory's own rules follow.
 
 **One password, and no user accounts.** There is exactly one secret, read from the environment.
 That isn't a shortcut — this app holds one person's statements in a local SQLite file, so per-user
@@ -406,7 +417,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (212).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (226).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -479,6 +490,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Recurring-detection actions~~ — flag a subscription "cancel" as a reminder until the charges
+  actually stop, or mark it "not recurring" to hide a coincidentally regular pattern for good.
+  Set from Recurring, listed and cleared from Manage
 - ~~Budget alerts~~ — a blown budget now shows as a badge in the header, visible from every tab
   rather than only when the Dashboard happens to be open. Clicking it jumps to the Dashboard
 - ~~Multi-currency support~~ — each account now has its own currency. "All accounts" refuses to
