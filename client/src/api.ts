@@ -12,6 +12,8 @@ import type {
   MerchantMemory,
   MerchantsResponse,
   PredictionsResponse,
+  RecurringAction,
+  RecurringOverride,
   RecurringResponse,
   SummaryResponse,
   Transaction,
@@ -299,6 +301,28 @@ export function fetchComparison(accountId: number | null, range: DateRangeValue 
 
 export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<RecurringResponse>(`/recurring${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/**
+ * Flags a merchant as "cancel" (a reminder shown alongside its series until you clear it) or
+ * "exclude" (hides it from recurring detection for good). Set from the Recurring page, in
+ * context next to the series it applies to.
+ */
+export function saveRecurringOverride(merchantKey: string, action: RecurringAction) {
+  return request<RecurringOverride>("/recurring/overrides", {
+    method: "POST",
+    body: JSON.stringify({ merchant_key: merchantKey, action }),
+  });
+}
+
+/** Every flagged or excluded merchant, for the management view in Manage. */
+export function fetchRecurringOverrides() {
+  return request<RecurringOverride[]>("/recurring/overrides");
+}
+
+/** Clears an override — un-flags a cancellation, or brings an excluded merchant back into view. */
+export function clearRecurringOverride(id: number) {
+  return request<{ ok: true }>(`/recurring/overrides/${id}`, { method: "DELETE" });
 }
 
 /** Earliest and latest dates on record, used to anchor the date-range presets. */

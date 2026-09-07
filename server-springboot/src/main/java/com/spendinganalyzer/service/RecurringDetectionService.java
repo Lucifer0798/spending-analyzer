@@ -116,7 +116,9 @@ public class RecurringDetectionService {
                 occurrences.size(),
                 (int) Math.round(medianInterval),
                 round2(mean * (365.0 / medianInterval)),
-                confidenceOf(occurrences.size(), coefficientOfVariation)
+                confidenceOf(occurrences.size(), coefficientOfVariation),
+                false,
+                null
         ));
     }
 
