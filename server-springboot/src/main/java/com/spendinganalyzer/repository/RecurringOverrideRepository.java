@@ -55,4 +55,23 @@ public class RecurringOverrideRepository {
         return jdbc.update("DELETE FROM recurring_overrides WHERE id = :id",
                 new MapSqlParameterSource("id", id)) > 0;
     }
+
+    /** Replaces every override with exactly what a backup holds, ids included — a restore, not a merge. */
+    public void restoreAll(List<RecurringOverride> overridesToRestore) {
+        jdbc.getJdbcTemplate().execute("DELETE FROM recurring_overrides");
+        if (overridesToRestore.isEmpty()) return;
+
+        MapSqlParameterSource[] params = overridesToRestore.stream()
+                .map(o -> new MapSqlParameterSource()
+                        .addValue("id", o.id())
+                        .addValue("key", o.merchantKey())
+                        .addValue("action", o.action())
+                        .addValue("createdAt", o.createdAt()))
+                .toArray(MapSqlParameterSource[]::new);
+
+        jdbc.batchUpdate("""
+                INSERT INTO recurring_overrides (id, merchant_key, action, created_at)
+                VALUES (:id, :key, :action, :createdAt)
+                """, params);
+    }
 }

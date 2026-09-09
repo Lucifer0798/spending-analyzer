@@ -115,4 +115,29 @@ public class AccountRepository {
         return jdbc.update("DELETE FROM accounts WHERE id = :id",
                 new MapSqlParameterSource("id", id)) > 0;
     }
+
+    /**
+     * Replaces every account with exactly what a backup holds, ids included — a restore, not a
+     * merge. Safe to insert explicit ids into an AUTOINCREMENT column: SQLite advances its own
+     * counter to match the highest one used, so accounts created afterward never collide.
+     */
+    public void restoreAll(List<Account> accountsToRestore) {
+        jdbc.getJdbcTemplate().execute("DELETE FROM accounts");
+        if (accountsToRestore.isEmpty()) return;
+
+        MapSqlParameterSource[] params = accountsToRestore.stream()
+                .map(a -> new MapSqlParameterSource()
+                        .addValue("id", a.id())
+                        .addValue("name", a.name())
+                        .addValue("type", a.type())
+                        .addValue("archived", a.archived() ? 1 : 0)
+                        .addValue("createdAt", a.createdAt())
+                        .addValue("currency", a.currency()))
+                .toArray(MapSqlParameterSource[]::new);
+
+        jdbc.batchUpdate("""
+                INSERT INTO accounts (id, name, type, archived, created_at, currency)
+                VALUES (:id, :name, :type, :archived, :createdAt, :currency)
+                """, params);
+    }
 }

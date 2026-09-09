@@ -160,7 +160,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V10)
-  src/test/                 226 tests
+  src/test/                 234 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -251,6 +251,8 @@ All endpoints live under `/api`.
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides |
+| `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
@@ -384,6 +386,16 @@ truncated export is worse than none. Amounts are stored unsigned with direction 
 alongside: negative for debits. The files start with a byte-order mark, without which Excel reads
 them in the OS codepage and mangles any accented merchant name.
 
+**The backup is a restore, not a merge, and that's what makes it simple.** Importing wipes every
+table it covers and reloads it exactly as exported — ids included, since SQLite happily accepts an
+explicit id into an `AUTOINCREMENT` column and advances its own counter to match afterward. That
+sidesteps the entire problem a merge would have to solve: which account in the file is "the same"
+as one already here, what happens when two merchant rules disagree, whether a transaction is a
+duplicate or a coincidence. A restore has none of those questions — it's either exactly the file,
+or (on a rejected version) untouched. The cost is that import is destructive by design, which is
+why it asks first and why AI forecasts are left out of the file entirely: they're a cache, not
+data, the same reasoning that let the old prediction cache row be dropped rather than migrated.
+
 **Merchant memory keys on a cleaned-up merchant name.** Store numbers and order references vary
 per visit (`WHOLE FOODS MARKET #123`, `AMAZON.COM*AB123`), so they're stripped before matching.
 That means one entry covers every branch of a chain. The same cleanup is shared with recurring
@@ -417,7 +429,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (226).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (234).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -490,6 +502,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Full data export/import~~ — one JSON file covers accounts, transactions, categories, budgets,
+  merchant memory, and recurring overrides, for backing up or moving to a new instance. Importing
+  is a restore, not a merge — it replaces everything currently in this instance with the file
 - ~~Recurring-detection actions~~ — flag a subscription "cancel" as a reminder until the charges
   actually stop, or mark it "not recurring" to hide a coincidentally regular pattern for good.
   Set from Recurring, listed and cleared from Manage
