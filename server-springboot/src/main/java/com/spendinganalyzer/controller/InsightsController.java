@@ -6,6 +6,8 @@ import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.dto.RecurringSeries;
 import com.spendinganalyzer.dto.SummaryResponse;
+import com.spendinganalyzer.model.RecurringOverride;
+import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.InsightsService;
 import com.spendinganalyzer.service.RecurringDetectionService;
@@ -29,17 +31,20 @@ public class InsightsController {
     private final InsightsService insightsService;
     private final RecurringDetectionService recurringDetectionService;
     private final TransactionRepository transactionRepository;
+    private final RecurringOverrideRepository recurringOverrideRepository;
 
     public InsightsController(
             StatsService statsService,
             InsightsService insightsService,
             RecurringDetectionService recurringDetectionService,
-            TransactionRepository transactionRepository
+            TransactionRepository transactionRepository,
+            RecurringOverrideRepository recurringOverrideRepository
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
         this.recurringDetectionService = recurringDetectionService;
         this.transactionRepository = transactionRepository;
+        this.recurringOverrideRepository = recurringOverrideRepository;
     }
 
     @GetMapping("/summary")
@@ -131,8 +136,20 @@ public class InsightsController {
         }
 
         DateRange range = DateRange.of(from, to);
+        Map<String, RecurringOverride> overrides = recurringOverrideRepository.loadAll();
+
         List<RecurringSeries> series = recurringDetectionService.detect(
-                transactionRepository.findSpendingTransactions(accountId, range));
+                        transactionRepository.findSpendingTransactions(accountId, range))
+                .stream()
+                // Excluded merchants are dropped outright -- never really a subscription, so
+                // there's nothing here for them to contribute to the totals below either.
+                .filter(s -> !isExcluded(overrides.get(s.merchant())))
+                .map(s -> {
+                    RecurringOverride o = overrides.get(s.merchant());
+                    boolean cancelling = o != null && RecurringOverride.ACTION_CANCEL.equals(o.action());
+                    return s.withOverride(cancelling, cancelling ? o.id() : null);
+                })
+                .toList();
 
         double totalAnnualized = series.stream().mapToDouble(RecurringSeries::annualizedCost).sum();
 
@@ -168,5 +185,9 @@ public class InsightsController {
             return ResponseEntity.status(502)
                     .body(new ErrorResponse("Prediction generation failed: " + e.getMessage()));
         }
+    }
+
+    private static boolean isExcluded(RecurringOverride override) {
+        return override != null && RecurringOverride.ACTION_EXCLUDE.equals(override.action());
     }
 }

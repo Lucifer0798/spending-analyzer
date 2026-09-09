@@ -236,4 +236,35 @@ public class TransactionRepository {
         jdbc.getJdbcTemplate().execute("DELETE FROM transactions");
         jdbc.getJdbcTemplate().execute("DELETE FROM predictions_cache");
     }
+
+    /**
+     * Replaces every transaction with exactly what a backup holds, ids included — a restore, not
+     * a merge. Only the stored columns are written; {@code account_name}/{@code account_currency}
+     * on the model are joined in at read time and have no column of their own to insert into.
+     */
+    public void restoreAll(List<Transaction> transactionsToRestore) {
+        jdbc.getJdbcTemplate().execute("DELETE FROM transactions");
+        if (transactionsToRestore.isEmpty()) return;
+
+        MapSqlParameterSource[] params = transactionsToRestore.stream()
+                .map(t -> new MapSqlParameterSource()
+                        .addValue("id", t.id())
+                        .addValue("date", t.date())
+                        .addValue("description", t.description())
+                        .addValue("amount", t.amount())
+                        .addValue("type", t.type())
+                        .addValue("category", t.category())
+                        .addValue("categorySource", t.categorySource())
+                        .addValue("batchId", t.uploadBatchId())
+                        .addValue("createdAt", t.createdAt())
+                        .addValue("accountId", t.accountId()))
+                .toArray(MapSqlParameterSource[]::new);
+
+        jdbc.batchUpdate("""
+                INSERT INTO transactions
+                  (id, date, description, amount, type, category, category_source, upload_batch_id, created_at, account_id)
+                VALUES
+                  (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt, :accountId)
+                """, params);
+    }
 }

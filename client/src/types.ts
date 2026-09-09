@@ -110,6 +110,18 @@ export interface RecurringSeries {
   median_interval_days: number;
   annualized_cost: number;
   confidence: "low" | "medium" | "high";
+  flagged_for_cancellation: boolean;
+  /** The override's id, for clearing it — null unless flagged_for_cancellation. */
+  override_id: number | null;
+}
+
+export type RecurringAction = "cancel" | "exclude";
+
+export interface RecurringOverride {
+  id: number;
+  merchant_key: string;
+  action: RecurringAction;
+  created_at: string;
 }
 
 export interface RecurringResponse {
@@ -250,4 +262,14 @@ export interface PredictionsPayload {
 export interface PredictionsResponse {
   predictions: PredictionsPayload | null;
   generatedAt: string | null;
+}
+
+/** How many rows of each kind a backup restore loaded. */
+export interface BackupSummary {
+  accounts: number;
+  categories: number;
+  transactions: number;
+  merchantCategories: number;
+  budgets: number;
+  recurringOverrides: number;
 }

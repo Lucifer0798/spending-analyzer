@@ -9,12 +9,13 @@ import { LoginScreen } from "./components/LoginScreen";
 import {
   fetchAccounts,
   fetchAuthStatus,
+  fetchBudgets,
   fetchDateBounds,
   logout,
   resetAllData,
   setUnauthorizedHandler,
 } from "./api";
-import type { Account, AuthStatus, DateBounds, DateRangeValue } from "./types";
+import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
 type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "manage";
@@ -34,6 +35,7 @@ function App() {
   const [accountId, setAccountId] = useState<number | null>(null);
   const [range, setRange] = useState<DateRangeValue>(ALL_TIME);
   const [bounds, setBounds] = useState<DateBounds | null>(null);
+  const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // null while we are still asking the server whether there is a password at all.
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -67,6 +69,16 @@ function App() {
     if (!signedIn) return;
     fetchDateBounds(accountId).then(setBounds).catch(() => setBounds(null));
   }, [accountId, refreshKey, signedIn]);
+
+  // Drives the header's over-budget badge, so a blown budget is visible from any tab rather
+  // than only when the Dashboard happens to be open. No month is passed — same as the newest-
+  // month default the Dashboard's own budget card uses — so this always answers "right now".
+  useEffect(() => {
+    if (!signedIn) return;
+    fetchBudgets(accountId).then(setBudgets).catch(() => setBudgets(null));
+  }, [accountId, refreshKey, signedIn]);
+
+  const overBudget = budgets?.budgets.filter((b) => b.status === "over") ?? [];
 
   const handleReset = async () => {
     if (!confirm("This will delete all imported transactions. Accounts and categories are kept. Continue?")) {
@@ -129,6 +141,16 @@ function App() {
                   </select>
                 )}
               </>
+            )}
+
+            {overBudget.length > 0 && (
+              <button
+                onClick={() => setTab("dashboard")}
+                title={`Over budget: ${overBudget.map((b) => b.category).join(", ")}`}
+                className="mr-1 rounded-md bg-red-100 px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+              >
+                ⚠ {overBudget.length} over budget
+              </button>
             )}
 
             {TABS.map((t) => (

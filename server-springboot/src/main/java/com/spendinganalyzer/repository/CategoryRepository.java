@@ -132,4 +132,29 @@ public class CategoryRepository {
         jdbc.update("DELETE FROM budgets WHERE category = :name", new MapSqlParameterSource("name", name));
         jdbc.update("DELETE FROM categories WHERE id = :id", new MapSqlParameterSource("id", id));
     }
+
+    /**
+     * Replaces every category with exactly what a backup holds, ids and sort order included —
+     * a restore, not a merge. Covers the built-in categories too: if one was ever renamed or
+     * re-flagged, the restore should bring that back rather than reseeding the untouched default.
+     */
+    public void restoreAll(List<Category> categoriesToRestore) {
+        jdbc.getJdbcTemplate().execute("DELETE FROM categories");
+        if (categoriesToRestore.isEmpty()) return;
+
+        MapSqlParameterSource[] params = categoriesToRestore.stream()
+                .map(c -> new MapSqlParameterSource()
+                        .addValue("id", c.id())
+                        .addValue("name", c.name())
+                        .addValue("isBuiltin", c.isBuiltin() ? 1 : 0)
+                        .addValue("isIncome", c.isIncome() ? 1 : 0)
+                        .addValue("isTransfer", c.isTransfer() ? 1 : 0)
+                        .addValue("sortOrder", c.sortOrder()))
+                .toArray(MapSqlParameterSource[]::new);
+
+        jdbc.batchUpdate("""
+                INSERT INTO categories (id, name, is_builtin, is_income, is_transfer, sort_order)
+                VALUES (:id, :name, :isBuiltin, :isIncome, :isTransfer, :sortOrder)
+                """, params);
+    }
 }
