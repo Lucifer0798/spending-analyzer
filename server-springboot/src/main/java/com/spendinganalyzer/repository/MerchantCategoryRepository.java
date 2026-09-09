@@ -148,4 +148,30 @@ public class MerchantCategoryRepository {
                 new MapSqlParameterSource(), Integer.class);
         return n != null ? n : 0;
     }
+
+    /** Replaces every rule with exactly what a backup holds, ids included — a restore, not a merge. */
+    public void restoreAll(List<MerchantCategory> rulesToRestore) {
+        jdbc.getJdbcTemplate().execute("DELETE FROM merchant_categories");
+        if (rulesToRestore.isEmpty()) return;
+
+        MapSqlParameterSource[] params = rulesToRestore.stream()
+                .map(m -> new MapSqlParameterSource()
+                        .addValue("id", m.id())
+                        .addValue("key", m.merchantKey())
+                        .addValue("category", m.category())
+                        .addValue("min", m.minAmount())
+                        .addValue("max", m.maxAmount())
+                        .addValue("source", m.source())
+                        .addValue("hitCount", m.hitCount())
+                        .addValue("createdAt", m.createdAt())
+                        .addValue("updatedAt", m.updatedAt()))
+                .toArray(MapSqlParameterSource[]::new);
+
+        jdbc.batchUpdate("""
+                INSERT INTO merchant_categories
+                  (id, merchant_key, category, min_amount, max_amount, source, hit_count, created_at, updated_at)
+                VALUES
+                  (:id, :key, :category, :min, :max, :source, :hitCount, :createdAt, :updatedAt)
+                """, params);
+    }
 }

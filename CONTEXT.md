@@ -232,6 +232,21 @@ Both look the override up by `s.merchant()`, which is already the normalized key
 > it," and guessing wrong silently would be worse than a stale row sitting in a list built
 > specifically so stale rows have somewhere to be found and removed.
 
+**`BackupService.restore` is the only `@Transactional` boundary; the six `restoreAll` methods
+have none of their own.** Each is `DELETE FROM <table>` followed by a batch insert that writes
+every column including `id` — deliberately raw SQL rather than going through `create`/`upsert`,
+which would assign fresh ids and silently break every reference a backup file has between tables
+(a transaction's `account_id`, a budget's category name). Calling six non-transactional methods
+in sequence from one `@Transactional` service method is what makes a restore atomic: if row five
+fails, Spring rolls back all of it, not just what came after the failure. `predictions_cache` is
+cleared the same way from inside that method despite never being part of the backup itself —
+`BackupData` has no field for it, so `PredictionsCacheRepository.deleteAll()` is called directly
+rather than threaded through `BackupData` for a table that was never going to round-trip anyway.
+
+> Explicit ids into an `AUTOINCREMENT` column are not a hack — SQLite advances `sqlite_sequence`
+> to match the highest id it has ever seen inserted, explicit or not. An account created after a
+> restore gets the next id in sequence, never one already used by a restored row.
+
 **Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
 the budget rather than folding it into the fallback category. Anything else that starts storing

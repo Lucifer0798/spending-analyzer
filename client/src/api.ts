@@ -2,6 +2,7 @@ import type {
   Account,
   AccountType,
   AuthStatus,
+  BackupSummary,
   Budget,
   BudgetSummary,
   CategorizeResult,
@@ -363,4 +364,26 @@ export function exportUrl(
 ) {
   const { range, ...rest } = params;
   return `/api/export/${kind}.csv${qs({ ...rest, from: range?.from, to: range?.to })}`;
+}
+
+// --- backup -------------------------------------------------------------------
+
+/**
+ * A download URL rather than a fetch, for the same reason exportUrl is — the browser keeps the
+ * filename the server sets. Covers accounts, categories, transactions, merchant memory, budgets
+ * and recurring overrides; AI forecasts aren't included, since regenerating one is one click.
+ */
+export function backupUrl() {
+  return "/api/backup";
+}
+
+/**
+ * Restores from a file this same export produced — replacing everything currently in this
+ * instance, not merging with it. `json` should be that file's untouched text.
+ */
+export function importBackup(json: string) {
+  return request<BackupSummary>("/backup/import", {
+    method: "POST",
+    body: json,
+  });
 }

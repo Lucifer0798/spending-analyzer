@@ -263,3 +263,13 @@ export interface PredictionsResponse {
   predictions: PredictionsPayload | null;
   generatedAt: string | null;
 }
+
+/** How many rows of each kind a backup restore loaded. */
+export interface BackupSummary {
+  accounts: number;
+  categories: number;
+  transactions: number;
+  merchantCategories: number;
+  budgets: number;
+  recurringOverrides: number;
+}

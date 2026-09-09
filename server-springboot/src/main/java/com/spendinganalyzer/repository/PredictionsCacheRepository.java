@@ -54,4 +54,9 @@ public class PredictionsCacheRepository {
                         "generatedAt", generatedAt))
         );
     }
+
+    /** Used when whatever the cache held no longer describes the current data — a reset, or a backup restore. */
+    public void deleteAll() {
+        jdbc.getJdbcTemplate().execute("DELETE FROM predictions_cache");
+    }
 }
