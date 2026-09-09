@@ -69,4 +69,23 @@ public class BudgetRepository {
         return jdbc.update("DELETE FROM budgets WHERE id = :id",
                 new MapSqlParameterSource("id", id)) > 0;
     }
+
+    /** Replaces every budget with exactly what a backup holds, ids included — a restore, not a merge. */
+    public void restoreAll(List<Budget> budgetsToRestore) {
+        jdbc.getJdbcTemplate().execute("DELETE FROM budgets");
+        if (budgetsToRestore.isEmpty()) return;
+
+        MapSqlParameterSource[] params = budgetsToRestore.stream()
+                .map(b -> new MapSqlParameterSource()
+                        .addValue("id", b.id())
+                        .addValue("category", b.category())
+                        .addValue("limit", b.monthlyLimit())
+                        .addValue("updatedAt", b.updatedAt()))
+                .toArray(MapSqlParameterSource[]::new);
+
+        jdbc.batchUpdate("""
+                INSERT INTO budgets (id, category, monthly_limit, updated_at)
+                VALUES (:id, :category, :limit, :updatedAt)
+                """, params);
+    }
 }

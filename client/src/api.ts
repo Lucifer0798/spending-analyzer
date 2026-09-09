@@ -2,6 +2,7 @@ import type {
   Account,
   AccountType,
   AuthStatus,
+  BackupSummary,
   Budget,
   BudgetSummary,
   CategorizeResult,
@@ -12,6 +13,8 @@ import type {
   MerchantMemory,
   MerchantsResponse,
   PredictionsResponse,
+  RecurringAction,
+  RecurringOverride,
   RecurringResponse,
   SummaryResponse,
   Transaction,
@@ -301,6 +304,28 @@ export function fetchRecurring(accountId: number | null, range: DateRangeValue =
   return request<RecurringResponse>(`/recurring${qs({ accountId, from: range.from, to: range.to })}`);
 }
 
+/**
+ * Flags a merchant as "cancel" (a reminder shown alongside its series until you clear it) or
+ * "exclude" (hides it from recurring detection for good). Set from the Recurring page, in
+ * context next to the series it applies to.
+ */
+export function saveRecurringOverride(merchantKey: string, action: RecurringAction) {
+  return request<RecurringOverride>("/recurring/overrides", {
+    method: "POST",
+    body: JSON.stringify({ merchant_key: merchantKey, action }),
+  });
+}
+
+/** Every flagged or excluded merchant, for the management view in Manage. */
+export function fetchRecurringOverrides() {
+  return request<RecurringOverride[]>("/recurring/overrides");
+}
+
+/** Clears an override — un-flags a cancellation, or brings an excluded merchant back into view. */
+export function clearRecurringOverride(id: number) {
+  return request<{ ok: true }>(`/recurring/overrides/${id}`, { method: "DELETE" });
+}
+
 /** Earliest and latest dates on record, used to anchor the date-range presets. */
 export function fetchDateBounds(accountId: number | null) {
   return request<DateBounds>(`/date-bounds${qs({ accountId })}`);
@@ -339,4 +364,26 @@ export function exportUrl(
 ) {
   const { range, ...rest } = params;
   return `/api/export/${kind}.csv${qs({ ...rest, from: range?.from, to: range?.to })}`;
+}
+
+// --- backup -------------------------------------------------------------------
+
+/**
+ * A download URL rather than a fetch, for the same reason exportUrl is — the browser keeps the
+ * filename the server sets. Covers accounts, categories, transactions, merchant memory, budgets
+ * and recurring overrides; AI forecasts aren't included, since regenerating one is one click.
+ */
+export function backupUrl() {
+  return "/api/backup";
+}
+
+/**
+ * Restores from a file this same export produced — replacing everything currently in this
+ * instance, not merging with it. `json` should be that file's untouched text.
+ */
+export function importBackup(json: string) {
+  return request<BackupSummary>("/backup/import", {
+    method: "POST",
+    body: json,
+  });
 }
