@@ -10,6 +10,9 @@ import type {
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
+  Goal,
+  GoalContribution,
+  GoalProgress,
   MerchantMemory,
   MerchantsResponse,
   PredictionsResponse,
@@ -255,6 +258,44 @@ export function deleteBudget(id: number) {
   return request<{ ok: true }>(`/budgets/${id}`, { method: "DELETE" });
 }
 
+// --- goals --------------------------------------------------------------------
+
+/** Every goal, measured against what has actually been logged toward it. */
+export function fetchGoals() {
+  return request<GoalProgress[]>("/goals");
+}
+
+export function createGoal(goal: { name: string; target_amount: number; target_date?: string; currency?: string }) {
+  return request<Goal>("/goals", { method: "POST", body: JSON.stringify(goal) });
+}
+
+/** Any subset of the editable fields; omitted fields are left unchanged. Currency can't be changed once set. */
+export function updateGoal(id: number, changes: { name?: string; target_amount?: number; target_date?: string }) {
+  return request<Goal>(`/goals/${id}`, { method: "PATCH", body: JSON.stringify(changes) });
+}
+
+/** Deletes a goal and every contribution logged toward it. */
+export function deleteGoal(id: number) {
+  return request<{ ok: true }>(`/goals/${id}`, { method: "DELETE" });
+}
+
+/** A goal's contribution history, newest first. */
+export function fetchGoalContributions(goalId: number) {
+  return request<GoalContribution[]>(`/goals/${goalId}/contributions`);
+}
+
+/** Logs an amount toward a goal. A negative amount records money taken back out. */
+export function addGoalContribution(goalId: number, contribution: { amount: number; date: string; note?: string }) {
+  return request<GoalContribution>(`/goals/${goalId}/contributions`, {
+    method: "POST",
+    body: JSON.stringify(contribution),
+  });
+}
+
+export function deleteGoalContribution(goalId: number, contributionId: number) {
+  return request<{ ok: true }>(`/goals/${goalId}/contributions/${contributionId}`, { method: "DELETE" });
+}
+
 // --- insights ---------------------------------------------------------------
 
 export function runCategorization() {
@@ -370,8 +411,9 @@ export function exportUrl(
 
 /**
  * A download URL rather than a fetch, for the same reason exportUrl is — the browser keeps the
- * filename the server sets. Covers accounts, categories, transactions, merchant memory, budgets
- * and recurring overrides; AI forecasts aren't included, since regenerating one is one click.
+ * filename the server sets. Covers accounts, categories, transactions, merchant memory, budgets,
+ * recurring overrides, and savings goals; AI forecasts aren't included, since regenerating one is
+ * one click.
  */
 export function backupUrl() {
   return "/api/backup";

@@ -3,6 +3,7 @@ import { UploadPage } from "./components/UploadPage";
 import { Dashboard } from "./components/Dashboard";
 import { TransactionsTable } from "./components/TransactionsTable";
 import { RecurringPage } from "./components/RecurringPage";
+import { GoalsPage } from "./components/GoalsPage";
 import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
@@ -18,13 +19,14 @@ import {
 import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
-type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "manage";
+type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "goals" | "manage";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "upload", label: "Upload" },
   { id: "dashboard", label: "Dashboard" },
   { id: "transactions", label: "Transactions" },
   { id: "recurring", label: "Recurring" },
+  { id: "goals", label: "Goals" },
   { id: "manage", label: "Manage" },
 ];
 
@@ -100,8 +102,9 @@ function App() {
     }
   };
 
-  // The filters only apply to views that show transaction data.
-  const showFilters = tab !== "manage" && tab !== "upload";
+  // The filters only apply to views that show transaction data. Goals aren't transaction-scoped
+  // at all -- they're measured from manually-logged contributions, not imports.
+  const showFilters = tab !== "manage" && tab !== "upload" && tab !== "goals";
 
   if (!auth) {
     return (
@@ -204,6 +207,7 @@ function App() {
         {tab === "dashboard" && <Dashboard accountId={accountId} range={range} />}
         {tab === "transactions" && <TransactionsTable accountId={accountId} range={range} />}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}
+        {tab === "goals" && <GoalsPage />}
         {tab === "manage" && <ManagePage onAccountsChanged={loadAccounts} />}
       </main>
     </div>
