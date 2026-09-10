@@ -7,6 +7,8 @@ import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.GoalContributionRepository;
+import com.spendinganalyzer.repository.GoalRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.PredictionsCacheRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
@@ -54,7 +56,15 @@ class BackupServiceTest {
     private RecurringOverrideRepository recurringOverrides;
 
     @Autowired
+    private GoalRepository goals;
+
+    @Autowired
+    private GoalContributionRepository goalContributions;
+
+    @Autowired
     private PredictionsCacheRepository predictionsCache;
+
+    private long goalId;
 
     @BeforeEach
     void seed() {
@@ -64,6 +74,8 @@ class BackupServiceTest {
         merchants.remember("COFFEE SHOP", "Dining & Coffee", "user");
         budgets.upsert("Dining & Coffee", 100.0);
         recurringOverrides.upsert("NETFLIX.COM", RecurringOverride.ACTION_CANCEL);
+        goalId = goals.create("Emergency fund", 5000.0, null, "USD").id();
+        goalContributions.add(goalId, 200.0, "2026-06-01", "first deposit");
         predictionsCache.upsert(Account.DEFAULT_ID, "{\"summary\":\"s\"}", "2026-06-01T00:00:00Z");
     }
 
@@ -78,6 +90,8 @@ class BackupServiceTest {
         assertThat(data.merchantCategories()).extracting("merchantKey").contains("COFFEE SHOP");
         assertThat(data.budgets()).extracting("category").contains("Dining & Coffee");
         assertThat(data.recurringOverrides()).extracting("merchantKey").contains("NETFLIX.COM");
+        assertThat(data.goals()).extracting("name").contains("Emergency fund");
+        assertThat(data.goalContributions()).extracting("note").contains("first deposit");
         // Built-in categories are exported too, not just custom ones.
         assertThat(data.categories()).extracting("name").contains("Groceries");
     }
@@ -93,6 +107,8 @@ class BackupServiceTest {
                 List.of(new ParsedTransaction("2026-07-01", "EXTRA CHARGE", 20.00, "debit", "Shopping")),
                 "post-snapshot-batch", extraAccount.id());
         budgets.upsert("Shopping", 200.0);
+        long extraGoalId = goals.create("Vacation", 1000.0, null, "USD").id();
+        goalContributions.add(extraGoalId, 50.0, "2026-07-01", null);
 
         backupService.restore(snapshot);
 
@@ -100,6 +116,8 @@ class BackupServiceTest {
         assertThat(transactions.find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 100, 0))
                 .extracting("description").containsExactly("COFFEE SHOP");
         assertThat(budgets.findAll()).extracting("category").containsExactly("Dining & Coffee");
+        assertThat(goals.findAll()).extracting("name").containsExactly("Emergency fund");
+        assertThat(goalContributions.findAll()).extracting("note").containsExactly("first deposit");
     }
 
     @Test
@@ -126,13 +144,15 @@ class BackupServiceTest {
         assertThat(summary.budgets()).isEqualTo(snapshot.budgets().size());
         assertThat(summary.merchantCategories()).isEqualTo(snapshot.merchantCategories().size());
         assertThat(summary.recurringOverrides()).isEqualTo(snapshot.recurringOverrides().size());
+        assertThat(summary.goals()).isEqualTo(snapshot.goals().size());
+        assertThat(summary.goalContributions()).isEqualTo(snapshot.goalContributions().size());
     }
 
     @Test
     @DisplayName("restoring an empty backup wipes every table it covers down to nothing")
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
         backupService.restore(empty);
 
@@ -142,5 +162,7 @@ class BackupServiceTest {
         assertThat(merchants.findAll()).isEmpty();
         assertThat(budgets.findAll()).isEmpty();
         assertThat(recurringOverrides.findAll()).isEmpty();
+        assertThat(goals.findAll()).isEmpty();
+        assertThat(goalContributions.findAll()).isEmpty();
     }
 }

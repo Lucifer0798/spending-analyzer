@@ -272,4 +272,43 @@ export interface BackupSummary {
   merchantCategories: number;
   budgets: number;
   recurringOverrides: number;
+  goals: number;
+  goalContributions: number;
+}
+
+export interface Goal {
+  id: number;
+  name: string;
+  target_amount: number;
+  /** Null when the goal has no deadline. */
+  target_date: string | null;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Positive is money added, negative is money taken back out. */
+export interface GoalContribution {
+  id: number;
+  goal_id: number;
+  amount: number;
+  date: string;
+  note: string | null;
+  created_at: string;
+}
+
+/** A goal measured against what has actually been logged toward it. */
+export interface GoalProgress {
+  id: number;
+  name: string;
+  targetAmount: number;
+  targetDate: string | null;
+  currency: string;
+  saved: number;
+  /** Never negative -- a goal met or exceeded has nothing left to go. */
+  remaining: number;
+  /** Uncapped, so a goal exceeded still reads as more than 100. */
+  percentComplete: number;
+  achieved: boolean;
+  contributionCount: number;
 }

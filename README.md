@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Seven tables, all created automatically:
+Nine tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -197,9 +197,11 @@ Seven tables, all created automatically:
 | `budgets` | A monthly spending target per category |
 | `predictions_cache` | The most recent AI forecast, one row per account |
 | `recurring_overrides` | A "cancel" reminder or "exclude" flag per merchant, set from the Recurring page |
+| `goals` | A savings target — name, amount, optional date, its own currency |
+| `goal_contributions` | Amounts logged by hand toward a goal; negative is a withdrawal |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V11__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V12__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -246,12 +248,14 @@ All endpoints live under `/api`.
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
 | `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them |
+| `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
+| `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
 | `GET` | `/export/transactions.csv` | Download transactions, filters and all |
 | `GET` | `/export/categories.csv` | Download spend per category |
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
-| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
@@ -386,6 +390,17 @@ truncated export is worse than none. Amounts are stored unsigned with direction 
 alongside: negative for debits. The files start with a byte-order mark, without which Excel reads
 them in the OS codepage and mangles any accented merchant name.
 
+**Savings goals track logged contributions, not a real balance.** Budgets, recurring detection,
+and everything else in this app is derived from categorized transactions — but nothing here
+represents an account's actual balance, so there's no number to point a "how much have I saved"
+goal at automatically. Instead, a goal's progress is exactly the sum of contributions logged
+against it by hand, positive for money added and negative for money taken back out. That also
+means a goal isn't scoped to an account: it has its own currency, set once at creation, so a
+savings target isn't forced to share a currency with whichever account the money eventually sits
+in. Deleting a goal deletes its contributions too, done explicitly at the application layer rather
+than by a database cascade — this schema doesn't enforce foreign keys anywhere, the same as every
+other table that references an id.
+
 **The backup is a restore, not a merge, and that's what makes it simple.** Importing wipes every
 table it covers and reloads it exactly as exported — ids included, since SQLite happily accepts an
 explicit id into an `AUTOINCREMENT` column and advances its own counter to match afterward. That
@@ -502,6 +517,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Savings goals~~ — a target amount, and optionally a date to reach it by. Progress comes from
+  contributions logged by hand, since this app tracks categorized spending rather than account
+  balances and has no automatic way to know how much has actually been saved
 - ~~Full data export/import~~ — one JSON file covers accounts, transactions, categories, budgets,
   merchant memory, and recurring overrides, for backing up or moving to a new instance. Importing
   is a restore, not a merge — it replaces everything currently in this instance with the file

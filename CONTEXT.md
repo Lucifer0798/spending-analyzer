@@ -247,6 +247,46 @@ rather than threaded through `BackupData` for a table that was never going to ro
 > to match the highest id it has ever seen inserted, explicit or not. An account created after a
 > restore gets the next id in sequence, never one already used by a restored row.
 
+**Goal progress is summed from logged contributions — there is no balance anywhere to read it
+from.** Every other derived number in this app (spend totals, budgets, recurring detection) is
+computed from categorized transactions, but a transaction only says "this much moved in a
+category," never "this account currently holds this much." A savings goal needs the latter, and
+this app has no source for it — so `GoalService.progress` doesn't try to infer one. It sums
+`goal_contributions.amount` for the goal (`GoalContributionRepository.totalsByGoal`, one grouped
+query for every goal rather than one query per goal) and compares that to `target_amount`
+directly. A negative contribution is a withdrawal, not a validation error — `CHECK (amount <> 0)`
+is the only constraint, so the sum can legitimately go down.
+
+> `remaining` clamps at zero (`Math.max(0, target - saved)`) rather than going negative the way
+> `BudgetProgress.remaining` does. The two read oppositely: a budget going negative means "over,"
+> which is bad and worth surfacing as a specific number; a goal exceeding its target is already
+> fully achieved, and "-200 remaining" would read as confusing rather than informative. `achieved`
+> (`saved >= targetAmount`) is the flag the UI actually branches on for the "reached" state.
+
+**A goal's currency is its own field, not inherited from an account.** Budgets and recurring
+detection are account-scoped and use `StatsService.resolveCurrency`; goals deliberately aren't —
+a savings target is a personal number ("save $5,000") that doesn't need to match whatever account
+the money ends up sitting in, and manual contributions have no account to inherit from in the
+first place. `GoalController.create` validates it the same way `AccountController` validates
+`accounts.currency` (`java.util.Currency.getInstance`, uppercased), but there's no shared helper —
+small enough to duplicate rather than extract, same call the account currency validation made.
+
+**Deleting a goal deletes its contributions in the controller, not the database.** `goal_id` on
+`goal_contributions` has no `REFERENCES` clause, matching every other id column in this schema —
+foreign keys aren't enforced here, a standing choice explained in `V2__accounts.sql` and
+`V8__predictions_cache_per_account.sql`'s comments. `GoalController.delete` calls
+`contributions.deleteByGoalId(id)` right after `goals.delete(id)` succeeds; skip that call and a
+deleted goal's contributions become permanently orphaned rows with no UI path to reach them.
+
+**Adding goals to the backup bumped `BackupData.CURRENT_VERSION` from 1 to 2, which is a breaking
+change on purpose.** `BackupController.restore` rejects anything whose `version` doesn't match
+exactly — there's no upgrade path between backup versions, only "supported" or "400." A version-1
+file predates the `goals`/`goalContributions` fields entirely, and there's no honest default to
+backfill them with (unlike `V9__account_currency.sql`'s `DEFAULT 'USD'`, "no goals" isn't a
+sensible guess about what a pre-goals export meant). This is the same reasoning
+`V8__predictions_cache_per_account.sql` used to justify dropping data rather than migrating it —
+just applied to the export format instead of a table.
+
 **Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
 the budget rather than folding it into the fallback category. Anything else that starts storing

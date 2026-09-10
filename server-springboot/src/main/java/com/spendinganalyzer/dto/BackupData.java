@@ -3,6 +3,8 @@ package com.spendinganalyzer.dto;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.model.Category;
+import com.spendinganalyzer.model.Goal;
+import com.spendinganalyzer.model.GoalContribution;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.model.Transaction;
@@ -23,7 +25,11 @@ public record BackupData(
         List<Transaction> transactions,
         List<MerchantCategory> merchantCategories,
         List<Budget> budgets,
-        List<RecurringOverride> recurringOverrides
+        List<RecurringOverride> recurringOverrides,
+        List<Goal> goals,
+        List<GoalContribution> goalContributions
 ) {
-    public static final int CURRENT_VERSION = 1;
+    // Bumped from 1: goals and goalContributions are new fields a version-1 file has no values
+    // for, and there is no migration path between backup versions -- see BackupController.
+    public static final int CURRENT_VERSION = 2;
 }

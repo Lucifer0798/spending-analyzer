@@ -5,6 +5,8 @@ import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.GoalContributionRepository;
+import com.spendinganalyzer.repository.GoalRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.PredictionsCacheRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
@@ -31,6 +33,8 @@ public class BackupService {
     private final MerchantCategoryRepository merchants;
     private final BudgetRepository budgets;
     private final RecurringOverrideRepository recurringOverrides;
+    private final GoalRepository goals;
+    private final GoalContributionRepository goalContributions;
     private final PredictionsCacheRepository predictionsCache;
 
     public BackupService(
@@ -40,6 +44,8 @@ public class BackupService {
             MerchantCategoryRepository merchants,
             BudgetRepository budgets,
             RecurringOverrideRepository recurringOverrides,
+            GoalRepository goals,
+            GoalContributionRepository goalContributions,
             PredictionsCacheRepository predictionsCache
     ) {
         this.accounts = accounts;
@@ -48,6 +54,8 @@ public class BackupService {
         this.merchants = merchants;
         this.budgets = budgets;
         this.recurringOverrides = recurringOverrides;
+        this.goals = goals;
+        this.goalContributions = goalContributions;
         this.predictionsCache = predictionsCache;
     }
 
@@ -57,7 +65,9 @@ public class BackupService {
             int transactions,
             int merchantCategories,
             int budgets,
-            int recurringOverrides
+            int recurringOverrides,
+            int goals,
+            int goalContributions
     ) {}
 
     public BackupData export() {
@@ -69,7 +79,9 @@ public class BackupService {
                 transactions.find(null, null, null, DateRange.ALL, NO_LIMIT, 0),
                 merchants.findAll(),
                 budgets.findAll(),
-                recurringOverrides.findAll()
+                recurringOverrides.findAll(),
+                goals.findAll(),
+                goalContributions.findAll()
         );
     }
 
@@ -86,6 +98,8 @@ public class BackupService {
         merchants.restoreAll(data.merchantCategories());
         budgets.restoreAll(data.budgets());
         recurringOverrides.restoreAll(data.recurringOverrides());
+        goals.restoreAll(data.goals());
+        goalContributions.restoreAll(data.goalContributions());
         predictionsCache.deleteAll();
 
         return new BackupSummary(
@@ -94,7 +108,9 @@ public class BackupService {
                 data.transactions().size(),
                 data.merchantCategories().size(),
                 data.budgets().size(),
-                data.recurringOverrides().size()
+                data.recurringOverrides().size(),
+                data.goals().size(),
+                data.goalContributions().size()
         );
     }
 }
