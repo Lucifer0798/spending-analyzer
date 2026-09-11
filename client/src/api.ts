@@ -20,7 +20,9 @@ import type {
   RecurringOverride,
   RecurringResponse,
   SummaryResponse,
+  Tag,
   Transaction,
+  TransactionWithTags,
   UploadResult,
 } from "./types";
 import { ALL_TIME } from "./types";
@@ -144,11 +146,12 @@ export function fetchTransactions(params: {
   month?: string;
   accountId?: number | null;
   range?: DateRangeValue;
+  tag?: string;
   limit?: number;
   offset?: number;
 } = {}) {
   const { range, ...rest } = params;
-  return request<{ transactions: Transaction[]; total: number }>(
+  return request<{ transactions: TransactionWithTags[]; total: number }>(
     `/transactions${qs({ ...rest, from: range?.from, to: range?.to })}`
   );
 }
@@ -176,6 +179,21 @@ export function updateTransaction(
 
 export function deleteTransaction(id: number) {
   return request<{ ok: true }>(`/transactions/${id}`, { method: "DELETE" });
+}
+
+/** Tags a transaction, creating the tag first if this is the first time it's been used. */
+export function addTransactionTag(id: number, name: string) {
+  return request<{ ok: true; tags: string[] }>(`/transactions/${id}/tags`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** Untags a transaction; the tag itself remains for whatever other transactions carry it. */
+export function removeTransactionTag(id: number, name: string) {
+  return request<{ ok: true; tags: string[] }>(`/transactions/${id}/tags/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
 }
 
 // --- accounts ---------------------------------------------------------------
@@ -237,6 +255,20 @@ export function deleteCategory(id: number) {
     `/categories/${id}`,
     { method: "DELETE" }
   );
+}
+
+// --- tags ---------------------------------------------------------------------
+
+/** Every tag on record with its usage count, for a filter dropdown or autocomplete list. */
+export function fetchTags() {
+  return request<Tag[]>("/tags");
+}
+
+/** Deletes a tag everywhere it's applied — the tag itself, not just one transaction's use of it. */
+export function deleteTag(name: string) {
+  return request<{ ok: true; transactionsUntagged: number }>(`/tags/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
 }
 
 // --- budgets ----------------------------------------------------------------
@@ -401,6 +433,7 @@ export function exportUrl(
     range?: DateRangeValue;
     category?: string;
     month?: string;
+    tag?: string;
   } = {}
 ) {
   const { range, ...rest } = params;
@@ -412,8 +445,8 @@ export function exportUrl(
 /**
  * A download URL rather than a fetch, for the same reason exportUrl is — the browser keeps the
  * filename the server sets. Covers accounts, categories, transactions, merchant memory, budgets,
- * recurring overrides, and savings goals; AI forecasts aren't included, since regenerating one is
- * one click.
+ * recurring overrides, savings goals, and tags; AI forecasts aren't included, since regenerating
+ * one is one click.
  */
 export function backupUrl() {
   return "/api/backup";

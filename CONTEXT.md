@@ -287,6 +287,45 @@ sensible guess about what a pre-goals export meant). This is the same reasoning
 `V8__predictions_cache_per_account.sql` used to justify dropping data rather than migrating it —
 just applied to the export format instead of a table.
 
+**Adding tags bumped `BackupData.CURRENT_VERSION` again, 2 to 3, same reasoning as the goals
+bump above.** `tags`/`transactionTags` are new fields a version-2 file has no values for, and
+there's still no upgrade path between versions.
+
+**`TransactionRepository.find`/`count` gained a `tag` parameter via overloads, not by changing the
+existing signatures.** Both methods already had several call sites — `ExportController`,
+`BackupService`, several tests — that don't need to know about tags at all. Changing the signature
+in place would have forced every one of them to pass an extra `null`; the two-argument-list
+overload lets the five-argument callers stay exactly as they were and only the transactions
+endpoint and its CSV export (which does thread the filter through, so an export matches what's
+filtered on screen) opt into the new parameter. The tag filter itself is an `EXISTS` subquery
+against `transaction_tags`/`tags`, not a `JOIN` — a transaction can carry several tags, and joining
+would multiply a matching row once per tag, corrupting both the list and `count`.
+
+**`transactions` list responses gained tags via a wrapper DTO, not by adding a field to
+`Transaction`.** `Transaction` round-trips through the backup file and the CSV export as-is; adding
+a `tags` field there would mean every `restoreAll`/CSV path either has to know about tags or
+silently ignore a field that doesn't apply to it. Instead `TransactionController.list` composes a
+`TransactionWithTags(@JsonUnwrapped Transaction, List<String> tags)` per row — `@JsonUnwrapped`
+flattens the wrapper in JSON, so the wire format is unaffected and the client's
+`TransactionWithTags` type is just `Transaction` plus a `tags` array. `TagRepository.namesByTransactionId`
+fetches every returned row's tags in one grouped query rather than one query per row, the same
+batching `GoalContributionRepository.totalsByGoal` uses for goals.
+
+**A tag name is `COLLATE NOCASE` at the column, not normalized in Java.** "Business Trip" and
+"business trip" have to resolve to the same tag, and declaring the collation on `tags.name` gets
+that for the UNIQUE constraint, `ON CONFLICT(name)`, and every `WHERE name = :name` lookup all at
+once — no uppercasing convention to remember and apply consistently, unlike merchant keys
+(`MerchantNormalizer`) or account names (`AccountRepository.nameExists`'s explicit `COLLATE
+NOCASE`, since that check isn't declared on the column). The casing of whichever spelling was used
+first is what sticks, since `ON CONFLICT ... DO NOTHING` leaves the existing row untouched.
+
+**Untagging doesn't delete the tag; only `DELETE /api/tags/{name}` does.**
+`TagRepository.removeTag` removes one `transaction_tags` row and leaves `tags` alone, so a tag with
+zero current uses still appears in the filter dropdown and autocomplete — the same "flagged but
+now unused" state `recurring_overrides` accepts (see above) rather than silently vanishing and
+reappearing under a fresh row if reused later. Actually deleting a tag everywhere is a distinct,
+explicit action from Manage, mirroring "Forget all" for merchant memory.
+
 **Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
 the budget rather than folding it into the fallback category. Anything else that starts storing

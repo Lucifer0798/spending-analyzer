@@ -66,10 +66,11 @@ public class ExportController {
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String tag
     ) {
         DateRange range = DateRange.of(from, to);
-        var rows = transactionRepository.find(category, month, accountId, range, NO_LIMIT, 0);
+        var rows = transactionRepository.find(category, month, accountId, range, tag, NO_LIMIT, 0);
         return attachment("transactions", csv.transactions(rows));
     }
 

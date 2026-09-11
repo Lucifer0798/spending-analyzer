@@ -2,6 +2,7 @@ package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -44,6 +45,9 @@ class ExportControllerTest {
     @Autowired
     private AccountRepository accounts;
 
+    @Autowired
+    private TagRepository tags;
+
     @BeforeEach
     void seed() {
         List<ParsedTransaction> rows = new ArrayList<>();
@@ -75,7 +79,7 @@ class ExportControllerTest {
     @Test
     @DisplayName("exports every matching row rather than the first page")
     void doesNotTruncateAtThePageSize() throws IOException {
-        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null);
+        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(seededRows(response)).hasSize(SEEDED_ROWS);
@@ -85,7 +89,7 @@ class ExportControllerTest {
     @DisplayName("applies the date range, so an export matches the filtered view on screen")
     void appliesDateRange() throws IOException {
         ResponseEntity<byte[]> response =
-                controller.transactions(null, null, null, "2026-06-01", "2026-06-30");
+                controller.transactions(null, null, null, "2026-06-01", "2026-06-30", null);
 
         List<CSVRecord> rows = seededRows(response);
         assertThat(rows).hasSize(SEEDED_ROWS - 100);
@@ -95,16 +99,29 @@ class ExportControllerTest {
     @Test
     @DisplayName("applies the category filter")
     void appliesCategoryFilter() throws IOException {
-        assertThat(seededRows(controller.transactions("Groceries", null, null, null, null)))
+        assertThat(seededRows(controller.transactions("Groceries", null, null, null, null, null)))
                 .hasSize(SEEDED_ROWS);
-        assertThat(seededRows(controller.transactions("Travel", null, null, null, null)))
+        assertThat(seededRows(controller.transactions("Travel", null, null, null, null, null)))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("applies the tag filter, matching the transactions list endpoint")
+    void appliesTagFilter() throws IOException {
+        long firstRowId = transactions
+                .find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 1, 0).get(0).id();
+        tags.addTag(firstRowId, "business trip");
+
+        assertThat(seededRows(controller.transactions(null, null, null, null, null, "business trip")))
+                .hasSize(1);
+        assertThat(seededRows(controller.transactions(null, null, null, null, null, "no such tag")))
                 .isEmpty();
     }
 
     @Test
     @DisplayName("serves a dated .csv attachment")
     void sendsAttachmentHeaders() {
-        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null);
+        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null, null);
 
         HttpHeaders headers = response.getHeaders();
         assertThat(headers.getContentType().toString()).startsWith("text/csv");
@@ -193,7 +210,7 @@ class ExportControllerTest {
     @DisplayName("rejects a malformed date instead of silently exporting everything")
     void rejectsBadDates() {
         assertThat(org.assertj.core.api.Assertions.catchThrowable(
-                () -> controller.transactions(null, null, null, "not-a-date", null)))
+                () -> controller.transactions(null, null, null, "not-a-date", null, null)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

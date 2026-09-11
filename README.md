@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Nine tables, all created automatically:
+Eleven tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -199,9 +199,11 @@ Nine tables, all created automatically:
 | `recurring_overrides` | A "cancel" reminder or "exclude" flag per merchant, set from the Recurring page |
 | `goals` | A savings target — name, amount, optional date, its own currency |
 | `goal_contributions` | Amounts logged by hand toward a goal; negative is a withdrawal |
+| `tags` | Free-form labels a transaction can carry alongside its single category |
+| `transaction_tags` | Which tags apply to which transaction — a transaction can carry any number |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V12__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V13__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -238,8 +240,9 @@ All endpoints live under `/api`.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/upload` | Import a statement (`?accountId=`, `?skipDuplicates=`) |
-| `GET` | `/transactions` | List transactions (filter by category, month, account) |
+| `GET` | `/transactions` | List transactions (filter by category, month, account, tag) |
 | `PATCH` | `/transactions/{id}` | Change a category — also teaches merchant memory |
+| `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it, per category |
@@ -250,12 +253,13 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them |
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
+| `GET` `DELETE` | `/tags` `/tags/{name}` | Every tag with its usage count, or delete one everywhere it's applied |
 | `GET` | `/export/transactions.csv` | Download transactions, filters and all |
 | `GET` | `/export/categories.csv` | Download spend per category |
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
-| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
@@ -401,6 +405,14 @@ in. Deleting a goal deletes its contributions too, done explicitly at the applic
 than by a database cascade — this schema doesn't enforce foreign keys anywhere, the same as every
 other table that references an id.
 
+**A tag name is case-insensitive, so retyping it never creates a near-duplicate.** "Business Trip"
+and "business trip" resolve to the same tag — the `tags.name` column is declared `COLLATE NOCASE`,
+so the uniqueness check, the create-if-missing insert, and every lookup all inherit that comparison
+for free rather than needing to normalize case in application code. The first spelling used wins
+and sticks around for later reuse of the same tag under any casing. Untagging a transaction only
+removes that one association; the tag itself stays on record — and in the filter dropdown — until
+whatever else used it is gone too, or someone deletes it outright from Manage.
+
 **The backup is a restore, not a merge, and that's what makes it simple.** Importing wipes every
 table it covers and reloads it exactly as exported — ids included, since SQLite happily accepts an
 explicit id into an `AUTOINCREMENT` column and advances its own counter to match afterward. That
@@ -517,6 +529,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Transaction tags~~ — free-form labels alongside a transaction's single category, for
+  filtering that cuts across categories ("business trip", "reimbursable"). Set from Transactions,
+  filtered from the same page, listed and forgotten from Manage
 - ~~Savings goals~~ — a target amount, and optionally a date to reach it by. Progress comes from
   contributions logged by hand, since this app tracks categorized spending rather than account
   balances and has no automatic way to know how much has actually been saved

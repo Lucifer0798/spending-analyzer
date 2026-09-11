@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import {
+  addTransactionTag,
   deleteTransaction,
   exportUrl,
   fetchCategories,
+  fetchTags,
   fetchTransactions,
+  removeTransactionTag,
   updateTransaction,
   updateTransactionCategory,
 } from "../api";
-import type { DateRangeValue, Transaction } from "../types";
+import type { DateRangeValue, Tag, TransactionWithTags } from "../types";
 import { currencyPrecise } from "../format";
 import { ExportLink } from "./ExportLink";
 
@@ -26,20 +29,28 @@ interface EditDraft {
 const PAGE_SIZE = 50;
 
 export function TransactionsTable({ accountId, range }: Props) {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tagDrafts, setTagDrafts] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchCategories().then((r) => setCategories(r.categories));
   }, []);
+
+  const loadTags = () => {
+    fetchTags().then(setTags).catch(() => {});
+  };
+  useEffect(loadTags, []);
 
   // A filter change invalidates the current page number. Reset it during render rather than
   // in a follow-up effect: an effect would commit the stale page first and only fix it a
@@ -47,7 +58,7 @@ export function TransactionsTable({ accountId, range }: Props) {
   // Comparing against the previous key and calling setState in this branch is React's own
   // pattern for adjusting state in response to a prop change — see "You Might Not Need an
   // Effect" in the React docs.
-  const filterKey = `${accountId}|${categoryFilter}|${range.from}|${range.to}`;
+  const filterKey = `${accountId}|${categoryFilter}|${tagFilter}|${range.from}|${range.to}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
@@ -62,6 +73,7 @@ export function TransactionsTable({ accountId, range }: Props) {
     setLoading(true);
     fetchTransactions({
       category: categoryFilter || undefined,
+      tag: tagFilter || undefined,
       accountId,
       range,
       limit: PAGE_SIZE,
@@ -75,7 +87,30 @@ export function TransactionsTable({ accountId, range }: Props) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [page, categoryFilter, accountId, range]);
+  useEffect(load, [page, categoryFilter, tagFilter, accountId, range]);
+
+  const handleAddTag = async (t: TransactionWithTags) => {
+    const name = (tagDrafts[t.id] ?? "").trim();
+    if (!name) return;
+    setTagDrafts((d) => ({ ...d, [t.id]: "" }));
+    try {
+      const { tags: updated } = await addTransactionTag(t.id, name);
+      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, tags: updated } : x)));
+      loadTags();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add tag.");
+    }
+  };
+
+  const handleRemoveTag = async (t: TransactionWithTags, tag: string) => {
+    try {
+      const { tags: updated } = await removeTransactionTag(t.id, tag);
+      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, tags: updated } : x)));
+      loadTags();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove tag.");
+    }
+  };
 
   const handleCategoryChange = async (id: number, category: string) => {
     setTransactions((prev) =>
@@ -89,7 +124,7 @@ export function TransactionsTable({ accountId, range }: Props) {
     }
   };
 
-  const startEdit = (t: Transaction) => {
+  const startEdit = (t: TransactionWithTags) => {
     setError(null);
     setEditingId(t.id);
     setDraft({
@@ -105,7 +140,7 @@ export function TransactionsTable({ accountId, range }: Props) {
     setDraft(null);
   };
 
-  const saveEdit = async (original: Transaction) => {
+  const saveEdit = async (original: TransactionWithTags) => {
     if (!draft) return;
     const amount = Number(draft.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -138,7 +173,7 @@ export function TransactionsTable({ accountId, range }: Props) {
     }
   };
 
-  const handleDelete = async (t: Transaction) => {
+  const handleDelete = async (t: TransactionWithTags) => {
     if (!confirm(`Delete "${t.description}" (${currencyPrecise(t.amount, t.account_currency ?? undefined)}) on ${t.date}?`)) return;
     setError(null);
     try {
@@ -151,7 +186,7 @@ export function TransactionsTable({ accountId, range }: Props) {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const showAccountColumn = accountId === null;
-  const columnCount = showAccountColumn ? 6 : 5;
+  const columnCount = showAccountColumn ? 7 : 6;
 
   const inputClass =
     "w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900";
@@ -173,12 +208,25 @@ export function TransactionsTable({ accountId, range }: Props) {
               </option>
             ))}
           </select>
+          <select
+            value={tagFilter}
+            onChange={(e) => setTagFilter(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="">All tags</option>
+            {tags.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.count})
+              </option>
+            ))}
+          </select>
           {/* Exports the whole filtered set, not the page on screen — hence the row count. */}
           <ExportLink
             href={exportUrl("transactions", {
               accountId,
               range,
               category: categoryFilter || undefined,
+              tag: tagFilter || undefined,
             })}
             label="Export CSV"
             disabled={total === 0}
@@ -204,6 +252,7 @@ export function TransactionsTable({ accountId, range }: Props) {
               )}
               <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500">Amount</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Category</th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Tags</th>
               <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500"></th>
             </tr>
           </thead>
@@ -264,6 +313,9 @@ export function TransactionsTable({ accountId, range }: Props) {
                   <td className="px-4 py-2 text-xs text-slate-500">
                     {t.category ?? "Uncategorized"}
                   </td>
+                  <td className="px-4 py-2 text-xs text-slate-500">
+                    {t.tags.length > 0 ? t.tags.join(", ") : "—"}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-2 text-right">
                     <button
                       disabled={saving}
@@ -317,6 +369,35 @@ export function TransactionsTable({ accountId, range }: Props) {
                       <span className="ml-2 text-[10px] uppercase text-slate-400">{t.category_source}</span>
                     )}
                   </td>
+                  <td className="px-4 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {t.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        >
+                          {tag}
+                          <button
+                            onClick={() => handleRemoveTag(t, tag)}
+                            className="text-slate-400 hover:text-red-600"
+                            title={`Remove "${tag}"`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        list="tag-suggestions"
+                        value={tagDrafts[t.id] ?? ""}
+                        onChange={(e) => setTagDrafts((d) => ({ ...d, [t.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddTag(t);
+                        }}
+                        placeholder="+ tag"
+                        className="w-16 rounded border border-dashed border-slate-300 bg-transparent px-1 py-0.5 text-xs focus:w-28 dark:border-slate-700"
+                      />
+                    </div>
+                  </td>
                   <td className="whitespace-nowrap px-4 py-2 text-right">
                     <button
                       onClick={() => startEdit(t)}
@@ -337,6 +418,12 @@ export function TransactionsTable({ accountId, range }: Props) {
           </tbody>
         </table>
       </div>
+
+      <datalist id="tag-suggestions">
+        {tags.map((t) => (
+          <option key={t.name} value={t.name} />
+        ))}
+      </datalist>
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
         <span>

@@ -2,11 +2,13 @@ package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
+import com.spendinganalyzer.dto.TransactionWithTags;
 import com.spendinganalyzer.dto.TransactionsListResponse;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
+import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.MerchantNormalizer;
 import org.springframework.http.ResponseEntity;
@@ -26,15 +28,18 @@ public class TransactionController {
     private final TransactionRepository repository;
     private final CategoryRepository categoryRepository;
     private final MerchantCategoryRepository merchantCategoryRepository;
+    private final TagRepository tagRepository;
 
     public TransactionController(
             TransactionRepository repository,
             CategoryRepository categoryRepository,
-            MerchantCategoryRepository merchantCategoryRepository
+            MerchantCategoryRepository merchantCategoryRepository,
+            TagRepository tagRepository
     ) {
         this.repository = repository;
         this.categoryRepository = categoryRepository;
         this.merchantCategoryRepository = merchantCategoryRepository;
+        this.tagRepository = tagRepository;
     }
 
     @GetMapping("/transactions")
@@ -44,13 +49,48 @@ public class TransactionController {
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
+            @RequestParam(required = false) String tag,
             @RequestParam(defaultValue = "200") int limit,
             @RequestParam(defaultValue = "0") int offset
     ) {
         DateRange range = DateRange.of(from, to);
-        var transactions = repository.find(category, month, accountId, range, limit, offset);
-        int total = repository.count(category, month, accountId, range);
-        return new TransactionsListResponse(transactions, total);
+        var transactions = repository.find(category, month, accountId, range, tag, limit, offset);
+        int total = repository.count(category, month, accountId, range, tag);
+        return new TransactionsListResponse(attachTags(transactions), total);
+    }
+
+    private List<TransactionWithTags> attachTags(List<Transaction> transactions) {
+        Map<Long, List<String>> tagsById = tagRepository.namesByTransactionId(
+                transactions.stream().map(Transaction::id).toList());
+        return transactions.stream()
+                .map(t -> new TransactionWithTags(t, tagsById.getOrDefault(t.id(), List.of())))
+                .toList();
+    }
+
+    /** Tags a transaction, creating the tag first if this is the first time it's been used. */
+    @PostMapping("/transactions/{id}/tags")
+    public ResponseEntity<?> addTag(@PathVariable long id, @RequestBody Map<String, String> body) {
+        if (repository.findById(id).isEmpty()) {
+            return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
+        }
+        String name = body.get("name") == null ? "" : body.get("name").trim();
+        if (name.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("name is required."));
+        }
+
+        tagRepository.addTag(id, name);
+        return ResponseEntity.ok(Map.of("ok", true, "tags", tagRepository.namesFor(id)));
+    }
+
+    /** Untags a transaction; the tag itself remains for whatever other transactions carry it. */
+    @DeleteMapping("/transactions/{id}/tags/{name}")
+    public ResponseEntity<?> removeTag(@PathVariable long id, @PathVariable String name) {
+        if (repository.findById(id).isEmpty()) {
+            return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
+        }
+
+        tagRepository.removeTag(id, name);
+        return ResponseEntity.ok(Map.of("ok", true, "tags", tagRepository.namesFor(id)));
     }
 
     /**

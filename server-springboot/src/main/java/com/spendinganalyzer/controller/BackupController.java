@@ -38,8 +38,8 @@ public class BackupController {
     }
 
     /**
-     * Accounts, categories, transactions, merchant memory, budgets, recurring overrides, and
-     * savings goals, as one JSON file. {@code predictions_cache} is left out — regenerating a
+     * Accounts, categories, transactions, merchant memory, budgets, recurring overrides, savings
+     * goals, and tags, as one JSON file. {@code predictions_cache} is left out — regenerating a
      * forecast is one click, the same reasoning the account-scoped cache migration used to
      * justify dropping the old row rather than migrating it.
      */
