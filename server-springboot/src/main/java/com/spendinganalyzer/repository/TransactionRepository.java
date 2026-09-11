@@ -127,9 +127,16 @@ public class TransactionRepository {
 
     public List<Transaction> find(
             String category, String month, Long accountId, DateRange range, int limit, int offset) {
+        return find(category, month, accountId, range, null, limit, offset);
+    }
+
+    /** Same as above, further filtered to transactions carrying a given tag. */
+    public List<Transaction> find(
+            String category, String month, Long accountId, DateRange range, String tag, int limit, int offset) {
         StringBuilder sql = new StringBuilder(SELECT_WITH_ACCOUNT).append(" WHERE 1=1");
         MapSqlParameterSource params = new MapSqlParameterSource();
         appendFilters(sql, params, category, month, accountId, range);
+        appendTagFilter(sql, params, tag);
 
         sql.append(" ORDER BY t.date DESC, t.id DESC LIMIT :limit OFFSET :offset");
         params.addValue("limit", limit).addValue("offset", offset);
@@ -138,12 +145,34 @@ public class TransactionRepository {
     }
 
     public int count(String category, String month, Long accountId, DateRange range) {
+        return count(category, month, accountId, range, null);
+    }
+
+    public int count(String category, String month, Long accountId, DateRange range, String tag) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM transactions t WHERE 1=1");
         MapSqlParameterSource params = new MapSqlParameterSource();
         appendFilters(sql, params, category, month, accountId, range);
+        appendTagFilter(sql, params, tag);
 
         Integer total = jdbc.queryForObject(sql.toString(), params, Integer.class);
         return total != null ? total : 0;
+    }
+
+    /**
+     * An EXISTS subquery rather than a JOIN: a transaction can carry several tags, and joining
+     * would multiply each matching row once per tag it has, corrupting both the list and the count.
+     */
+    private static void appendTagFilter(StringBuilder sql, MapSqlParameterSource params, String tag) {
+        if (tag != null && !tag.isBlank()) {
+            sql.append("""
+                     AND EXISTS (
+                       SELECT 1 FROM transaction_tags tt
+                       JOIN tags tg ON tg.id = tt.tag_id
+                       WHERE tt.transaction_id = t.id AND tg.name = :tag
+                     )
+                    """);
+            params.addValue("tag", tag);
+        }
     }
 
     public boolean updateCategory(long id, String category, String source) {

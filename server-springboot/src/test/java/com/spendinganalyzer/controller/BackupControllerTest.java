@@ -72,7 +72,8 @@ class BackupControllerTest {
         BackupData wrongVersion = new BackupData(
                 99, exported.exportedAt(), exported.accounts(), exported.categories(),
                 exported.transactions(), exported.merchantCategories(), exported.budgets(),
-                exported.recurringOverrides(), exported.goals(), exported.goalContributions());
+                exported.recurringOverrides(), exported.goals(), exported.goalContributions(),
+                exported.tags(), exported.transactionTags());
 
         ResponseEntity<?> response = controller.restore(wrongVersion);
 

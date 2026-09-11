@@ -14,6 +14,17 @@ export interface Transaction {
   account_currency: string | null;
 }
 
+/** A transaction as the list endpoint returns it, with its tags attached. */
+export interface TransactionWithTags extends Transaction {
+  tags: string[];
+}
+
+/** A tag and how many transactions currently carry it. */
+export interface Tag {
+  name: string;
+  count: number;
+}
+
 export type AccountType =
   | "checking"
   | "savings"
@@ -274,6 +285,7 @@ export interface BackupSummary {
   recurringOverrides: number;
   goals: number;
   goalContributions: number;
+  tags: number;
 }
 
 export interface Goal {

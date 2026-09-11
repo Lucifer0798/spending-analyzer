@@ -7,7 +7,9 @@ import com.spendinganalyzer.model.Goal;
 import com.spendinganalyzer.model.GoalContribution;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.RecurringOverride;
+import com.spendinganalyzer.model.Tag;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.model.TransactionTag;
 
 import java.util.List;
 
@@ -27,9 +29,11 @@ public record BackupData(
         List<Budget> budgets,
         List<RecurringOverride> recurringOverrides,
         List<Goal> goals,
-        List<GoalContribution> goalContributions
+        List<GoalContribution> goalContributions,
+        List<Tag> tags,
+        List<TransactionTag> transactionTags
 ) {
-    // Bumped from 1: goals and goalContributions are new fields a version-1 file has no values
-    // for, and there is no migration path between backup versions -- see BackupController.
-    public static final int CURRENT_VERSION = 2;
+    // Bumped from 2: tags and transactionTags are new fields a version-2 file has no values for,
+    // and there is no migration path between backup versions -- see BackupController.
+    public static final int CURRENT_VERSION = 3;
 }

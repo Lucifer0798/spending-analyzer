@@ -12,6 +12,7 @@ import com.spendinganalyzer.repository.GoalRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.PredictionsCacheRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
+import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,20 +63,27 @@ class BackupServiceTest {
     private GoalContributionRepository goalContributions;
 
     @Autowired
+    private TagRepository tags;
+
+    @Autowired
     private PredictionsCacheRepository predictionsCache;
 
     private long goalId;
+    private long taggedTransactionId;
 
     @BeforeEach
     void seed() {
         transactions.insertBatch(
                 List.of(new ParsedTransaction("2026-06-01", "COFFEE SHOP", 4.50, "debit", "Dining & Coffee")),
                 "backup-test-batch", Account.DEFAULT_ID);
+        taggedTransactionId = transactions
+                .find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 1, 0).get(0).id();
         merchants.remember("COFFEE SHOP", "Dining & Coffee", "user");
         budgets.upsert("Dining & Coffee", 100.0);
         recurringOverrides.upsert("NETFLIX.COM", RecurringOverride.ACTION_CANCEL);
         goalId = goals.create("Emergency fund", 5000.0, null, "USD").id();
         goalContributions.add(goalId, 200.0, "2026-06-01", "first deposit");
+        tags.addTag(taggedTransactionId, "business trip");
         predictionsCache.upsert(Account.DEFAULT_ID, "{\"summary\":\"s\"}", "2026-06-01T00:00:00Z");
     }
 
@@ -92,6 +100,8 @@ class BackupServiceTest {
         assertThat(data.recurringOverrides()).extracting("merchantKey").contains("NETFLIX.COM");
         assertThat(data.goals()).extracting("name").contains("Emergency fund");
         assertThat(data.goalContributions()).extracting("note").contains("first deposit");
+        assertThat(data.tags()).extracting("name").contains("business trip");
+        assertThat(data.transactionTags()).extracting("transactionId").contains(taggedTransactionId);
         // Built-in categories are exported too, not just custom ones.
         assertThat(data.categories()).extracting("name").contains("Groceries");
     }
@@ -109,6 +119,7 @@ class BackupServiceTest {
         budgets.upsert("Shopping", 200.0);
         long extraGoalId = goals.create("Vacation", 1000.0, null, "USD").id();
         goalContributions.add(extraGoalId, 50.0, "2026-07-01", null);
+        tags.addTag(taggedTransactionId, "extra tag added after the snapshot");
 
         backupService.restore(snapshot);
 
@@ -118,6 +129,7 @@ class BackupServiceTest {
         assertThat(budgets.findAll()).extracting("category").containsExactly("Dining & Coffee");
         assertThat(goals.findAll()).extracting("name").containsExactly("Emergency fund");
         assertThat(goalContributions.findAll()).extracting("note").containsExactly("first deposit");
+        assertThat(tags.namesFor(taggedTransactionId)).containsExactly("business trip");
     }
 
     @Test
@@ -146,13 +158,15 @@ class BackupServiceTest {
         assertThat(summary.recurringOverrides()).isEqualTo(snapshot.recurringOverrides().size());
         assertThat(summary.goals()).isEqualTo(snapshot.goals().size());
         assertThat(summary.goalContributions()).isEqualTo(snapshot.goalContributions().size());
+        assertThat(summary.tags()).isEqualTo(snapshot.tags().size());
     }
 
     @Test
     @DisplayName("restoring an empty backup wipes every table it covers down to nothing")
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of());
 
         backupService.restore(empty);
 
@@ -164,5 +178,6 @@ class BackupServiceTest {
         assertThat(recurringOverrides.findAll()).isEmpty();
         assertThat(goals.findAll()).isEmpty();
         assertThat(goalContributions.findAll()).isEmpty();
+        assertThat(tags.findAll()).isEmpty();
     }
 }
