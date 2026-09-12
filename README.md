@@ -240,7 +240,7 @@ All endpoints live under `/api`.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/upload` | Import a statement (`?accountId=`, `?skipDuplicates=`) |
-| `GET` | `/transactions` | List transactions (filter by category, month, account, tag) |
+| `GET` | `/transactions` | List transactions (filter by category, month, account, tag, description search) |
 | `PATCH` | `/transactions/{id}` | Change a category — also teaches merchant memory |
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
 | `POST` | `/categorize` | Categorize anything uncategorized |
@@ -413,6 +413,16 @@ and sticks around for later reuse of the same tag under any casing. Untagging a 
 removes that one association; the tag itself stays on record — and in the filter dropdown — until
 whatever else used it is gone too, or someone deletes it outright from Manage.
 
+**Search is a plain `LIKE`, not a separate full-text index — and its wildcard characters are
+escaped.** Transaction volumes here are personal-finance-sized, not web-scale, so a substring match
+on `description` needs no `FTS5` virtual table, ranking, or tokenizer to stay fast; SQLite's `LIKE`
+is already case-insensitive for ASCII, so no `COLLATE` or `LOWER()` is needed either. The one thing
+a naive `LIKE '%' || term || '%'` gets wrong is a search term that itself contains `%` or `_` —
+without escaping, searching for "50% off" would match every row, since `%` is a wildcard to `LIKE`
+whether or not the user meant it as one. The search box escapes both characters (and the escape
+character itself) before building the pattern, so a literal percent sign searches for a literal
+percent sign.
+
 **The backup is a restore, not a merge, and that's what makes it simple.** Importing wipes every
 table it covers and reloads it exactly as exported — ids included, since SQLite happily accepts an
 explicit id into an `AUTOINCREMENT` column and advances its own counter to match afterward. That
@@ -529,6 +539,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Full-text search~~ — a search box on Transactions matches anywhere in the description,
+  case-insensitively, and combines with the category/tag/account/date filters already there
 - ~~Transaction tags~~ — free-form labels alongside a transaction's single category, for
   filtering that cuts across categories ("business trip", "reimbursable"). Set from Transactions,
   filtered from the same page, listed and forgotten from Manage

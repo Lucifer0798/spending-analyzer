@@ -127,16 +127,24 @@ public class TransactionRepository {
 
     public List<Transaction> find(
             String category, String month, Long accountId, DateRange range, int limit, int offset) {
-        return find(category, month, accountId, range, null, limit, offset);
+        return find(category, month, accountId, range, null, null, limit, offset);
     }
 
     /** Same as above, further filtered to transactions carrying a given tag. */
     public List<Transaction> find(
             String category, String month, Long accountId, DateRange range, String tag, int limit, int offset) {
+        return find(category, month, accountId, range, tag, null, limit, offset);
+    }
+
+    /** Same as above, further filtered to descriptions containing a search term. */
+    public List<Transaction> find(
+            String category, String month, Long accountId, DateRange range,
+            String tag, String search, int limit, int offset) {
         StringBuilder sql = new StringBuilder(SELECT_WITH_ACCOUNT).append(" WHERE 1=1");
         MapSqlParameterSource params = new MapSqlParameterSource();
         appendFilters(sql, params, category, month, accountId, range);
         appendTagFilter(sql, params, tag);
+        appendSearchFilter(sql, params, search);
 
         sql.append(" ORDER BY t.date DESC, t.id DESC LIMIT :limit OFFSET :offset");
         params.addValue("limit", limit).addValue("offset", offset);
@@ -145,14 +153,19 @@ public class TransactionRepository {
     }
 
     public int count(String category, String month, Long accountId, DateRange range) {
-        return count(category, month, accountId, range, null);
+        return count(category, month, accountId, range, null, null);
     }
 
     public int count(String category, String month, Long accountId, DateRange range, String tag) {
+        return count(category, month, accountId, range, tag, null);
+    }
+
+    public int count(String category, String month, Long accountId, DateRange range, String tag, String search) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM transactions t WHERE 1=1");
         MapSqlParameterSource params = new MapSqlParameterSource();
         appendFilters(sql, params, category, month, accountId, range);
         appendTagFilter(sql, params, tag);
+        appendSearchFilter(sql, params, search);
 
         Integer total = jdbc.queryForObject(sql.toString(), params, Integer.class);
         return total != null ? total : 0;
@@ -172,6 +185,22 @@ public class TransactionRepository {
                      )
                     """);
             params.addValue("tag", tag);
+        }
+    }
+
+    /**
+     * SQLite's LIKE is already case-insensitive for ASCII, so no COLLATE or LOWER() is needed.
+     * The search term's own {@code %}/{@code _} wildcard characters are escaped so a term like
+     * "50% off" matches that literal text rather than being read as a wildcard pattern.
+     */
+    private static void appendSearchFilter(StringBuilder sql, MapSqlParameterSource params, String search) {
+        if (search != null && !search.isBlank()) {
+            String escaped = search.trim()
+                    .replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_");
+            sql.append(" AND t.description LIKE :search ESCAPE '\\'");
+            params.addValue("search", "%" + escaped + "%");
         }
     }
 

@@ -147,6 +147,8 @@ export function fetchTransactions(params: {
   accountId?: number | null;
   range?: DateRangeValue;
   tag?: string;
+  /** Case-insensitive substring match on description. */
+  search?: string;
   limit?: number;
   offset?: number;
 } = {}) {
@@ -434,6 +436,7 @@ export function exportUrl(
     category?: string;
     month?: string;
     tag?: string;
+    search?: string;
   } = {}
 ) {
   const { range, ...rest } = params;
