@@ -34,6 +34,8 @@ export function TransactionsTable({ accountId, range }: Props) {
   const [page, setPage] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,13 +54,20 @@ export function TransactionsTable({ accountId, range }: Props) {
   };
   useEffect(loadTags, []);
 
+  // Debounces the search box: the filter actually sent to the API only updates once typing
+  // pauses, so each keystroke doesn't trigger its own request.
+  useEffect(() => {
+    const handle = setTimeout(() => setSearchFilter(searchInput.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
   // A filter change invalidates the current page number. Reset it during render rather than
   // in a follow-up effect: an effect would commit the stale page first and only fix it a
   // render later, so the fetch below would run once for the old page and again for page 0.
   // Comparing against the previous key and calling setState in this branch is React's own
   // pattern for adjusting state in response to a prop change — see "You Might Not Need an
   // Effect" in the React docs.
-  const filterKey = `${accountId}|${categoryFilter}|${tagFilter}|${range.from}|${range.to}`;
+  const filterKey = `${accountId}|${categoryFilter}|${tagFilter}|${searchFilter}|${range.from}|${range.to}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
@@ -74,6 +83,7 @@ export function TransactionsTable({ accountId, range }: Props) {
     fetchTransactions({
       category: categoryFilter || undefined,
       tag: tagFilter || undefined,
+      search: searchFilter || undefined,
       accountId,
       range,
       limit: PAGE_SIZE,
@@ -87,7 +97,7 @@ export function TransactionsTable({ accountId, range }: Props) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [page, categoryFilter, tagFilter, accountId, range]);
+  useEffect(load, [page, categoryFilter, tagFilter, searchFilter, accountId, range]);
 
   const handleAddTag = async (t: TransactionWithTags) => {
     const name = (tagDrafts[t.id] ?? "").trim();
@@ -196,6 +206,12 @@ export function TransactionsTable({ accountId, range }: Props) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Transactions</h1>
         <div className="flex items-center gap-2">
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search descriptions…"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -227,6 +243,7 @@ export function TransactionsTable({ accountId, range }: Props) {
               range,
               category: categoryFilter || undefined,
               tag: tagFilter || undefined,
+              search: searchFilter || undefined,
             })}
             label="Export CSV"
             disabled={total === 0}

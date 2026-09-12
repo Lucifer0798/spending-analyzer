@@ -50,12 +50,13 @@ public class TransactionController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "200") int limit,
             @RequestParam(defaultValue = "0") int offset
     ) {
         DateRange range = DateRange.of(from, to);
-        var transactions = repository.find(category, month, accountId, range, tag, limit, offset);
-        int total = repository.count(category, month, accountId, range, tag);
+        var transactions = repository.find(category, month, accountId, range, tag, search, limit, offset);
+        int total = repository.count(category, month, accountId, range, tag, search);
         return new TransactionsListResponse(attachTags(transactions), total);
     }
 

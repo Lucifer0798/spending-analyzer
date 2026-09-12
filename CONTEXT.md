@@ -301,6 +301,24 @@ filtered on screen) opt into the new parameter. The tag filter itself is an `EXI
 against `transaction_tags`/`tags`, not a `JOIN` — a transaction can carry several tags, and joining
 would multiply a matching row once per tag, corrupting both the list and `count`.
 
+**Search followed the tag filter's overload pattern exactly, one layer deeper.** `find`/`count`
+gained an eight/six-argument overload taking `search` after `tag`, with the seven/five-argument
+versions delegating with `search = null` — same reasoning as the tag overload above, just one more
+rung on the same ladder. `TransactionController.list` and `ExportController.transactions` are the
+only two callers that moved to the new overload; everything else (`BackupService`, most tests)
+still calls a shorter one and never finds out `search` exists.
+
+**The search filter is a plain `LIKE`, not `FTS5`, and its wildcard characters are escaped by
+hand.** `appendSearchFilter` builds `t.description LIKE :search ESCAPE '\\'` with `%`/`_` in the
+term backslash-escaped before the surrounding `%...%` wildcards are added — SQLite's `LIKE` treats
+both characters specially, so a search for a literal `%` (a discount code, "50% off") would
+otherwise match every row instead of rows containing an actual percent sign. No `COLLATE NOCASE`
+is needed the way `tags.name` needed it: SQLite's `LIKE` is already case-insensitive over ASCII by
+default. `FTS5` (a virtual table, triggers to keep it in sync with `transactions`, a tokenizer)
+would be the standard answer at web scale; a personal statement history is small enough that a
+substring scan is fast without it, and there's no ranking need since every match is a single flat
+list.
+
 **`transactions` list responses gained tags via a wrapper DTO, not by adding a field to
 `Transaction`.** `Transaction` round-trips through the backup file and the CSV export as-is; adding
 a `tags` field there would mean every `restoreAll`/CSV path either has to know about tags or

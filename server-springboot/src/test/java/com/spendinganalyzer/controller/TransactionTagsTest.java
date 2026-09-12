@@ -95,7 +95,7 @@ class TransactionTagsTest {
     void listCarriesTagsAndFilters() {
         tags.addTag(taggedId, "business trip");
 
-        var all = controller.list(null, null, null, null, null, null, 200, 0);
+        var all = controller.list(null, null, null, null, null, null, null, 200, 0);
         assertThat(all.transactions()).hasSize(2);
         var flight = all.transactions().stream()
                 .filter(t -> t.transaction().description().equals("FLIGHT")).findFirst().orElseThrow();
@@ -104,7 +104,7 @@ class TransactionTagsTest {
         assertThat(flight.tags()).containsExactly("business trip");
         assertThat(groceries.tags()).isEmpty();
 
-        var filtered = controller.list(null, null, null, null, null, "business trip", 200, 0);
+        var filtered = controller.list(null, null, null, null, null, "business trip", null, 200, 0);
         assertThat(filtered.transactions()).extracting(t -> t.transaction().description())
                 .containsExactly("FLIGHT");
         assertThat(filtered.total()).isEqualTo(1);

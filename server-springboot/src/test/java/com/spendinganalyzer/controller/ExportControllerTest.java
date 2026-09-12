@@ -79,7 +79,7 @@ class ExportControllerTest {
     @Test
     @DisplayName("exports every matching row rather than the first page")
     void doesNotTruncateAtThePageSize() throws IOException {
-        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null, null);
+        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null, null, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(seededRows(response)).hasSize(SEEDED_ROWS);
@@ -89,7 +89,7 @@ class ExportControllerTest {
     @DisplayName("applies the date range, so an export matches the filtered view on screen")
     void appliesDateRange() throws IOException {
         ResponseEntity<byte[]> response =
-                controller.transactions(null, null, null, "2026-06-01", "2026-06-30", null);
+                controller.transactions(null, null, null, "2026-06-01", "2026-06-30", null, null);
 
         List<CSVRecord> rows = seededRows(response);
         assertThat(rows).hasSize(SEEDED_ROWS - 100);
@@ -99,9 +99,9 @@ class ExportControllerTest {
     @Test
     @DisplayName("applies the category filter")
     void appliesCategoryFilter() throws IOException {
-        assertThat(seededRows(controller.transactions("Groceries", null, null, null, null, null)))
+        assertThat(seededRows(controller.transactions("Groceries", null, null, null, null, null, null)))
                 .hasSize(SEEDED_ROWS);
-        assertThat(seededRows(controller.transactions("Travel", null, null, null, null, null)))
+        assertThat(seededRows(controller.transactions("Travel", null, null, null, null, null, null)))
                 .isEmpty();
     }
 
@@ -112,16 +112,31 @@ class ExportControllerTest {
                 .find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 1, 0).get(0).id();
         tags.addTag(firstRowId, "business trip");
 
-        assertThat(seededRows(controller.transactions(null, null, null, null, null, "business trip")))
+        assertThat(seededRows(controller.transactions(null, null, null, null, null, "business trip", null)))
                 .hasSize(1);
-        assertThat(seededRows(controller.transactions(null, null, null, null, null, "no such tag")))
+        assertThat(seededRows(controller.transactions(null, null, null, null, null, "no such tag", null)))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("applies the search filter, matching the transactions list endpoint")
+    void appliesSearchFilter() throws IOException {
+        // Deliberately without MARKER -- seededRows() filters to that prefix, and this row needs
+        // to be found by its own description instead.
+        transactions.insertBatch(
+                List.of(new ParsedTransaction("2026-06-01", "UBER TRIP 12345", 15.00, "debit", "Transportation")),
+                "export-search-batch", 1L);
+
+        assertThat(parse(controller.transactions(null, null, null, null, null, null, "uber")))
+                .hasSize(1);
+        assertThat(parse(controller.transactions(null, null, null, null, null, null, "no such word")))
                 .isEmpty();
     }
 
     @Test
     @DisplayName("serves a dated .csv attachment")
     void sendsAttachmentHeaders() {
-        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null, null);
+        ResponseEntity<byte[]> response = controller.transactions(null, null, null, null, null, null, null);
 
         HttpHeaders headers = response.getHeaders();
         assertThat(headers.getContentType().toString()).startsWith("text/csv");
@@ -210,7 +225,7 @@ class ExportControllerTest {
     @DisplayName("rejects a malformed date instead of silently exporting everything")
     void rejectsBadDates() {
         assertThat(org.assertj.core.api.Assertions.catchThrowable(
-                () -> controller.transactions(null, null, null, "not-a-date", null, null)))
+                () -> controller.transactions(null, null, null, "not-a-date", null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }
