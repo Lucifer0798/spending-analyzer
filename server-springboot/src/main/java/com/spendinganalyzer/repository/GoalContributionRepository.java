@@ -28,9 +28,13 @@ public class GoalContributionRepository {
             rs.getString("created_at")
     );
 
-    /** A goal's sum and count, kept together since {@link #totalsByGoal} always produces both at once. */
-    public record GoalTotals(double sum, int count) {
-        public static final GoalTotals NONE = new GoalTotals(0, 0);
+    /**
+     * A goal's sum, count and earliest contribution date, kept together since {@link
+     * #totalsByGoal} always produces all three at once. {@code firstContributionDate} is what a
+     * pace projection measures elapsed time from.
+     */
+    public record GoalTotals(double sum, int count, String firstContributionDate) {
+        public static final GoalTotals NONE = new GoalTotals(0, 0, null);
     }
 
     /** Every contribution across every goal, for the backup export. */
@@ -45,14 +49,19 @@ public class GoalContributionRepository {
                 new MapSqlParameterSource("goalId", goalId), ROW_MAPPER);
     }
 
-    /** Every goal's running sum and contribution count in one query, so listing goals costs one query, not one per goal. */
+    /** Every goal's running sum, contribution count and earliest date in one query, so listing goals costs one query, not one per goal. */
     public Map<Long, GoalTotals> totalsByGoal() {
         Map<Long, GoalTotals> totals = new HashMap<>();
-        for (Map<String, Object> row : jdbc.getJdbcTemplate().queryForList(
-                "SELECT goal_id, SUM(amount) AS total, COUNT(*) AS n FROM goal_contributions GROUP BY goal_id")) {
+        for (Map<String, Object> row : jdbc.getJdbcTemplate().queryForList("""
+                SELECT goal_id, SUM(amount) AS total, COUNT(*) AS n, MIN(date) AS first_date
+                FROM goal_contributions GROUP BY goal_id
+                """)) {
             totals.put(
                     ((Number) row.get("goal_id")).longValue(),
-                    new GoalTotals(((Number) row.get("total")).doubleValue(), ((Number) row.get("n")).intValue()));
+                    new GoalTotals(
+                            ((Number) row.get("total")).doubleValue(),
+                            ((Number) row.get("n")).intValue(),
+                            (String) row.get("first_date")));
         }
         return totals;
     }

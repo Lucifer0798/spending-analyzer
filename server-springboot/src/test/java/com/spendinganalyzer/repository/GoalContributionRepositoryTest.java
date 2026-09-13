@@ -53,6 +53,7 @@ class GoalContributionRepositoryTest {
 
         assertThat(totals.get(goalId).sum()).isEqualTo(150.0);
         assertThat(totals.get(goalId).count()).isEqualTo(2);
+        assertThat(totals.get(goalId).firstContributionDate()).isEqualTo("2026-06-01");
     }
 
     @Test

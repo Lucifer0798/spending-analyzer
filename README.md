@@ -405,6 +405,18 @@ in. Deleting a goal deletes its contributions too, done explicitly at the applic
 than by a database cascade — this schema doesn't enforce foreign keys anywhere, the same as every
 other table that references an id.
 
+**A goal's pace is measured from its first contribution, not a trailing window.** The dashboard's
+spend forecast has months of transactions to average over, so a three-month moving window makes
+sense there; a goal might have one or two logged contributions total, and averaging those over
+only the most recent few weeks would swing wildly on each new entry. Instead the pace is simply
+everything saved so far divided by the days since the very first contribution, scaled to a
+30.44-day month. A goal met, or one with nothing logged yet, has no pace worth projecting from —
+the projected date is left `null` rather than showing a meaningless one. So is a pace that's zero
+or negative: a goal being drained faster than it's funded will never arrive at this rate, and
+`today + a negative or infinite number of days` isn't a date worth showing either. Where a target
+date exists, the projected date is compared against it to say "on track" or "behind pace"; where
+none was set, the projection is just informational.
+
 **A tag name is case-insensitive, so retyping it never creates a near-duplicate.** "Business Trip"
 and "business trip" resolve to the same tag — the `tags.name` column is declared `COLLATE NOCASE`,
 so the uniqueness check, the create-if-missing insert, and every lookup all inherit that comparison
@@ -539,6 +551,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Goal pace projection~~ — each goal shows "on track" or "behind pace" against its target date,
+  and the date it'd be reached at the average rate saved since the first contribution
 - ~~Full-text search~~ — a search box on Transactions matches anywhere in the description,
   case-insensitively, and combines with the category/tag/account/date filters already there
 - ~~Transaction tags~~ — free-form labels alongside a transaction's single category, for

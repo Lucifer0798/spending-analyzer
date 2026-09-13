@@ -263,6 +263,44 @@ is the only constraint, so the sum can legitimately go down.
 > fully achieved, and "-200 remaining" would read as confusing rather than informative. `achieved`
 > (`saved >= targetAmount`) is the flag the UI actually branches on for the "reached" state.
 
+**Pace projection took an injectable `Clock`, following `LoginAttemptLimiter`'s precedent, not a
+bare `LocalDate.now()`.** `GoalService` gained a package-private three-arg constructor
+(`goals, contributions, Clock`) alongside the public two-arg one, which defaults to
+`Clock.systemDefaultZone()` — the public constructor needs an explicit `@Autowired` once a second
+constructor exists, or Spring can't pick one and the context fails to start (this broke on first
+pass; the fix was adding the annotation, not removing the second constructor). Tests build a
+`GoalService` directly with `Clock.fixed(...)` to assert a projected date exactly rather than
+computing an expected value relative to whatever day the suite happens to run on.
+
+> `Clock.systemDefaultZone()`, not `systemUTC()` the way `LoginAttemptLimiter` uses it. That
+> class only measures elapsed *duration* for a lockout, where a timezone is irrelevant; this one
+> answers "what calendar date is today" to match against `date` strings the rest of the schema
+> already treats as local dates with no timezone of their own (same assumption `BudgetService`
+> makes with `YearMonth.now()`). `systemUTC()` here could read as tomorrow or yesterday depending
+> on where the server runs relative to the user.
+
+**The pace calculation measures from the first contribution ever logged, not a trailing window.**
+Unlike `StatsService.computeMonthlyCategorySeries`'s three-month moving average, which has months
+of transaction history to smooth over, a goal typically has a handful of contributions total —
+averaging only a recent slice would swing hard on every new entry rather than settling toward a
+representative rate. `GoalService.progress` instead divides the total saved by
+`ChronoUnit.DAYS.between(firstContributionDate, today)` (floored at 1 day, so a contribution
+logged today doesn't divide by zero) and scales by 30.44 (the average days per month) to get a
+`$/month` figure comparable to how budgets already frame targets.
+
+> The 30.44 conversion cancels out algebraically in the "days to go" calculation
+> (`(remaining / monthlyPace) * 30.44`, where `monthlyPace` already carries a `* 30.44` factor),
+> so `GoalServiceTest.projectsCompletionDateFromPace` can assert an exact day count by hand rather
+> than tolerating a rounding fudge factor.
+
+**No projected date at all beats a nonsensical one.** `projectedCompletionDate` stays `null` in
+three cases: the goal has no contributions yet (no pace to measure), it's already `achieved`
+(nothing left to project), or `monthlyPace` isn't positive (net withdrawals — the goal is moving
+away from its target, and `today + a negative or unbounded number of days` isn't a real date).
+Only a target date **and** a positive projection together produce the "on track" / "behind pace"
+distinction; a goal with no target date just gets an informational projection with no verdict
+attached, since there's nothing to be on track *against*.
+
 **A goal's currency is its own field, not inherited from an account.** Budgets and recurring
 detection are account-scoped and use `StatsService.resolveCurrency`; goals deliberately aren't —
 a savings target is a personal number ("save $5,000") that doesn't need to match whatever account
