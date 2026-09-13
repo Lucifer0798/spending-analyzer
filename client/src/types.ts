@@ -323,4 +323,10 @@ export interface GoalProgress {
   percentComplete: number;
   achieved: boolean;
   contributionCount: number;
+  /** Average net contribution rate since the first one logged, projected to a 30.44-day month.
+   *  Zero with nothing logged yet, and can be negative when withdrawals outpace deposits. */
+  monthlyPace: number;
+  /** Null when there's no pace to project from -- no contributions, already achieved, or the
+   *  pace isn't positive. Otherwise the date this goal would be reached at the current pace. */
+  projectedCompletionDate: string | null;
 }

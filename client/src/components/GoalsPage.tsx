@@ -25,6 +25,37 @@ function dateLabel(iso: string) {
   });
 }
 
+const PACE_TONE_CLASS: Record<"positive" | "warning" | "neutral", string> = {
+  positive: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  neutral: "text-slate-500",
+};
+
+/**
+ * Nothing to say once a goal is achieved (its own badge covers that) or before a first
+ * contribution exists (there's no pace yet to project from).
+ */
+function paceMessage(goal: GoalProgress): { text: string; tone: "positive" | "warning" | "neutral" } | null {
+  if (goal.achieved || goal.contributionCount === 0) return null;
+
+  if (goal.monthlyPace <= 0) {
+    return { text: "Recent withdrawals outpace contributions — no projection at this pace.", tone: "warning" };
+  }
+
+  const paceText = `${currency(goal.monthlyPace, 0, goal.currency)}/month`;
+  if (!goal.projectedCompletionDate) return null;
+  const projected = dateLabel(goal.projectedCompletionDate);
+
+  if (goal.targetDate) {
+    const onTrack = goal.projectedCompletionDate <= goal.targetDate;
+    return onTrack
+      ? { text: `On track at ${paceText} — projected ${projected}`, tone: "positive" }
+      : { text: `Behind pace at ${paceText} — projected ${projected}`, tone: "warning" };
+  }
+
+  return { text: `At ${paceText}, you'll reach this around ${projected}`, tone: "neutral" };
+}
+
 function ContributionHistory({
   goalId,
   currencyCode,
@@ -90,6 +121,7 @@ function GoalCard({ goal, onChanged }: { goal: GoalProgress; onChanged: () => vo
 
   const filled = Math.min(goal.percentComplete, 100);
   const color = goal.achieved ? "#0ca30c" : "#4f46e5";
+  const pace = paceMessage(goal);
 
   const submitContribution = async () => {
     const parsed = Number(amount);
@@ -191,6 +223,8 @@ function GoalCard({ goal, onChanged }: { goal: GoalProgress; onChanged: () => vo
           ? `${Math.round(goal.percentComplete)}% funded`
           : `${currency(goal.remaining, 0, goal.currency)} to go · ${Math.round(goal.percentComplete)}%`}
       </p>
+
+      {pace && <p className={`mt-1 text-xs ${PACE_TONE_CLASS[pace.tone]}`}>{pace.text}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
