@@ -247,6 +247,7 @@ All endpoints live under `/api`.
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it, per category |
 | `GET` | `/recurring` | Detected recurring charges |
+| `GET` | `/anomalies` | Transactions well above their category's typical amount |
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
@@ -291,6 +292,15 @@ merchant name recurring detection and merchant memory already agree on. "Cancel"
 that stays next to the series until you clear it; "exclude" hides the merchant from the list for
 good. Both are set from the Recurring page, in context next to the charge they apply to, but
 listed and cleared from Manage — the same split merchant memory's own rules follow.
+
+**Anomaly detection compares a transaction to its own category's median, not a mean.** A single
+$400 grocery run would drag a category's *average* up toward itself — the very transaction being
+judged would raise its own bar for what counts as unusual. The median barely moves for one extreme
+value in an otherwise-typical group, so it stays a meaningful "typical" even with the outlier
+sitting right there in the data. A category needs at least five transactions before anything in it
+gets judged at all — with fewer, there's no reliable typical to compare against, and everything
+would read as either an anomaly or not by chance. Categories are judged independently: a $100
+dinner never gets compared against a $5 coffee habit's usual range.
 
 **One password, and no user accounts.** There is exactly one secret, read from the environment.
 That isn't a shortcut — this app holds one person's statements in a local SQLite file, so per-user
@@ -551,6 +561,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Spending anomaly alerts~~ — a transaction well above its category's usual amount (a $400
+  grocery run against an $80 typical one) shows on the dashboard, with how many times over typical
+  it came to
 - ~~Goal pace projection~~ — each goal shows "on track" or "behind pace" against its target date,
   and the date it'd be reached at the average rate saved since the first contribution
 - ~~Full-text search~~ — a search box on Transactions matches anywhere in the description,

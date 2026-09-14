@@ -14,6 +14,7 @@ import { exportUrl, fetchPredictions, fetchSummary, refreshPredictions } from ".
 import type { CategoryTotal, DateRangeValue, MonthlyTotal, PredictionsPayload, SummaryResponse } from "../types";
 import { currency } from "../format";
 import { ExportLink } from "./ExportLink";
+import { AnomaliesCard } from "./AnomaliesCard";
 import { BudgetsCard } from "./BudgetsCard";
 import { ComparisonCard } from "./ComparisonCard";
 
@@ -269,6 +270,10 @@ export function Dashboard({ accountId, range }: Props) {
           sub={generatedAt ? `as of ${new Date(generatedAt).toLocaleDateString()} · full history` : "not generated yet"}
         />
       </div>
+
+      {/* Renders nothing unless something is flagged, so the dashboard is unchanged for
+          anyone with nothing unusual to see. */}
+      <AnomaliesCard accountId={accountId} range={range} />
 
       {/* Renders nothing for "all time" or a half-open filter -- there's no defined-length
           period to compare against. */}

@@ -1,6 +1,7 @@
 import type {
   Account,
   AccountType,
+  AnomaliesResponse,
   AuthStatus,
   BackupSummary,
   Budget,
@@ -377,6 +378,11 @@ export function fetchComparison(accountId: number | null, range: DateRangeValue 
 
 export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<RecurringResponse>(`/recurring${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/** Transactions whose amount stood out against their own category's typical spend. */
+export function fetchAnomalies(accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<AnomaliesResponse>(`/anomalies${qs({ accountId, from: range.from, to: range.to })}`);
 }
 
 /**
