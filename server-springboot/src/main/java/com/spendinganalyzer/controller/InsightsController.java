@@ -1,14 +1,17 @@
 package com.spendinganalyzer.controller;
 
+import com.spendinganalyzer.dto.AnomaliesResponse;
 import com.spendinganalyzer.dto.ComparisonResponse;
 import com.spendinganalyzer.dto.CurrencyBreakdown;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.dto.RecurringSeries;
+import com.spendinganalyzer.dto.SpendingAnomaly;
 import com.spendinganalyzer.dto.SummaryResponse;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.service.AnomalyDetectionService;
 import com.spendinganalyzer.service.InsightsService;
 import com.spendinganalyzer.service.RecurringDetectionService;
 import com.spendinganalyzer.service.StatsService;
@@ -30,6 +33,7 @@ public class InsightsController {
     private final StatsService statsService;
     private final InsightsService insightsService;
     private final RecurringDetectionService recurringDetectionService;
+    private final AnomalyDetectionService anomalyDetectionService;
     private final TransactionRepository transactionRepository;
     private final RecurringOverrideRepository recurringOverrideRepository;
 
@@ -37,12 +41,14 @@ public class InsightsController {
             StatsService statsService,
             InsightsService insightsService,
             RecurringDetectionService recurringDetectionService,
+            AnomalyDetectionService anomalyDetectionService,
             TransactionRepository transactionRepository,
             RecurringOverrideRepository recurringOverrideRepository
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
         this.recurringDetectionService = recurringDetectionService;
+        this.anomalyDetectionService = anomalyDetectionService;
         this.transactionRepository = transactionRepository;
         this.recurringOverrideRepository = recurringOverrideRepository;
     }
@@ -160,6 +166,28 @@ public class InsightsController {
                 "currency", currency,
                 "mixedCurrencies", false
         );
+    }
+
+    /**
+     * Transactions whose amount stood out against their own category's typical spend. Refuses
+     * to compare across currencies the same way {@code /recurring} does — a category's "typical"
+     * amount has no single unit once "all accounts" spans more than one currency.
+     */
+    @GetMapping("/anomalies")
+    public AnomaliesResponse anomalies(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return new AnomaliesResponse(List.of(), "", true);
+        }
+
+        DateRange range = DateRange.of(from, to);
+        List<SpendingAnomaly> anomalies = anomalyDetectionService.detect(
+                transactionRepository.findSpendingTransactions(accountId, range));
+        return new AnomaliesResponse(anomalies, currency, false);
     }
 
     /** The cached forecast for the given account, or for every account combined if omitted. */
