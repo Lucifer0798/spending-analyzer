@@ -113,6 +113,28 @@ class InsightsControllerCurrencyTest {
         assertThat(response.get("currency")).isEqualTo("USD");
     }
 
+    // --- anomalies ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("anomalies asks for one account once currencies mix, rather than guessing a unit")
+    void anomaliesRefusesWhenMixed() {
+        seedEuroAccountWithSpend();
+
+        var response = controller.anomalies(null, null, null);
+
+        assertThat(response.mixedCurrencies()).isTrue();
+        assertThat(response.anomalies()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("anomalies reports its currency when accounts agree")
+    void anomaliesReportsCurrencyWhenNotMixed() {
+        var response = controller.anomalies(null, null, null);
+
+        assertThat(response.mixedCurrencies()).isFalse();
+        assertThat(response.currency()).isEqualTo("USD");
+    }
+
     // --- predictions refresh -----------------------------------------------------
 
     @Test

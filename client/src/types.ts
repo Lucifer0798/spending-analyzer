@@ -144,6 +144,25 @@ export interface RecurringResponse {
   mixedCurrencies: boolean;
 }
 
+/** A transaction whose amount stood out against its own category's typical spend. */
+export interface SpendingAnomaly {
+  transactionId: number;
+  date: string;
+  description: string;
+  category: string;
+  amount: number;
+  /** The category's median amount — what the transaction is being compared against. */
+  typicalAmount: number;
+  multiplier: number;
+}
+
+export interface AnomaliesResponse {
+  anomalies: SpendingAnomaly[];
+  currency: string;
+  /** True when "all accounts" spans more than one currency — anomalies is left empty above. */
+  mixedCurrencies: boolean;
+}
+
 export interface CategoryTotal {
   category: string;
   total: number;
