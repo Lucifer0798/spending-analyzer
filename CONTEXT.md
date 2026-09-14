@@ -232,6 +232,32 @@ Both look the override up by `s.merchant()`, which is already the normalized key
 > it," and guessing wrong silently would be worse than a stale row sitting in a list built
 > specifically so stale rows have somewhere to be found and removed.
 
+**`AnomalyDetectionService` uses the median, not the mean, deliberately.** A category's "typical"
+amount has to survive the very outlier it's being used to judge — a mean would get dragged toward
+a $400 charge sitting in an otherwise-$80 category, quietly raising the bar the $400 charge itself
+needs to clear. The median moves far less for one extreme value, the same reasoning
+`RecurringDetectionService` already leans on for interval and amount consistency (median interval,
+coefficient of variation off a mean amount — though there the mean is safe, since a recurring
+charge is defined by having *no* outliers to begin with). `MIN_SAMPLES = 5` exists because a
+median of two or three points isn't a "typical" worth naming; a category under that count is
+skipped entirely rather than flagging or clearing everything in it by chance. Categories are never
+compared to each other — grouped, judged, and thresholded independently, the same per-merchant
+independence recurring detection already has for cadence.
+
+> Like `RecurringSeries`, nothing about a `SpendingAnomaly` is stored — `AnomalyDetectionService`
+> is pure logic over whatever `TransactionRepository.findSpendingTransactions` returns, recomputed
+> on every `/api/anomalies` call. There's no override table the way `recurring_overrides` gives
+> recurring detection somewhere to attach "I know, ignore this" — an anomaly is inherently a
+> one-off past event, not an ongoing pattern something needs to be remembered about across
+> requests the way a subscription's cancel/exclude flag does.
+
+**`InsightsController.anomalies` refuses to compare across currencies, same as `/recurring`.** A
+category's median has no single unit once "all accounts" spans more than one currency — comparing
+a $400 USD charge to a category baseline built from mixed USD and EUR amounts would be
+meaningless, not just imprecise. `mixedCurrencies: true` with an empty list is the same shape
+`/recurring` already returns for the same reason, so `AnomaliesCard` on the frontend renders
+nothing in that case exactly the way `BudgetsCard` does.
+
 **`BackupService.restore` is the only `@Transactional` boundary; the six `restoreAll` methods
 have none of their own.** Each is `DELETE FROM <table>` followed by a batch insert that writes
 every column including `id` — deliberately raw SQL rather than going through `create`/`upsert`,
