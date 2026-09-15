@@ -2,6 +2,7 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.BackupData;
 import com.spendinganalyzer.dto.DateRange;
+import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
@@ -37,6 +38,7 @@ public class BackupService {
     private final GoalRepository goals;
     private final GoalContributionRepository goalContributions;
     private final TagRepository tags;
+    private final AccountBalanceRepository accountBalances;
     private final PredictionsCacheRepository predictionsCache;
 
     public BackupService(
@@ -49,6 +51,7 @@ public class BackupService {
             GoalRepository goals,
             GoalContributionRepository goalContributions,
             TagRepository tags,
+            AccountBalanceRepository accountBalances,
             PredictionsCacheRepository predictionsCache
     ) {
         this.accounts = accounts;
@@ -60,6 +63,7 @@ public class BackupService {
         this.goals = goals;
         this.goalContributions = goalContributions;
         this.tags = tags;
+        this.accountBalances = accountBalances;
         this.predictionsCache = predictionsCache;
     }
 
@@ -72,7 +76,8 @@ public class BackupService {
             int recurringOverrides,
             int goals,
             int goalContributions,
-            int tags
+            int tags,
+            int accountBalances
     ) {}
 
     public BackupData export() {
@@ -88,7 +93,8 @@ public class BackupService {
                 goals.findAll(),
                 goalContributions.findAll(),
                 tags.findAll(),
-                tags.findAllAssociations()
+                tags.findAllAssociations(),
+                accountBalances.findAll()
         );
     }
 
@@ -108,6 +114,7 @@ public class BackupService {
         goals.restoreAll(data.goals());
         goalContributions.restoreAll(data.goalContributions());
         tags.restoreAll(data.tags(), data.transactionTags());
+        accountBalances.restoreAll(data.accountBalances());
         predictionsCache.deleteAll();
 
         return new BackupSummary(
@@ -119,7 +126,8 @@ public class BackupService {
                 data.recurringOverrides().size(),
                 data.goals().size(),
                 data.goalContributions().size(),
-                data.tags().size()
+                data.tags().size(),
+                data.accountBalances().size()
         );
     }
 }

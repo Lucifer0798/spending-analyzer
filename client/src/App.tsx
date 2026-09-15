@@ -4,6 +4,7 @@ import { Dashboard } from "./components/Dashboard";
 import { TransactionsTable } from "./components/TransactionsTable";
 import { RecurringPage } from "./components/RecurringPage";
 import { GoalsPage } from "./components/GoalsPage";
+import { NetWorthPage } from "./components/NetWorthPage";
 import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
@@ -19,7 +20,7 @@ import {
 import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
-type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "goals" | "manage";
+type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "goals" | "net-worth" | "manage";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "upload", label: "Upload" },
@@ -27,6 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "transactions", label: "Transactions" },
   { id: "recurring", label: "Recurring" },
   { id: "goals", label: "Goals" },
+  { id: "net-worth", label: "Net Worth" },
   { id: "manage", label: "Manage" },
 ];
 
@@ -102,9 +104,9 @@ function App() {
     }
   };
 
-  // The filters only apply to views that show transaction data. Goals aren't transaction-scoped
-  // at all -- they're measured from manually-logged contributions, not imports.
-  const showFilters = tab !== "manage" && tab !== "upload" && tab !== "goals";
+  // The filters only apply to views that show transaction data. Goals and net worth aren't
+  // transaction-scoped at all -- they're measured from manually-logged amounts, not imports.
+  const showFilters = tab !== "manage" && tab !== "upload" && tab !== "goals" && tab !== "net-worth";
 
   if (!auth) {
     return (
@@ -208,6 +210,7 @@ function App() {
         {tab === "transactions" && <TransactionsTable accountId={accountId} range={range} />}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}
         {tab === "goals" && <GoalsPage />}
+        {tab === "net-worth" && <NetWorthPage />}
         {tab === "manage" && <ManagePage onAccountsChanged={loadAccounts} />}
       </main>
     </div>

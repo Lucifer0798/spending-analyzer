@@ -1,6 +1,7 @@
 package com.spendinganalyzer.dto;
 
 import com.spendinganalyzer.model.Account;
+import com.spendinganalyzer.model.AccountBalance;
 import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.model.Category;
 import com.spendinganalyzer.model.Goal;
@@ -31,9 +32,10 @@ public record BackupData(
         List<Goal> goals,
         List<GoalContribution> goalContributions,
         List<Tag> tags,
-        List<TransactionTag> transactionTags
+        List<TransactionTag> transactionTags,
+        List<AccountBalance> accountBalances
 ) {
-    // Bumped from 2: tags and transactionTags are new fields a version-2 file has no values for,
-    // and there is no migration path between backup versions -- see BackupController.
-    public static final int CURRENT_VERSION = 3;
+    // Bumped from 3: accountBalances is a new field a version-3 file has no values for, and there
+    // is no migration path between backup versions -- see BackupController.
+    public static final int CURRENT_VERSION = 4;
 }

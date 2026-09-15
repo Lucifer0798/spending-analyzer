@@ -163,6 +163,46 @@ export interface AnomaliesResponse {
   mixedCurrencies: boolean;
 }
 
+/** One manually-logged balance for an account, as of a date. Negative is a liability. */
+export interface AccountBalance {
+  id: number;
+  account_id: number;
+  date: string;
+  balance: number;
+  created_at: string;
+}
+
+/** One account's most recently logged balance. */
+export interface NetWorthAccount {
+  accountId: number;
+  accountName: string;
+  balance: number;
+  asOfDate: string;
+}
+
+/** Total net worth as of one date -- a point on the history chart. */
+export interface NetWorthPoint {
+  date: string;
+  total: number;
+}
+
+/** One currency's slice of a {@link NetWorthResponse} whose accounts don't all share one. */
+export interface CurrencyNetWorth {
+  currency: string;
+  total: number;
+  accounts: NetWorthAccount[];
+  history: NetWorthPoint[];
+}
+
+/** Null currency (with perCurrency populated instead) once active accounts span more than one. */
+export interface NetWorthResponse {
+  total: number;
+  accounts: NetWorthAccount[];
+  history: NetWorthPoint[];
+  currency: string | null;
+  perCurrency: CurrencyNetWorth[] | null;
+}
+
 export interface CategoryTotal {
   category: string;
   total: number;
@@ -305,6 +345,7 @@ export interface BackupSummary {
   goals: number;
   goalContributions: number;
   tags: number;
+  accountBalances: number;
 }
 
 export interface Goal {

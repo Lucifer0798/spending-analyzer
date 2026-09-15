@@ -1,6 +1,8 @@
 package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.model.Account;
+import com.spendinganalyzer.model.AccountBalance;
+import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,9 @@ class AccountControllerTest {
 
     @Autowired
     private AccountRepository accounts;
+
+    @Autowired
+    private AccountBalanceRepository accountBalances;
 
     private static Map<String, String> body(String... keyValues) {
         Map<String, String> map = new HashMap<>();
@@ -105,5 +110,88 @@ class AccountControllerTest {
         @SuppressWarnings("unchecked")
         var currencies = (java.util.List<String>) response.get("currencies");
         assertThat(currencies).contains("USD", "EUR", "GBP");
+    }
+
+    // --- balances (net worth) ----------------------------------------------------
+
+    @Test
+    @DisplayName("logs a balance, and reports a missing account as 404")
+    void logsBalance() {
+        Account created = accounts.create("Checking", "checking", "USD");
+
+        ResponseEntity<?> response = controller.logBalance(created.id(), Map.of("date", "2026-06-01", "balance", 5230.0));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(((AccountBalance) response.getBody()).balance()).isEqualTo(5230.0);
+        assertThat(controller.logBalance(999_999L, Map.of("date", "2026-06-01", "balance", 1.0))
+                .getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("a second balance the same day replaces the first, rather than adding a duplicate")
+    void loggingTwiceSameDayReplaces() {
+        Account created = accounts.create("Checking", "checking", "USD");
+
+        controller.logBalance(created.id(), Map.of("date", "2026-06-01", "balance", 100.0));
+        controller.logBalance(created.id(), Map.of("date", "2026-06-01", "balance", 150.0));
+
+        assertThat(accountBalances.findByAccountId(created.id())).singleElement()
+                .extracting("balance").isEqualTo(150.0);
+    }
+
+    @Test
+    @DisplayName("a balance can be negative, for a credit card's outstanding bill")
+    void balanceCanBeNegative() {
+        Account created = accounts.create("Credit Card", "credit_card", "USD");
+
+        ResponseEntity<?> response = controller.logBalance(created.id(), Map.of("date", "2026-06-01", "balance", -450.0));
+
+        assertThat(((AccountBalance) response.getBody()).balance()).isEqualTo(-450.0);
+    }
+
+    @Test
+    @DisplayName("rejects a malformed date and a missing balance")
+    void rejectsInvalidBalanceInput() {
+        Account created = accounts.create("Checking", "checking", "USD");
+
+        assertThat(controller.logBalance(created.id(), Map.of("date", "not-a-date", "balance", 1.0))
+                .getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.logBalance(created.id(), Map.of("date", "2026-06-01"))
+                .getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("lists an account's balance history, and reports a missing account as 404")
+    void listsBalances() {
+        Account created = accounts.create("Checking", "checking", "USD");
+        controller.logBalance(created.id(), Map.of("date", "2026-06-01", "balance", 100.0));
+
+        ResponseEntity<?> response = controller.listBalances(created.id());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat((java.util.List<?>) response.getBody()).hasSize(1);
+        assertThat(controller.listBalances(999_999L).getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("deletes a balance entry, and reports a missing one as 404")
+    void deletesBalance() {
+        Account created = accounts.create("Checking", "checking", "USD");
+        AccountBalance saved = accountBalances.upsert(created.id(), "2026-06-01", 100.0);
+
+        assertThat(controller.deleteBalance(created.id(), saved.id()).getStatusCode().value()).isEqualTo(200);
+        assertThat(accountBalances.findByAccountId(created.id())).isEmpty();
+        assertThat(controller.deleteBalance(created.id(), saved.id()).getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("deleting an account deletes its logged balances too")
+    void deletingAccountDeletesItsBalances() {
+        Account created = accounts.create("Old Checking", "checking", "USD");
+        accountBalances.upsert(created.id(), "2026-06-01", 100.0);
+
+        controller.delete(created.id());
+
+        assertThat(accountBalances.findByAccountId(created.id())).isEmpty();
     }
 }

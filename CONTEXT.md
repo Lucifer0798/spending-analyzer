@@ -258,6 +258,53 @@ meaningless, not just imprecise. `mixedCurrencies: true` with an empty list is t
 `/recurring` already returns for the same reason, so `AnomaliesCard` on the frontend renders
 nothing in that case exactly the way `BudgetsCard` does.
 
+**Net worth is manual snapshots, not derived from a starting balance plus transactions — decided
+explicitly, not by default.** The alternative (one starting balance per account, every transaction
+netting against it automatically) needs no re-entry, but silently drifts from reality on any
+statement gap, missed import, or miscategorization, with no way to detect the drift — a wrong
+number that looks exactly as confident as a right one. `account_balances` instead holds exactly
+what was logged, on request: `AccountBalanceRepository.upsert` keyed on `(account_id, date)`, the
+same "one true value as of a day" `PredictionsCacheRepository`'s per-account key already models,
+just with a date added. The number is taken literally, positive or negative, with no sign-flip
+based on `accounts.type` — `AccountBalanceCard` on the frontend is the only place that knows a
+credit card's balance is a bill rather than a holding, asking "how much do you owe" and negating
+it before the request goes out; the API and the stored value never see a "type" concept at all.
+
+**`NetWorthService.computeForCurrency` reconstructs history with a single forward pass, not a
+query per date.** Rows come back from `AccountBalanceRepository.findAllForActiveAccounts` already
+ordered by date then account id. Walking them once, updating a `Map<accountId, balance>` as each
+row is seen and emitting a history point only when the date changes, gets the carry-forward
+behavior (every account's *last known* balance counts toward every date, not just the ones it was
+itself logged on) in O(n) with no re-fetching. The same map holds the answer for "current total"
+and "each account's latest balance" at the end of the loop, so one pass produces both the current
+snapshot and the whole history.
+
+> Archived accounts are excluded at the repository query (`WHERE a.archived = 0`), not filtered
+> in the service afterward — so an archived account's past balances vanish from history retroactively
+> the moment it's archived, not just from the current total. This was a deliberate scope cut for
+> v1: correctly preserving an archived account's contribution to *past* points while excluding it
+> from the *current* one would need each history point to know which accounts were active as of
+> that date, not just which are active now.
+
+**`AccountBalanceRepository` and `NetWorthService` follow the goals/tags split: mutate on the
+resource, read in its own controller.** `POST`/`GET`/`DELETE /api/accounts/{id}/balances` live on
+`AccountController` since a balance is a sub-resource of one account, mirroring how transaction
+tags live on `TransactionController`; the cross-account `/api/net-worth` view gets its own
+`NetWorthController`, mirroring how `/api/goals` is separate from whatever reads across every
+goal. Deleting an account calls `accountBalanceRepository.deleteByAccountId` directly in
+`AccountController.delete`, the same explicit cleanup `GoalController.delete` does for
+contributions — there are no foreign keys in this schema, so nothing does it automatically.
+
+**`NetWorthResponse` mirrors `SummaryResponse`'s currency/perCurrency duality exactly, not
+`/recurring`'s "refuse and ask for one account."** Recurring detection and budgets are scoped to
+one thing at a time (a merchant, a category) where "pick an account" is a reasonable ask; net
+worth is inherently "the whole picture across every account," the same shape a combined dashboard
+summary is. `currency` is `null` with `perCurrency` populated once active accounts disagree,
+`"USD"` with empty lists when nothing has been logged at all yet — that empty-state default matters
+because `null` already means something specific (mixed currencies) and reusing it for "no data"
+would make the frontend's `NetWorthPage` treat an empty instance as a currency mismatch it needs to
+explain, rather than the plain "nothing logged yet" it actually is.
+
 **`BackupService.restore` is the only `@Transactional` boundary; the six `restoreAll` methods
 have none of their own.** Each is `DELETE FROM <table>` followed by a batch insert that writes
 every column including `id` — deliberately raw SQL rather than going through `create`/`upsert`,
