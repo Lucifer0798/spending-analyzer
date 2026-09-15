@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Eleven tables, all created automatically:
+Twelve tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -201,9 +201,10 @@ Eleven tables, all created automatically:
 | `goal_contributions` | Amounts logged by hand toward a goal; negative is a withdrawal |
 | `tags` | Free-form labels a transaction can carry alongside its single category |
 | `transaction_tags` | Which tags apply to which transaction — a transaction can carry any number |
+| `account_balances` | A manually-logged balance per account per date, for net worth; negative is a liability |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V13__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V14__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -260,9 +261,11 @@ All endpoints live under `/api`.
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
-| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
+| `GET` | `/net-worth` | Net worth across every active account, and its history over time |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
+| `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
 | `DELETE` | `/reset` | Delete all transactions (keeps accounts and categories) |
@@ -301,6 +304,21 @@ sitting right there in the data. A category needs at least five transactions bef
 gets judged at all — with fewer, there's no reliable typical to compare against, and everything
 would read as either an anomaly or not by chance. Categories are judged independently: a $100
 dinner never gets compared against a $5 coffee habit's usual range.
+
+**Net worth is logged by hand, and takes a balance literally.** Everything else derived in this
+app comes from categorized transactions, but a transaction only ever says "this much moved" —
+never "this account currently holds this much." So a balance is exactly what you type: a positive
+number for an asset, a negative one for a liability, with no automatic sign-flip based on account
+type. The one exception is in the UI, not the data model — logging a credit card's balance asks
+"how much do you owe" and negates it before saving, so nobody has to remember to type a minus
+sign, but what's actually stored is the same plain "this account is worth this much" number every
+other account uses. History is reconstructed by carrying each account's last-known balance forward
+until a newer one is logged, the same way a running balance sheet works — log Checking today and
+Savings next week, and today's total already reflects Checking, updating again once Savings is
+known. Archived accounts are left out entirely, current total and history alike, on the assumption
+that an archived account is one you're done tracking. Like everything else that spans accounts,
+"all accounts" refuses to add balances across currencies — accounts that disagree get a
+per-currency breakdown instead, the same split the dashboard uses for spend.
 
 **One password, and no user accounts.** There is exactly one secret, read from the environment.
 That isn't a shortcut — this app holds one person's statements in a local SQLite file, so per-user
@@ -561,6 +579,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Net worth tracking~~ — log each account's balance whenever you check it, and see the total
+  (and its history) across every active account. Manual, not derived from transactions — this app
+  has no way to know an account's actual balance from categorized spend alone
 - ~~Spending anomaly alerts~~ — a transaction well above its category's usual amount (a $400
   grocery run against an $80 typical one) shows on the dashboard, with how many times over typical
   it came to

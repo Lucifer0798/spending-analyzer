@@ -1,5 +1,6 @@
 import type {
   Account,
+  AccountBalance,
   AccountType,
   AnomaliesResponse,
   AuthStatus,
@@ -16,6 +17,7 @@ import type {
   GoalProgress,
   MerchantMemory,
   MerchantsResponse,
+  NetWorthResponse,
   PredictionsResponse,
   RecurringAction,
   RecurringOverride,
@@ -228,6 +230,31 @@ export function deleteAccount(id: number) {
   return request<{ ok: true; transactionsMovedToDefault: number }>(`/accounts/${id}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * Logs an account's balance as of a date, for net worth — replacing whatever was logged for that
+ * same day. The number is taken literally; a credit card's outstanding bill is a negative amount.
+ */
+export function logAccountBalance(accountId: number, date: string, balance: number) {
+  return request<AccountBalance>(`/accounts/${accountId}/balances`, {
+    method: "POST",
+    body: JSON.stringify({ date, balance }),
+  });
+}
+
+/** An account's own balance history, newest first. */
+export function fetchAccountBalances(accountId: number) {
+  return request<AccountBalance[]>(`/accounts/${accountId}/balances`);
+}
+
+export function deleteAccountBalance(accountId: number, balanceId: number) {
+  return request<{ ok: true }>(`/accounts/${accountId}/balances/${balanceId}`, { method: "DELETE" });
+}
+
+/** Net worth across every active account, and its history over time. */
+export function fetchNetWorth() {
+  return request<NetWorthResponse>("/net-worth");
 }
 
 // --- categories -------------------------------------------------------------

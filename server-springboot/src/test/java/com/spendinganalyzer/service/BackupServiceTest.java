@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.BackupData;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.model.RecurringOverride;
+import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
@@ -66,6 +67,9 @@ class BackupServiceTest {
     private TagRepository tags;
 
     @Autowired
+    private AccountBalanceRepository accountBalances;
+
+    @Autowired
     private PredictionsCacheRepository predictionsCache;
 
     private long goalId;
@@ -84,6 +88,7 @@ class BackupServiceTest {
         goalId = goals.create("Emergency fund", 5000.0, null, "USD").id();
         goalContributions.add(goalId, 200.0, "2026-06-01", "first deposit");
         tags.addTag(taggedTransactionId, "business trip");
+        accountBalances.upsert(Account.DEFAULT_ID, "2026-06-01", 1500.0);
         predictionsCache.upsert(Account.DEFAULT_ID, "{\"summary\":\"s\"}", "2026-06-01T00:00:00Z");
     }
 
@@ -102,6 +107,7 @@ class BackupServiceTest {
         assertThat(data.goalContributions()).extracting("note").contains("first deposit");
         assertThat(data.tags()).extracting("name").contains("business trip");
         assertThat(data.transactionTags()).extracting("transactionId").contains(taggedTransactionId);
+        assertThat(data.accountBalances()).extracting("balance").contains(1500.0);
         // Built-in categories are exported too, not just custom ones.
         assertThat(data.categories()).extracting("name").contains("Groceries");
     }
@@ -120,6 +126,7 @@ class BackupServiceTest {
         long extraGoalId = goals.create("Vacation", 1000.0, null, "USD").id();
         goalContributions.add(extraGoalId, 50.0, "2026-07-01", null);
         tags.addTag(taggedTransactionId, "extra tag added after the snapshot");
+        accountBalances.upsert(Account.DEFAULT_ID, "2026-07-01", 9999.0);
 
         backupService.restore(snapshot);
 
@@ -130,6 +137,7 @@ class BackupServiceTest {
         assertThat(goals.findAll()).extracting("name").containsExactly("Emergency fund");
         assertThat(goalContributions.findAll()).extracting("note").containsExactly("first deposit");
         assertThat(tags.namesFor(taggedTransactionId)).containsExactly("business trip");
+        assertThat(accountBalances.findByAccountId(Account.DEFAULT_ID)).extracting("balance").containsExactly(1500.0);
     }
 
     @Test
@@ -159,6 +167,7 @@ class BackupServiceTest {
         assertThat(summary.goals()).isEqualTo(snapshot.goals().size());
         assertThat(summary.goalContributions()).isEqualTo(snapshot.goalContributions().size());
         assertThat(summary.tags()).isEqualTo(snapshot.tags().size());
+        assertThat(summary.accountBalances()).isEqualTo(snapshot.accountBalances().size());
     }
 
     @Test
@@ -166,7 +175,7 @@ class BackupServiceTest {
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
 
         backupService.restore(empty);
 
@@ -179,5 +188,6 @@ class BackupServiceTest {
         assertThat(goals.findAll()).isEmpty();
         assertThat(goalContributions.findAll()).isEmpty();
         assertThat(tags.findAll()).isEmpty();
+        assertThat(accountBalances.findAll()).isEmpty();
     }
 }
