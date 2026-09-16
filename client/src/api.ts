@@ -201,6 +201,29 @@ export function removeTransactionTag(id: number, name: string) {
   });
 }
 
+/** Categorizes several transactions at once, teaching merchant memory for each one's own description. */
+export function bulkCategorize(ids: number[], category: string) {
+  return request<{ ok: true; updated: number }>("/transactions/bulk-category", {
+    method: "PATCH",
+    body: JSON.stringify({ ids, category }),
+  });
+}
+
+/** Tags several transactions at once, creating the tag first if this is the first time it's been used. */
+export function bulkAddTag(ids: number[], name: string) {
+  return request<{ ok: true; tagged: number }>("/transactions/bulk-tags", {
+    method: "POST",
+    body: JSON.stringify({ ids, name }),
+  });
+}
+
+export function bulkDeleteTransactions(ids: number[]) {
+  return request<{ ok: true; deleted: number }>("/transactions/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 // --- accounts ---------------------------------------------------------------
 
 export function fetchAccounts(includeArchived = false) {

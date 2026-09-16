@@ -16,8 +16,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api")
@@ -176,6 +179,87 @@ public class TransactionController {
             return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
         }
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    // --- bulk actions -------------------------------------------------------------
+
+    /**
+     * Categorizes several transactions in one request, teaching merchant memory for each one's
+     * own description — the same durability a single-transaction category edit gets. Every
+     * distinct merchant among the selection is only taught once, even if several selected rows
+     * share it.
+     */
+    @PatchMapping("/transactions/bulk-category")
+    public ResponseEntity<?> bulkCategory(@RequestBody Map<String, Object> body) {
+        List<Long> ids = asIdList(body.get("ids"));
+        String category = asTrimmedString(body.get("category"));
+
+        if (ids.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("ids is required and must not be empty."));
+        }
+        if (category == null || category.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("category is required."));
+        }
+        if (!categoryRepository.exists(category)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    "category must be one of: " + String.join(", ", categoryRepository.findAllNames())));
+        }
+
+        List<Transaction> targets = repository.findByIds(ids);
+        int updated = repository.updateCategoryBulk(ids, category, MerchantCategory.SOURCE_USER);
+
+        Set<String> taughtMerchants = new LinkedHashSet<>();
+        for (Transaction t : targets) {
+            String merchantKey = MerchantNormalizer.normalize(t.description());
+            if (taughtMerchants.add(merchantKey)) {
+                merchantCategoryRepository.remember(merchantKey, category, MerchantCategory.SOURCE_USER);
+            }
+        }
+
+        return ResponseEntity.ok(Map.of("ok", true, "updated", updated));
+    }
+
+    /** Tags several transactions at once, creating the tag first if this is the first time it's been used. */
+    @PostMapping("/transactions/bulk-tags")
+    public ResponseEntity<?> bulkAddTag(@RequestBody Map<String, Object> body) {
+        List<Long> ids = asIdList(body.get("ids"));
+        String name = asTrimmedString(body.get("name"));
+
+        if (ids.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("ids is required and must not be empty."));
+        }
+        if (name == null || name.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("name is required."));
+        }
+
+        tagRepository.addTagBulk(ids, name);
+        return ResponseEntity.ok(Map.of("ok", true, "tagged", ids.size()));
+    }
+
+    /**
+     * Deletes several transactions at once. A {@code POST} rather than a {@code DELETE}, since
+     * the set of ids to remove has to travel as a body and a body on a {@code DELETE} is
+     * needlessly contentious for no benefit here.
+     */
+    @PostMapping("/transactions/bulk-delete")
+    public ResponseEntity<?> bulkDelete(@RequestBody Map<String, Object> body) {
+        List<Long> ids = asIdList(body.get("ids"));
+        if (ids.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("ids is required and must not be empty."));
+        }
+
+        int deleted = repository.deleteBulk(ids);
+        return ResponseEntity.ok(Map.of("ok", true, "deleted", deleted));
+    }
+
+    private static List<Long> asIdList(Object value) {
+        List<Long> ids = new ArrayList<>();
+        if (value instanceof List<?> list) {
+            for (Object o : list) {
+                if (o instanceof Number n) ids.add(n.longValue());
+            }
+        }
+        return ids;
     }
 
     @DeleteMapping("/reset")

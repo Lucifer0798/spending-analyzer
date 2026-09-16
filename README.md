@@ -244,6 +244,8 @@ All endpoints live under `/api`.
 | `GET` | `/transactions` | List transactions (filter by category, month, account, tag, description search) |
 | `PATCH` | `/transactions/{id}` | Change a category — also teaches merchant memory |
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
+| `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
+| `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it, per category |
@@ -453,6 +455,15 @@ and sticks around for later reuse of the same tag under any casing. Untagging a 
 removes that one association; the tag itself stays on record — and in the filter dropdown — until
 whatever else used it is gone too, or someone deletes it outright from Manage.
 
+**Bulk actions are real bulk SQL, not a loop over the single-transaction endpoints.**
+`UPDATE ... WHERE id IN (:ids)` and `DELETE ... WHERE id IN (:ids)` touch every selected row in
+one statement, so selecting a thousand transactions costs one round trip, not a thousand. Bulk
+categorizing still teaches merchant memory exactly the way editing one transaction's category
+does — each distinct merchant among the selection gets remembered, just once per merchant even if
+several selected rows share it, rather than once per row. Bulk delete goes through `POST
+/transactions/bulk-delete` rather than `DELETE` with a body: sending a set of ids has to travel as
+a request body, and putting a body on a `DELETE` is a fight not worth having for no benefit here.
+
 **Search is a plain `LIKE`, not a separate full-text index — and its wildcard characters are
 escaped.** Transaction volumes here are personal-finance-sized, not web-scale, so a substring match
 on `description` needs no `FTS5` virtual table, ranking, or tokenizer to stay fast; SQLite's `LIKE`
@@ -579,6 +590,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Bulk transaction actions~~ — select several transactions on the Transactions page to
+  categorize, tag, or delete them together, instead of one row at a time
 - ~~Net worth tracking~~ — log each account's balance whenever you check it, and see the total
   (and its history) across every active account. Manual, not derived from transactions — this app
   has no way to know an account's actual balance from categorized spend alone

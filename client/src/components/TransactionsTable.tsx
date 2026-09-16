@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   addTransactionTag,
+  bulkAddTag,
+  bulkCategorize,
+  bulkDeleteTransactions,
   deleteTransaction,
   exportUrl,
   fetchCategories,
@@ -44,6 +47,10 @@ export function TransactionsTable({ accountId, range }: Props) {
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [tagDrafts, setTagDrafts] = useState<Record<number, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkCategoryChoice, setBulkCategoryChoice] = useState("");
+  const [bulkTagInput, setBulkTagInput] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     fetchCategories().then((r) => setCategories(r.categories));
@@ -80,6 +87,7 @@ export function TransactionsTable({ accountId, range }: Props) {
     // derived from a prop.
     // oxlint-disable-next-line react/set-state-in-effect
     setLoading(true);
+    setSelectedIds(new Set());
     fetchTransactions({
       category: categoryFilter || undefined,
       tag: tagFilter || undefined,
@@ -194,9 +202,72 @@ export function TransactionsTable({ accountId, range }: Props) {
     }
   };
 
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allOnPageSelected = transactions.length > 0 && transactions.every((t) => selectedIds.has(t.id));
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds(allOnPageSelected ? new Set() : new Set(transactions.map((t) => t.id)));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkCategorize = async () => {
+    if (!bulkCategoryChoice) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await bulkCategorize([...selectedIds], bulkCategoryChoice);
+      setBulkCategoryChoice("");
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to categorize the selection.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkTag = async () => {
+    const name = bulkTagInput.trim();
+    if (!name) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await bulkAddTag([...selectedIds], name);
+      setBulkTagInput("");
+      load();
+      loadTags();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to tag the selection.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Delete ${selectedIds.size} selected transaction${selectedIds.size === 1 ? "" : "s"}?`)) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await bulkDeleteTransactions([...selectedIds]);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete the selection.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const showAccountColumn = accountId === null;
-  const columnCount = showAccountColumn ? 7 : 6;
+  const columnCount = showAccountColumn ? 8 : 7;
 
   const inputClass =
     "w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900";
@@ -258,10 +329,75 @@ export function TransactionsTable({ accountId, range }: Props) {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm dark:border-indigo-900/50 dark:bg-indigo-950/30">
+          <span className="font-medium text-indigo-900 dark:text-indigo-200">
+            {selectedIds.size} selected
+          </span>
+          <select
+            value={bulkCategoryChoice}
+            onChange={(e) => setBulkCategoryChoice(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="">Set category…</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button
+            disabled={bulkBusy || !bulkCategoryChoice}
+            onClick={handleBulkCategorize}
+            className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            Apply
+          </button>
+          <input
+            list="tag-suggestions"
+            value={bulkTagInput}
+            onChange={(e) => setBulkTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleBulkTag();
+            }}
+            placeholder="Add tag…"
+            className="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
+          <button
+            disabled={bulkBusy || !bulkTagInput.trim()}
+            onClick={handleBulkTag}
+            className="rounded-md px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
+          >
+            Add tag
+          </button>
+          <button
+            disabled={bulkBusy}
+            onClick={handleBulkDelete}
+            className="rounded-md px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 dark:hover:bg-red-950/40"
+          >
+            Delete
+          </button>
+          <button
+            onClick={clearSelection}
+            className="ml-auto rounded-md px-3 py-1 text-sm text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900">
             <tr>
+              <th className="px-4 py-2">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={toggleSelectAllOnPage}
+                  title="Select all on this page"
+                />
+              </th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Date</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Description</th>
               {showAccountColumn && (
@@ -292,6 +428,13 @@ export function TransactionsTable({ accountId, range }: Props) {
             {transactions.map((t) =>
               editingId === t.id && draft ? (
                 <tr key={t.id} className="bg-indigo-50/50 dark:bg-indigo-950/20">
+                  <td className="px-4 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => toggleSelected(t.id)}
+                    />
+                  </td>
                   <td className="px-4 py-2">
                     <input
                       type="date"
@@ -351,7 +494,14 @@ export function TransactionsTable({ accountId, range }: Props) {
                   </td>
                 </tr>
               ) : (
-                <tr key={t.id}>
+                <tr key={t.id} className={selectedIds.has(t.id) ? "bg-indigo-50/30 dark:bg-indigo-950/10" : undefined}>
+                  <td className="px-4 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => toggleSelected(t.id)}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
                     {t.date}
                   </td>

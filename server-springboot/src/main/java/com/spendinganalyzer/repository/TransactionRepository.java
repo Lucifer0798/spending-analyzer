@@ -214,6 +214,30 @@ public class TransactionRepository {
                 params) > 0;
     }
 
+    /** Every transaction among the given ids — the source rows a bulk action reads before it acts. */
+    public List<Transaction> findByIds(List<Long> ids) {
+        if (ids.isEmpty()) return List.of();
+        return jdbc.query(SELECT_WITH_ACCOUNT + " WHERE t.id IN (:ids)",
+                new MapSqlParameterSource("ids", ids), ROW_MAPPER);
+    }
+
+    /** Categorizes several transactions in one statement. Returns how many rows were touched. */
+    public int updateCategoryBulk(List<Long> ids, String category, String source) {
+        if (ids.isEmpty()) return 0;
+        return jdbc.update(
+                "UPDATE transactions SET category = :category, category_source = :source WHERE id IN (:ids)",
+                new MapSqlParameterSource()
+                        .addValue("category", category)
+                        .addValue("source", source)
+                        .addValue("ids", ids));
+    }
+
+    /** Deletes several transactions in one statement. Returns how many rows were removed. */
+    public int deleteBulk(List<Long> ids) {
+        if (ids.isEmpty()) return 0;
+        return jdbc.update("DELETE FROM transactions WHERE id IN (:ids)", new MapSqlParameterSource("ids", ids));
+    }
+
     /**
      * Updates the editable fields of a transaction. Only non-null values are applied, so a
      * caller can change the amount without having to resend the whole row.
