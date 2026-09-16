@@ -110,6 +110,20 @@ public class TagRepository {
                 new MapSqlParameterSource().addValue("tid", transactionId).addValue("gid", tagId));
     }
 
+    /** Tags several transactions at once, creating the tag first if this is the first time it's been used. */
+    public void addTagBulk(List<Long> transactionIds, String tagName) {
+        if (transactionIds.isEmpty()) return;
+        long tagId = findOrCreateId(tagName);
+
+        MapSqlParameterSource[] params = transactionIds.stream()
+                .map(id -> new MapSqlParameterSource().addValue("tid", id).addValue("gid", tagId))
+                .toArray(MapSqlParameterSource[]::new);
+        jdbc.batchUpdate("""
+                INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (:tid, :gid)
+                ON CONFLICT(transaction_id, tag_id) DO NOTHING
+                """, params);
+    }
+
     /** Untags a transaction; the tag itself remains for whatever other transactions carry it. */
     public boolean removeTag(long transactionId, String tagName) {
         return jdbc.update("""

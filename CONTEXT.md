@@ -430,6 +430,27 @@ would be the standard answer at web scale; a personal statement history is small
 substring scan is fast without it, and there's no ranking need since every match is a single flat
 list.
 
+**Bulk actions are real `WHERE id IN (:ids)` statements, not a loop calling the single-transaction
+methods once per id.** `TransactionRepository.updateCategoryBulk`/`deleteBulk` and
+`TagRepository.addTagBulk` each do one SQL statement (a plain `UPDATE`/`DELETE`, or one
+`batchUpdate` for the tag join rows) regardless of how many ids are selected — a thousand
+selected transactions costs one round trip to SQLite, not a thousand. `TransactionController
+.bulkCategory` still teaches merchant memory the same way a single-transaction category edit does,
+but the source rows have to be fetched first (`repository.findByIds`) *before* the bulk `UPDATE`
+runs — the description merchant memory keys on lives on the row being updated, so it has to be
+read while it's still there. A `LinkedHashSet` of already-taught merchant keys means a shared
+merchant among the selection is only remembered once, not once per row that happens to share it.
+
+> `bulk-category`/`bulk-tags`/`bulk-delete` are literal path segments alongside `/transactions/{id}`,
+> not nested under it — Spring's path matching prefers the more specific literal match over the
+> `{id}` variable pattern, so both coexist safely without `bulk-category` ever being parsed as an id.
+
+**Bulk delete is `POST /transactions/bulk-delete`, not `DELETE` with a body.** The set of ids to
+remove has to travel as a request body, and while Spring and `fetch` both technically support a
+body on `DELETE`, it's an unusual enough combination to be worth avoiding for no real benefit —
+`POST` to an action-shaped URL sidesteps the question entirely, the same pragmatic choice
+`POST /merchants` already makes for an upsert instead of forcing a `PUT`.
+
 **`transactions` list responses gained tags via a wrapper DTO, not by adding a field to
 `Transaction`.** `Transaction` round-trips through the backup file and the CSV export as-is; adding
 a `tags` field there would mean every `restoreAll`/CSV path either has to know about tags or
