@@ -7,7 +7,10 @@ import com.spendinganalyzer.service.BudgetService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api")
@@ -39,10 +42,14 @@ public class BudgetController {
         return budgetService.progress(accountId, month);
     }
 
+    private static final Set<String> ESCALATION_TYPES = Set.of("fixed", "percent");
+
     /**
-     * Sets a category's monthly target, replacing any existing one. An upsert rather than
-     * separate create and update calls: "budget Groceries at 500" is a single intent, and the
-     * caller should not have to discover whether a budget already exists to express it.
+     * Sets a category's monthly target, replacing any existing one -- escalation schedule
+     * included, so leaving the escalation fields out clears whatever schedule was there before.
+     * An upsert rather than separate create and update calls: "budget Groceries at 500" is a
+     * single intent, and the caller should not have to discover whether a budget already exists
+     * to express it.
      */
     @PostMapping("/budgets")
     public ResponseEntity<?> set(@RequestBody Map<String, Object> body) {
@@ -66,7 +73,49 @@ public class BudgetController {
                     .body(new ErrorResponse("monthly_limit must be greater than zero."));
         }
 
-        return ResponseEntity.ok(budgets.upsert(category, limit));
+        Object rawType = body.get("escalation_type");
+        String escalationType = rawType instanceof String s && !s.isBlank() ? s.trim() : null;
+        Integer escalationFrequencyMonths = null;
+        Double escalationValue = null;
+        String escalationStartMonth = null;
+
+        if (escalationType != null) {
+            if (!ESCALATION_TYPES.contains(escalationType)) {
+                return ResponseEntity.badRequest().body(new ErrorResponse(
+                        "escalation_type must be one of: " + String.join(", ", ESCALATION_TYPES)));
+            }
+
+            escalationValue = body.get("escalation_value") instanceof Number n ? n.doubleValue() : null;
+            if (escalationValue == null || escalationValue <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("escalation_value must be greater than zero."));
+            }
+
+            escalationFrequencyMonths = body.get("escalation_frequency_months") instanceof Number n
+                    ? n.intValue() : null;
+            if (escalationFrequencyMonths == null || escalationFrequencyMonths <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("escalation_frequency_months must be greater than zero."));
+            }
+
+            Object rawStart = body.get("escalation_start_month");
+            if (rawStart instanceof String s && !s.isBlank()) {
+                try {
+                    escalationStartMonth = YearMonth.parse(s.trim()).toString();
+                } catch (DateTimeParseException e) {
+                    return ResponseEntity.badRequest().body(new ErrorResponse(
+                            "escalation_start_month must be in YYYY-MM form, got: " + s));
+                }
+            } else {
+                // Unspecified means "starts now" -- the calendar month the schedule was set up in,
+                // not the newest month with imported data, since setting up a schedule is a real-time
+                // action independent of how far behind statement imports happen to be.
+                escalationStartMonth = YearMonth.now().toString();
+            }
+        }
+
+        return ResponseEntity.ok(budgets.upsert(
+                category, limit, escalationType, escalationValue, escalationFrequencyMonths, escalationStartMonth));
     }
 
     @DeleteMapping("/budgets/{id}")

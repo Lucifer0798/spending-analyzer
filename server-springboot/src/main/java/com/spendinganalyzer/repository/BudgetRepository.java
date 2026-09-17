@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,8 +23,22 @@ public class BudgetRepository {
             rs.getLong("id"),
             rs.getString("category"),
             rs.getDouble("monthly_limit"),
+            rs.getString("escalation_type"),
+            nullableDouble(rs, "escalation_value"),
+            nullableInt(rs, "escalation_frequency_months"),
+            rs.getString("escalation_start_month"),
             rs.getString("updated_at")
     );
+
+    private static Double nullableDouble(ResultSet rs, String column) throws java.sql.SQLException {
+        double v = rs.getDouble(column);
+        return rs.wasNull() ? null : v;
+    }
+
+    private static Integer nullableInt(ResultSet rs, String column) throws java.sql.SQLException {
+        int v = rs.getInt(column);
+        return rs.wasNull() ? null : v;
+    }
 
     /** Ordered by the category's own sort order so budgets read in the same order as everything else. */
     public List<Budget> findAll() {
@@ -47,20 +62,42 @@ public class BudgetRepository {
     }
 
     /**
-     * Sets the target for a category, replacing any existing one. Upsert rather than separate
-     * create and update endpoints because "budget Groceries at 500" is one intent, and the
-     * caller should not have to know whether a row already exists.
+     * Sets the target for a category, replacing any existing one -- escalation schedule
+     * included, so a save that omits it clears whatever schedule was there before. Upsert
+     * rather than separate create and update endpoints because "budget Groceries at 500" is
+     * one intent, and the caller should not have to know whether a row already exists.
      */
-    public Budget upsert(String category, double monthlyLimit) {
+    public Budget upsert(
+            String category,
+            double monthlyLimit,
+            String escalationType,
+            Double escalationValue,
+            Integer escalationFrequencyMonths,
+            String escalationStartMonth
+    ) {
         jdbc.update("""
-                INSERT INTO budgets (category, monthly_limit) VALUES (:category, :limit)
+                INSERT INTO budgets (
+                  category, monthly_limit,
+                  escalation_type, escalation_value, escalation_frequency_months, escalation_start_month
+                ) VALUES (
+                  :category, :limit,
+                  :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth
+                )
                 ON CONFLICT(category) DO UPDATE SET
                   monthly_limit = excluded.monthly_limit,
+                  escalation_type = excluded.escalation_type,
+                  escalation_value = excluded.escalation_value,
+                  escalation_frequency_months = excluded.escalation_frequency_months,
+                  escalation_start_month = excluded.escalation_start_month,
                   updated_at = datetime('now')
                 """,
                 new MapSqlParameterSource()
                         .addValue("category", category)
-                        .addValue("limit", monthlyLimit));
+                        .addValue("limit", monthlyLimit)
+                        .addValue("escalationType", escalationType)
+                        .addValue("escalationValue", escalationValue)
+                        .addValue("escalationFrequencyMonths", escalationFrequencyMonths)
+                        .addValue("escalationStartMonth", escalationStartMonth));
 
         return findByCategory(category).orElseThrow();
     }
@@ -80,12 +117,23 @@ public class BudgetRepository {
                         .addValue("id", b.id())
                         .addValue("category", b.category())
                         .addValue("limit", b.monthlyLimit())
+                        .addValue("escalationType", b.escalationType())
+                        .addValue("escalationValue", b.escalationValue())
+                        .addValue("escalationFrequencyMonths", b.escalationFrequencyMonths())
+                        .addValue("escalationStartMonth", b.escalationStartMonth())
                         .addValue("updatedAt", b.updatedAt()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
-                INSERT INTO budgets (id, category, monthly_limit, updated_at)
-                VALUES (:id, :category, :limit, :updatedAt)
+                INSERT INTO budgets (
+                  id, category, monthly_limit,
+                  escalation_type, escalation_value, escalation_frequency_months, escalation_start_month,
+                  updated_at
+                ) VALUES (
+                  :id, :category, :limit,
+                  :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth,
+                  :updatedAt
+                )
                 """, params);
     }
 }

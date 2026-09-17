@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   backupUrl,
   clearRecurringOverride,
@@ -25,8 +25,10 @@ import {
 import type {
   Account,
   AccountType,
+  BudgetProgress,
   BudgetSummary,
   CategoryDetail,
+  EscalationType,
   MerchantsResponse,
   RecurringOverride,
   Tag,
@@ -53,6 +55,14 @@ export function ManagePage({ onAccountsChanged }: Props) {
   // Only holds categories the user has actually typed into. Everything else reads its value
   // straight from the saved budget, so there is no state to keep in step after a reload.
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
+
+  // The auto-increase editor per category: which ones are expanded, and what's been typed into
+  // each. A category not present here falls back to its saved schedule (or blank), the same
+  // "no state to keep in step" approach the plain limit draft above uses.
+  const [escalationOpen, setEscalationOpen] = useState<Record<string, boolean>>({});
+  const [escalationDrafts, setEscalationDrafts] = useState<
+    Record<string, { type: EscalationType | ""; value: string; frequencyMonths: string; startMonth: string }>
+  >({});
 
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState<AccountType>("checking");
@@ -152,6 +162,28 @@ export function ManagePage({ onAccountsChanged }: Props) {
   // Null when accounts use different currencies — budgets is empty in that case too, so this
   // only matters for formatting the (necessarily present) saved rows below.
   const budgetCurrency = budgets?.currency ?? "USD";
+
+  const escalationDraftFor = (category: string, saved: BudgetProgress | undefined) =>
+    escalationDrafts[category] ?? {
+      type: saved?.escalationType ?? "",
+      value: saved?.escalationValue != null ? String(saved.escalationValue) : "",
+      frequencyMonths: saved?.escalationFrequencyMonths != null ? String(saved.escalationFrequencyMonths) : "3",
+      // Carried through so a Save that never opens this editor (only changing the plain limit)
+      // keeps counting from whenever the schedule actually started, instead of quietly resetting
+      // it to "now" and erasing every period it already elapsed.
+      startMonth: saved?.escalationStartMonth ?? "",
+    };
+
+  function escalationSummary(b: BudgetProgress, currencyCode: string): string {
+    const per =
+      b.escalationFrequencyMonths === 1 ? "month"
+      : b.escalationFrequencyMonths === 12 ? "year"
+      : `${b.escalationFrequencyMonths} months`;
+    const amount = b.escalationType === "percent"
+      ? `${b.escalationValue}%`
+      : currency(b.escalationValue ?? 0, 0, currencyCode);
+    return `+${amount} every ${per}, since ${b.escalationStartMonth}`;
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -387,67 +419,166 @@ export function ManagePage({ onAccountsChanged }: Props) {
             <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
               {spendingCategories.map((c) => {
                 const saved = budgetByCategory.get(c.name);
-                const draft = budgetDrafts[c.name] ?? (saved ? String(saved.monthlyLimit) : "");
+                const draft = budgetDrafts[c.name] ?? (saved ? String(saved.baseLimit) : "");
                 const parsed = Number(draft);
+
+                const isOpen = escalationOpen[c.name] ?? false;
+                const eDraft = escalationDraftFor(c.name, saved);
+                const eValueNum = Number(eDraft.value);
+                const eFreqNum = Number(eDraft.frequencyMonths);
+                const escalationValid =
+                  eDraft.type === "" ||
+                  (Number.isFinite(eValueNum) && eValueNum > 0 && Number.isFinite(eFreqNum) && eFreqNum > 0);
+                const escalationForSave =
+                  eDraft.type === "" || !escalationValid
+                    ? undefined
+                    : {
+                        type: eDraft.type,
+                        value: eValueNum,
+                        frequencyMonths: eFreqNum,
+                        // Blank only for a schedule that never had one yet, in which case the
+                        // server defaults it to the current month -- an existing schedule's start
+                        // always carries forward unchanged.
+                        startMonth: eDraft.startMonth || undefined,
+                      };
+                const savedEscalationKey = saved?.escalationType
+                  ? `${saved.escalationType}:${saved.escalationValue}:${saved.escalationFrequencyMonths}`
+                  : "";
+                const draftEscalationKey = eDraft.type ? `${eDraft.type}:${eDraft.value}:${eDraft.frequencyMonths}` : "";
+
                 const canSave =
                   draft.trim() !== "" &&
                   Number.isFinite(parsed) &&
                   parsed > 0 &&
-                  parsed !== saved?.monthlyLimit;
+                  escalationValid &&
+                  (parsed !== saved?.baseLimit || draftEscalationKey !== savedEscalationKey);
+
+                const save = () =>
+                  run(() => setBudget(c.name, parsed, escalationForSave), `Budget set for ${c.name}.`);
 
                 return (
-                  <tr key={c.id}>
-                    <td className="px-4 py-2">
-                      <div className="text-sm text-slate-800 dark:text-slate-200">{c.name}</div>
-                      {saved && (
-                        <div className="text-xs text-slate-500">
-                          {currency(saved.spent, 0, budgetCurrency)} spent of {currency(saved.monthlyLimit, 0, budgetCurrency)} this month
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="10"
-                          inputMode="decimal"
-                          value={draft}
-                          placeholder="No budget"
-                          onChange={(e) =>
-                            setBudgetDrafts((d) => ({ ...d, [c.name]: e.target.value }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && canSave) {
-                              run(() => setBudget(c.name, parsed), `Budget set for ${c.name}.`);
+                  <Fragment key={c.id}>
+                    <tr>
+                      <td className="px-4 py-2">
+                        <div className="text-sm text-slate-800 dark:text-slate-200">{c.name}</div>
+                        {saved && (
+                          <div className="text-xs text-slate-500">
+                            {currency(saved.spent, 0, budgetCurrency)} spent of {currency(saved.monthlyLimit, 0, budgetCurrency)} this month
+                          </div>
+                        )}
+                        {saved?.escalationType && !isOpen && (
+                          <div className="text-xs text-slate-400">{escalationSummary(saved, budgetCurrency)}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="10"
+                            inputMode="decimal"
+                            value={draft}
+                            placeholder="No budget"
+                            onChange={(e) =>
+                              setBudgetDrafts((d) => ({ ...d, [c.name]: e.target.value }))
                             }
-                          }}
-                          className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-900"
-                        />
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && canSave) save();
+                            }}
+                            className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-900"
+                          />
+                          <button
+                            disabled={!canSave}
+                            onClick={save}
+                            className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+                          >
+                            Save
+                          </button>
+                          <button
+                            disabled={!saved}
+                            onClick={() =>
+                              run(() => deleteBudget(saved!.id), `Budget cleared for ${c.name}.`).then(() => {
+                                // Drop every draft too, or the inputs keep showing the old numbers.
+                                setBudgetDrafts((d) => ({ ...d, [c.name]: "" }));
+                                setEscalationDrafts((d) => ({
+                                  ...d,
+                                  [c.name]: { type: "", value: "", frequencyMonths: "3", startMonth: "" },
+                                }));
+                                setEscalationOpen((o) => ({ ...o, [c.name]: false }));
+                              })
+                            }
+                            className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"
+                          >
+                            Clear
+                          </button>
+                        </div>
                         <button
-                          disabled={!canSave}
-                          onClick={() =>
-                            run(() => setBudget(c.name, parsed), `Budget set for ${c.name}.`)
-                          }
-                          className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+                          onClick={() => setEscalationOpen((o) => ({ ...o, [c.name]: !isOpen }))}
+                          className="mt-1 text-xs text-indigo-600 hover:underline dark:text-indigo-400"
                         >
-                          Save
+                          {isOpen ? "Hide auto-increase" : saved?.escalationType ? "Edit auto-increase" : "+ Auto-increase"}
                         </button>
-                        <button
-                          disabled={!saved}
-                          onClick={() =>
-                            run(() => deleteBudget(saved!.id), `Budget cleared for ${c.name}.`).then(
-                              // Drop the draft too, or the input keeps showing the old number.
-                              () => setBudgetDrafts((d) => ({ ...d, [c.name]: "" }))
-                            )
-                          }
-                          className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={2} className="bg-slate-50 px-4 py-3 dark:bg-slate-900/50">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <select
+                              value={eDraft.type}
+                              onChange={(e) =>
+                                setEscalationDrafts((d) => ({
+                                  ...d,
+                                  [c.name]: { ...eDraft, type: e.target.value as EscalationType | "" },
+                                }))
+                              }
+                              className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                            >
+                              <option value="">No auto-increase</option>
+                              <option value="fixed">Add a fixed amount</option>
+                              <option value="percent">Add a percentage</option>
+                            </select>
+
+                            {eDraft.type !== "" && (
+                              <>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step={eDraft.type === "percent" ? "1" : "10"}
+                                  inputMode="decimal"
+                                  value={eDraft.value}
+                                  placeholder={eDraft.type === "percent" ? "e.g. 5" : "e.g. 25"}
+                                  onChange={(e) =>
+                                    setEscalationDrafts((d) => ({ ...d, [c.name]: { ...eDraft, value: e.target.value } }))
+                                  }
+                                  className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-900"
+                                />
+                                <span className="text-slate-500">{eDraft.type === "percent" ? "%" : budgetCurrency}</span>
+                                <span className="text-slate-500">every</span>
+                                <select
+                                  value={eDraft.frequencyMonths}
+                                  onChange={(e) =>
+                                    setEscalationDrafts((d) => ({
+                                      ...d,
+                                      [c.name]: { ...eDraft, frequencyMonths: e.target.value },
+                                    }))
+                                  }
+                                  className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                                >
+                                  <option value="1">month</option>
+                                  <option value="3">quarter</option>
+                                  <option value="12">year</option>
+                                </select>
+                                <span className="text-xs text-slate-500">
+                                  — starting this month, and hit Save above to apply
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

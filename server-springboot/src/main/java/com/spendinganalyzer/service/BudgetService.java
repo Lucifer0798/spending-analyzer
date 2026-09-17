@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,29 +57,57 @@ public class BudgetService {
             spent.put(total.category(), total.total());
         }
 
+        YearMonth measuredMonth = YearMonth.parse(month);
         List<BudgetProgress> rows = new ArrayList<>();
         double totalLimit = 0;
         double totalSpent = 0;
 
         for (Budget budget : budgets.findAll()) {
             double used = spent.getOrDefault(budget.category(), 0.0);
-            double percent = (used / budget.monthlyLimit()) * 100;
+            double limit = effectiveLimit(budget, measuredMonth);
+            double percent = (used / limit) * 100;
 
             rows.add(new BudgetProgress(
                     budget.id(),
                     budget.category(),
+                    round2(limit),
                     budget.monthlyLimit(),
                     round2(used),
-                    round2(budget.monthlyLimit() - used),
+                    round2(limit - used),
                     round2(percent),
-                    status(percent)
+                    status(percent),
+                    budget.escalationType(),
+                    budget.escalationValue(),
+                    budget.escalationFrequencyMonths(),
+                    budget.escalationStartMonth()
             ));
 
-            totalLimit += budget.monthlyLimit();
+            totalLimit += limit;
             totalSpent += used;
         }
 
         return new BudgetSummary(month, rows, round2(totalLimit), round2(totalSpent), currency, false);
+    }
+
+    /**
+     * The limit actually in effect for {@code month}, applying the budget's escalation schedule
+     * if it has one. A schedule increases the base target every {@code escalationFrequencyMonths}
+     * months starting from {@code escalationStartMonth} -- by a flat amount ({@code fixed}) or a
+     * compounding percentage ({@code percent}) of the base. Measuring a month before the schedule
+     * starts reports the base target unchanged, the same as having no schedule at all.
+     */
+    static double effectiveLimit(Budget budget, YearMonth month) {
+        if (budget.escalationType() == null) return budget.monthlyLimit();
+
+        YearMonth start = YearMonth.parse(budget.escalationStartMonth());
+        long monthsElapsed = ChronoUnit.MONTHS.between(start, month);
+        if (monthsElapsed < 0) return budget.monthlyLimit();
+
+        long periods = monthsElapsed / budget.escalationFrequencyMonths();
+        return switch (budget.escalationType()) {
+            case "percent" -> budget.monthlyLimit() * Math.pow(1 + budget.escalationValue() / 100, periods);
+            default -> budget.monthlyLimit() + budget.escalationValue() * periods;
+        };
     }
 
     private static String status(double percentUsed) {

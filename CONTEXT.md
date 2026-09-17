@@ -512,6 +512,40 @@ owns that: `rename` carries the budget (and merchant memory) across, `deleteAndR
 the budget rather than folding it into the fallback category. Anything else that starts storing
 a category name belongs in those two methods too.
 
+**A budget's escalation schedule is computed on read, not applied by a background job that
+mutates `monthly_limit` over time.** This app has no scheduler or cron equivalent — everything
+derived here (recurring detection, anomalies, net worth history) is recomputed fresh from stored
+facts on every request, and a budget's effective limit follows the same rule.
+`BudgetService.effectiveLimit` takes the base `monthly_limit`, the elapsed whole periods between
+`escalation_start_month` and the month being measured (`ChronoUnit.MONTHS.between(...) /
+escalationFrequencyMonths`, floored), and applies either a flat multiple (`fixed`) or a compounding
+power (`percent`) of that period count. Measuring a month before the start reports the untouched
+base, identical to having no schedule — there is no "negative periods" case to reason about.
+`BudgetProgress.monthlyLimit` carries the *effective* value (what `spent` is actually compared
+against, so the dashboard needs no changes to already be correct); `baseLimit` carries the raw
+stored one, which is what an editor has to read from, not `monthlyLimit` — prefilling an edit
+field from the escalated number would silently lock in the current inflated value as a new flat
+base and erase the schedule's growth curve retroactively.
+
+> All four escalation columns added in `V15__budget_escalation.sql` are nullable and start `NULL`
+> on every existing row, which reads as "no schedule" — exactly today's behavior, unchanged. This
+> is the same additive-nullable-column shape `V9__account_currency.sql` used, not the "new table"
+> shape that bumped `BackupData.CURRENT_VERSION` for goals/tags/net-worth/filter-presets: `Budget`
+> was already part of the backup, an old export just deserializes with the new fields `null`, and
+> that's a meaningful, correct value here (not a lossy guess), so no version bump was needed.
+
+> The upsert replaces the whole row every save, escalation included — same convention as the base
+> target itself — so a save that omits the escalation fields entirely clears any schedule that was
+> there. That makes it the frontend's job to always resend the current schedule on a save that
+> isn't touching it (`ManagePage`'s escalation draft falls back to the saved budget's own fields,
+> including `escalationStartMonth`, whenever the editor hasn't been opened) — the fix for a real
+> bug caught during manual verification: falling back to everything *except* the start month meant
+> every edit to the plain limit silently reset the schedule's start to "now" and erased whatever
+> periods had already elapsed. An unset start month is only ever correct for a schedule that never
+> had one before, which is also the one case `BudgetController.set` defaults it to the current
+> calendar month for — "starts now" is a real-time action, not tied to the newest imported month
+> the rest of this app's date defaults chase.
+
 **`predictions_cache` is keyed by account id, same 0-sentinel trick as the merchant bands.**
 It used to be one global row (`id = 1`) with no account attached — generate a forecast while
 looking at one account, switch to another, and the dashboard kept showing the first account's

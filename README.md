@@ -160,7 +160,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V14)
-  src/test/                 343 tests
+  src/test/                 352 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -255,7 +255,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
-| `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them |
+| `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them and an optional auto-increase schedule |
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
 | `GET` `DELETE` | `/tags` `/tags/{name}` | Every tag with its usage count, or delete one everywhere it's applied |
@@ -357,6 +357,19 @@ being measured is always named on the card, so it can't quietly disagree with yo
 Targets are stored per category name, which means a category rename or delete has to reach them.
 A rename carries the budget across; a delete drops it rather than folding it into whichever
 category the transactions moved to, since that would silently change a number you set.
+
+**A budget can auto-increase on a schedule, computed on read rather than mutated by a background
+job.** The stored `monthly_limit` is always the original base the user set; a budget with an
+escalation schedule (a fixed amount or a percentage, every 1/3/12 months from a start month) has
+its limit for whichever month is being measured computed at request time — periods elapsed since
+the start, floored, times the fixed step or compounded for a percentage step. This app has no
+scheduler, so there was never a "cron job that bumps the number every month" option on the table;
+computing the effective value fresh each time is also what every other derived number here
+already does (recurring charges, anomalies, net worth history). Measuring a month before the
+schedule starts reports the plain base, same as having no schedule at all. Editing just the base
+limit has to leave an existing schedule's start month untouched — carrying it forward, not
+resetting it to "now" on every save, is what makes the increases keep counting from when the
+schedule actually began rather than restarting every time someone touches the target.
 
 **The header's over-budget badge fetches independently of the Dashboard.** It has to: the badge
 is meant to be visible from Upload, Transactions, Manage — everywhere, not just the one screen
@@ -532,7 +545,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (343).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (352).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -605,6 +618,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Scheduled/recurring budgets~~ — a budget can auto-increase by a fixed amount or a percentage
+  every month, quarter, or year, so a target set once keeps pace without a manual bump each time
 - ~~Saved filter presets~~ — save the Transactions page's current category, tag, search, account,
   and date range under a name, then reapply all of them in one click from a chip on the same page
 - ~~Bulk transaction actions~~ — select several transactions on the Transactions page to
