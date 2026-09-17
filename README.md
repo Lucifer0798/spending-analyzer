@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V10)
-  src/test/                 234 tests
+    db/migration/           Versioned schema migrations (V1–V14)
+  src/test/                 343 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Twelve tables, all created automatically:
+Thirteen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -202,9 +202,10 @@ Twelve tables, all created automatically:
 | `tags` | Free-form labels a transaction can carry alongside its single category |
 | `transaction_tags` | Which tags apply to which transaction — a transaction can carry any number |
 | `account_balances` | A manually-logged balance per account per date, for net worth; negative is a liability |
+| `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V14__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V15__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -266,6 +267,7 @@ All endpoints live under `/api`.
 | `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` | `/net-worth` | Net worth across every active account, and its history over time |
+| `GET` `POST` `DELETE` | `/filter-presets` | Save, list, or delete a named combination of Transactions filters |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
@@ -455,6 +457,19 @@ and sticks around for later reuse of the same tag under any casing. Untagging a 
 removes that one association; the tag itself stays on record — and in the filter dropdown — until
 whatever else used it is gone too, or someone deletes it outright from Manage.
 
+**A filter preset saves five independent things and applies them all in one click.** The
+Transactions page's category, tag, and search filters are local to that component, but the
+account and date range are owned by `App` and shared with every other tab. Applying a preset
+therefore can't just set local state — it needs two callback props, `onAccountIdChange` and
+`onRangeChange`, that `App` fills with the same setters it already uses for its own account and
+range pickers, so one click can reach into state it doesn't own. A preset's name is the natural
+key, `COLLATE NOCASE` like a tag, so saving under a name you've already used replaces that preset
+rather than creating a near-duplicate. Unlike tags or recurring overrides, there's no separate
+Manage section for presets — apply and delete are both already one click away as chips right
+where the filters live, so a second place to manage them would just be a redundant list. Deleting
+an account clears its id from any preset that referenced it (the same explicit cleanup pattern
+`account_balances` uses) rather than leaving a dangling id or deleting the whole preset.
+
 **Bulk actions are real bulk SQL, not a loop over the single-transaction endpoints.**
 `UPDATE ... WHERE id IN (:ids)` and `DELETE ... WHERE id IN (:ids)` touch every selected row in
 one statement, so selecting a thousand transactions costs one round trip, not a thousand. Bulk
@@ -517,7 +532,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (234).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (343).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -590,6 +605,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Saved filter presets~~ — save the Transactions page's current category, tag, search, account,
+  and date range under a name, then reapply all of them in one click from a chip on the same page
 - ~~Bulk transaction actions~~ — select several transactions on the Transactions page to
   categorize, tag, or delete them together, instead of one row at a time
 - ~~Net worth tracking~~ — log each account's balance whenever you check it, and see the total

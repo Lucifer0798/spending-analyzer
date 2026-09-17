@@ -2,8 +2,10 @@ package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.AccountBalance;
+import com.spendinganalyzer.model.FilterPreset;
 import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.FilterPresetRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,9 @@ class AccountControllerTest {
 
     @Autowired
     private AccountBalanceRepository accountBalances;
+
+    @Autowired
+    private FilterPresetRepository filterPresets;
 
     private static Map<String, String> body(String... keyValues) {
         Map<String, String> map = new HashMap<>();
@@ -193,5 +198,17 @@ class AccountControllerTest {
         controller.delete(created.id());
 
         assertThat(accountBalances.findByAccountId(created.id())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("deleting an account clears the reference on any filter preset that used it, rather than leaving it dangling")
+    void deletingAccountClearsFilterPresetReferences() {
+        Account created = accounts.create("Old Checking", "checking", "USD");
+        FilterPreset saved = filterPresets.upsert("Old checking spend", null, null, null, created.id(), null, null);
+
+        controller.delete(created.id());
+
+        FilterPreset reloaded = filterPresets.findById(saved.id()).orElseThrow();
+        assertThat(reloaded.accountId()).isNull();
     }
 }

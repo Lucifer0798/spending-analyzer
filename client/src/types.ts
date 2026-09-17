@@ -203,6 +203,19 @@ export interface NetWorthResponse {
   perCurrency: CurrencyNetWorth[] | null;
 }
 
+/** A saved combination of the Transactions page's filters. Every field but the name is optional. */
+export interface FilterPreset {
+  id: number;
+  name: string;
+  category: string | null;
+  tag: string | null;
+  search: string | null;
+  account_id: number | null;
+  date_from: string | null;
+  date_to: string | null;
+  created_at: string;
+}
+
 export interface CategoryTotal {
   category: string;
   total: number;
@@ -346,6 +359,7 @@ export interface BackupSummary {
   goalContributions: number;
   tags: number;
   accountBalances: number;
+  filterPresets: number;
 }
 
 export interface Goal {

@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.FilterPresetRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,15 +22,18 @@ public class AccountController {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final AccountBalanceRepository accountBalanceRepository;
+    private final FilterPresetRepository filterPresetRepository;
 
     public AccountController(
             AccountRepository accountRepository,
             TransactionRepository transactionRepository,
-            AccountBalanceRepository accountBalanceRepository
+            AccountBalanceRepository accountBalanceRepository,
+            FilterPresetRepository filterPresetRepository
     ) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.accountBalanceRepository = accountBalanceRepository;
+        this.filterPresetRepository = filterPresetRepository;
     }
 
     public record AccountWithCount(
@@ -122,6 +126,7 @@ public class AccountController {
         transactionRepository.reassignAccount(id, Account.DEFAULT_ID);
         accountRepository.delete(id);
         accountBalanceRepository.deleteByAccountId(id);
+        filterPresetRepository.clearAccountReference(id);
 
         return ResponseEntity.ok(Map.of("ok", true, "transactionsMovedToDefault", moved));
     }
