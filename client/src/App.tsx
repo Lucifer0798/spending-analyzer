@@ -207,7 +207,14 @@ function App() {
           />
         )}
         {tab === "dashboard" && <Dashboard accountId={accountId} range={range} />}
-        {tab === "transactions" && <TransactionsTable accountId={accountId} range={range} />}
+        {tab === "transactions" && (
+          <TransactionsTable
+            accountId={accountId}
+            range={range}
+            onAccountIdChange={setAccountId}
+            onRangeChange={setRange}
+          />
+        )}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}
         {tab === "goals" && <GoalsPage />}
         {tab === "net-worth" && <NetWorthPage />}

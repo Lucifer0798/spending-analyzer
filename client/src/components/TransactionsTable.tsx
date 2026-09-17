@@ -4,22 +4,27 @@ import {
   bulkAddTag,
   bulkCategorize,
   bulkDeleteTransactions,
+  deleteFilterPreset,
   deleteTransaction,
   exportUrl,
   fetchCategories,
+  fetchFilterPresets,
   fetchTags,
   fetchTransactions,
   removeTransactionTag,
+  saveFilterPreset,
   updateTransaction,
   updateTransactionCategory,
 } from "../api";
-import type { DateRangeValue, Tag, TransactionWithTags } from "../types";
+import type { DateRangeValue, FilterPreset, Tag, TransactionWithTags } from "../types";
 import { currencyPrecise } from "../format";
 import { ExportLink } from "./ExportLink";
 
 interface Props {
   accountId: number | null;
   range: DateRangeValue;
+  onAccountIdChange: (id: number | null) => void;
+  onRangeChange: (range: DateRangeValue) => void;
 }
 
 interface EditDraft {
@@ -31,7 +36,7 @@ interface EditDraft {
 
 const PAGE_SIZE = 50;
 
-export function TransactionsTable({ accountId, range }: Props) {
+export function TransactionsTable({ accountId, range, onAccountIdChange, onRangeChange }: Props) {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -41,6 +46,7 @@ export function TransactionsTable({ accountId, range }: Props) {
   const [searchFilter, setSearchFilter] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -55,6 +61,50 @@ export function TransactionsTable({ accountId, range }: Props) {
   useEffect(() => {
     fetchCategories().then((r) => setCategories(r.categories));
   }, []);
+
+  const loadPresets = () => {
+    fetchFilterPresets().then(setPresets).catch(() => {});
+  };
+  useEffect(loadPresets, []);
+
+  const applyPreset = (preset: FilterPreset) => {
+    setCategoryFilter(preset.category ?? "");
+    setTagFilter(preset.tag ?? "");
+    setSearchInput(preset.search ?? "");
+    setSearchFilter(preset.search ?? "");
+    onAccountIdChange(preset.account_id);
+    onRangeChange({ from: preset.date_from, to: preset.date_to });
+  };
+
+  const saveCurrentAsPreset = async () => {
+    const name = prompt("Save the current filters as a preset named:");
+    if (!name || !name.trim()) return;
+    setError(null);
+    try {
+      await saveFilterPreset({
+        name: name.trim(),
+        category: categoryFilter || undefined,
+        tag: tagFilter || undefined,
+        search: searchFilter || undefined,
+        account_id: accountId,
+        date_from: range.from || undefined,
+        date_to: range.to || undefined,
+      });
+      loadPresets();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save the preset.");
+    }
+  };
+
+  const handleDeletePreset = async (preset: FilterPreset) => {
+    if (!confirm(`Delete the preset "${preset.name}"?`)) return;
+    try {
+      await deleteFilterPreset(preset.id);
+      loadPresets();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete the preset.");
+    }
+  };
 
   const loadTags = () => {
     fetchTags().then(setTags).catch(() => {});
@@ -321,6 +371,36 @@ export function TransactionsTable({ accountId, range }: Props) {
             title={total > 0 ? `Download all ${total} matching transactions` : undefined}
           />
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {presets.map((p) => (
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+          >
+            <button
+              onClick={() => applyPreset(p)}
+              className="font-medium text-slate-700 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
+              title="Apply this preset — category, tag, search, account, and date range"
+            >
+              {p.name}
+            </button>
+            <button
+              onClick={() => handleDeletePreset(p)}
+              className="text-slate-400 hover:text-red-600"
+              title={`Delete "${p.name}"`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <button
+          onClick={saveCurrentAsPreset}
+          className="rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+        >
+          + Save current filters as preset…
+        </button>
       </div>
 
       {error && (

@@ -12,6 +12,7 @@ import type {
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
+  FilterPreset,
   Goal,
   GoalContribution,
   GoalProgress,
@@ -278,6 +279,29 @@ export function deleteAccountBalance(accountId: number, balanceId: number) {
 /** Net worth across every active account, and its history over time. */
 export function fetchNetWorth() {
   return request<NetWorthResponse>("/net-worth");
+}
+
+// --- filter presets -----------------------------------------------------------
+
+export function fetchFilterPresets() {
+  return request<FilterPreset[]>("/filter-presets");
+}
+
+/** Saves a named combination of filters, replacing whatever was already saved under that name. */
+export function saveFilterPreset(preset: {
+  name: string;
+  category?: string;
+  tag?: string;
+  search?: string;
+  account_id?: number | null;
+  date_from?: string;
+  date_to?: string;
+}) {
+  return request<FilterPreset>("/filter-presets", { method: "POST", body: JSON.stringify(preset) });
+}
+
+export function deleteFilterPreset(id: number) {
+  return request<{ ok: true }>(`/filter-presets/${id}`, { method: "DELETE" });
 }
 
 // --- categories -------------------------------------------------------------

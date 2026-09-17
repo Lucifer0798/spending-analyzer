@@ -4,6 +4,7 @@ import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.AccountBalance;
 import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.model.Category;
+import com.spendinganalyzer.model.FilterPreset;
 import com.spendinganalyzer.model.Goal;
 import com.spendinganalyzer.model.GoalContribution;
 import com.spendinganalyzer.model.MerchantCategory;
@@ -33,9 +34,10 @@ public record BackupData(
         List<GoalContribution> goalContributions,
         List<Tag> tags,
         List<TransactionTag> transactionTags,
-        List<AccountBalance> accountBalances
+        List<AccountBalance> accountBalances,
+        List<FilterPreset> filterPresets
 ) {
-    // Bumped from 3: accountBalances is a new field a version-3 file has no values for, and there
+    // Bumped from 4: filterPresets is a new field a version-4 file has no values for, and there
     // is no migration path between backup versions -- see BackupController.
-    public static final int CURRENT_VERSION = 4;
+    public static final int CURRENT_VERSION = 5;
 }

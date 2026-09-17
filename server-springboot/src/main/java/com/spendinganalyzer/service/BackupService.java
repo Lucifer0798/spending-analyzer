@@ -6,6 +6,7 @@ import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.FilterPresetRepository;
 import com.spendinganalyzer.repository.GoalContributionRepository;
 import com.spendinganalyzer.repository.GoalRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
@@ -39,6 +40,7 @@ public class BackupService {
     private final GoalContributionRepository goalContributions;
     private final TagRepository tags;
     private final AccountBalanceRepository accountBalances;
+    private final FilterPresetRepository filterPresets;
     private final PredictionsCacheRepository predictionsCache;
 
     public BackupService(
@@ -52,6 +54,7 @@ public class BackupService {
             GoalContributionRepository goalContributions,
             TagRepository tags,
             AccountBalanceRepository accountBalances,
+            FilterPresetRepository filterPresets,
             PredictionsCacheRepository predictionsCache
     ) {
         this.accounts = accounts;
@@ -64,6 +67,7 @@ public class BackupService {
         this.goalContributions = goalContributions;
         this.tags = tags;
         this.accountBalances = accountBalances;
+        this.filterPresets = filterPresets;
         this.predictionsCache = predictionsCache;
     }
 
@@ -77,7 +81,8 @@ public class BackupService {
             int goals,
             int goalContributions,
             int tags,
-            int accountBalances
+            int accountBalances,
+            int filterPresets
     ) {}
 
     public BackupData export() {
@@ -94,7 +99,8 @@ public class BackupService {
                 goalContributions.findAll(),
                 tags.findAll(),
                 tags.findAllAssociations(),
-                accountBalances.findAll()
+                accountBalances.findAll(),
+                filterPresets.findAll()
         );
     }
 
@@ -115,6 +121,7 @@ public class BackupService {
         goalContributions.restoreAll(data.goalContributions());
         tags.restoreAll(data.tags(), data.transactionTags());
         accountBalances.restoreAll(data.accountBalances());
+        filterPresets.restoreAll(data.filterPresets());
         predictionsCache.deleteAll();
 
         return new BackupSummary(
@@ -127,7 +134,8 @@ public class BackupService {
                 data.goals().size(),
                 data.goalContributions().size(),
                 data.tags().size(),
-                data.accountBalances().size()
+                data.accountBalances().size(),
+                data.filterPresets().size()
         );
     }
 }

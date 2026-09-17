@@ -118,7 +118,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
 
     if (
       !confirm(
-        "This deletes everything currently in this instance — accounts, transactions, categories, budgets, merchant memory, recurring flags, savings goals, tags, and net worth balances — and replaces it with the backup file. This cannot be undone. Continue?"
+        "This deletes everything currently in this instance — accounts, transactions, categories, budgets, merchant memory, recurring flags, savings goals, tags, net worth balances, and saved filter presets — and replaces it with the backup file. This cannot be undone. Continue?"
       )
     ) {
       return;
@@ -136,7 +136,8 @@ export function ManagePage({ onAccountsChanged }: Props) {
         `Restored ${summary.accounts} accounts, ${summary.transactions} transactions, ` +
           `${summary.categories} categories, ${summary.budgets} budgets, ` +
           `${summary.merchantCategories} merchant rules, ${summary.recurringOverrides} recurring flags, ` +
-          `${summary.goals} savings goals, ${summary.tags} tags, ${summary.accountBalances} balance entries.`
+          `${summary.goals} savings goals, ${summary.tags} tags, ${summary.accountBalances} balance entries, ` +
+          `${summary.filterPresets} filter presets.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed.");
@@ -708,9 +709,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Backup</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Everything below, as one JSON file — accounts, transactions, categories, budgets,
-          merchant memory, recurring flags, savings goals, tags, and net worth balances — for
-          keeping a backup or moving to a new instance. AI forecasts aren't included;
-          regenerating one is one click.
+          merchant memory, recurring flags, savings goals, tags, net worth balances, and saved
+          filter presets — for keeping a backup or moving to a new instance. AI forecasts aren't
+          included; regenerating one is one click.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">

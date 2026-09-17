@@ -39,9 +39,10 @@ public class BackupController {
 
     /**
      * Accounts, categories, transactions, merchant memory, budgets, recurring overrides, savings
-     * goals, tags, and net worth balances, as one JSON file. {@code predictions_cache} is left
-     * out — regenerating a forecast is one click, the same reasoning the account-scoped cache
-     * migration used to justify dropping the old row rather than migrating it.
+     * goals, tags, net worth balances, and saved filter presets, as one JSON file. {@code
+     * predictions_cache} is left out — regenerating a forecast is one click, the same reasoning
+     * the account-scoped cache migration used to justify dropping the old row rather than
+     * migrating it.
      */
     @GetMapping
     public ResponseEntity<BackupData> export() {

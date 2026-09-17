@@ -476,6 +476,37 @@ now unused" state `recurring_overrides` accepts (see above) rather than silently
 reappearing under a fresh row if reused later. Actually deleting a tag everywhere is a distinct,
 explicit action from Manage, mirroring "Forget all" for merchant memory.
 
+**A filter preset's name is `COLLATE NOCASE`, same convention as `tags.name`.** Both are natural
+keys where a user retyping an existing name (different casing or not) should replace, not
+duplicate — `filter_presets.upsert` is an `ON CONFLICT(name) DO UPDATE`, exactly the tag
+create-if-missing pattern applied to a five-field row instead of a bare name.
+
+**Applying a preset has to reach state `TransactionsTable` doesn't own.** Category, tag, and
+search are local to the component; account and date range live in `App` and are shared with
+every other tab. There was no way to "just setState" all five from inside `TransactionsTable`,
+so `App` passes down `onAccountIdChange`/`onRangeChange` filled with the same `setAccountId`/
+`setRange` it already uses for its own header controls — the preset's apply handler calls all
+five setters (three local, two lifted) in one click handler, and the two lifted ones happen to
+change state one level up instead of in place.
+
+**Filter presets have no Manage-page section, unlike tags and recurring overrides.** Both of
+those split "set in context" from "list and clear centrally" because deleting a tag *everywhere*
+or clearing a stale override needs a view wider than any one transaction row. A preset has no
+such need — apply and delete are already both one click away as chips on the Transactions page
+itself, the only place a preset is ever used, so a second page listing the same chips would be
+a redundant view onto the same seven-or-so rows a person is likely to ever save.
+
+**Deleting an account clears its id from any preset that referenced it, rather than deleting the
+preset.** `AccountController.delete` calls `filterPresetRepository.clearAccountReference(id)`
+alongside the existing `accountBalanceRepository.deleteByAccountId(id)` — no foreign keys exist
+in this schema, so both are explicit application-layer cleanup. A preset losing its account
+becomes an "all accounts" preset rather than vanishing outright, since its category/tag/search
+fields are still meaningful with no account attached.
+
+**Adding filter presets bumped `BackupData.CURRENT_VERSION` again, 4 to 5, same reasoning as
+every prior bump.** A version-4 file has no `filterPresets` field and there's still no upgrade
+path between backup versions — see the goals (1→2) and tags (2→3) bumps above.
+
 **Budgets are keyed by category name, so category edits must cascade.** `CategoryRepository`
 owns that: `rename` carries the budget (and merchant memory) across, `deleteAndReassign` drops
 the budget rather than folding it into the fallback category. Anything else that starts storing
