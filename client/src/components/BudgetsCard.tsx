@@ -47,6 +47,17 @@ function BudgetRow({ budget, currencyCode }: { budget: BudgetProgress; currencyC
           ? `${currency(budget.remaining, 0, currencyCode)} left · ${Math.round(budget.percentUsed)}% used`
           : `${currency(Math.abs(budget.remaining), 0, currencyCode)} over budget`}
       </p>
+
+      {budget.escalationType && (
+        <p className="mt-0.5 text-[11px] text-slate-400">
+          auto-increasing {budget.escalationType === "percent"
+            ? `${budget.escalationValue}%`
+            : currency(budget.escalationValue ?? 0, 0, currencyCode)}{" "}
+          every {budget.escalationFrequencyMonths === 1 ? "month"
+            : budget.escalationFrequencyMonths === 12 ? "year"
+            : `${budget.escalationFrequencyMonths} months`}
+        </p>
+      )}
     </div>
   );
 }

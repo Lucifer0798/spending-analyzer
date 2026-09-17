@@ -87,7 +87,7 @@ class BackupServiceTest {
         taggedTransactionId = transactions
                 .find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 1, 0).get(0).id();
         merchants.remember("COFFEE SHOP", "Dining & Coffee", "user");
-        budgets.upsert("Dining & Coffee", 100.0);
+        budgets.upsert("Dining & Coffee", 100.0, null, null, null, null);
         recurringOverrides.upsert("NETFLIX.COM", RecurringOverride.ACTION_CANCEL);
         goalId = goals.create("Emergency fund", 5000.0, null, "USD").id();
         goalContributions.add(goalId, 200.0, "2026-06-01", "first deposit");
@@ -128,7 +128,7 @@ class BackupServiceTest {
         transactions.insertBatch(
                 List.of(new ParsedTransaction("2026-07-01", "EXTRA CHARGE", 20.00, "debit", "Shopping")),
                 "post-snapshot-batch", extraAccount.id());
-        budgets.upsert("Shopping", 200.0);
+        budgets.upsert("Shopping", 200.0, null, null, null, null);
         long extraGoalId = goals.create("Vacation", 1000.0, null, "USD").id();
         goalContributions.add(extraGoalId, 50.0, "2026-07-01", null);
         tags.addTag(taggedTransactionId, "extra tag added after the snapshot");

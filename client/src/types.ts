@@ -288,10 +288,18 @@ export interface AuthStatus {
   authenticated: boolean;
 }
 
+/** "fixed" adds a flat amount per period; "percent" compounds a percentage of the base. */
+export type EscalationType = "fixed" | "percent";
+
 export interface Budget {
   id: number;
   category: string;
   monthly_limit: number;
+  escalation_type: EscalationType | null;
+  escalation_value: number | null;
+  escalation_frequency_months: number | null;
+  /** YYYY-MM the schedule starts counting periods from. */
+  escalation_start_month: string | null;
   updated_at: string;
 }
 
@@ -301,13 +309,20 @@ export type BudgetStatus = "under" | "near" | "over";
 export interface BudgetProgress {
   id: number;
   category: string;
+  /** The limit actually in effect for the measured month -- what `spent` is compared against. */
   monthlyLimit: number;
+  /** The raw target as originally set, before any escalation. */
+  baseLimit: number;
   spent: number;
   /** Negative once the budget is blown. */
   remaining: number;
   /** Uncapped, so 140 means 40% over. */
   percentUsed: number;
   status: BudgetStatus;
+  escalationType: EscalationType | null;
+  escalationValue: number | null;
+  escalationFrequencyMonths: number | null;
+  escalationStartMonth: string | null;
 }
 
 export interface BudgetSummary {

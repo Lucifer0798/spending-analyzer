@@ -12,6 +12,7 @@ import type {
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
+  EscalationType,
   FilterPreset,
   Goal,
   GoalContribution,
@@ -355,11 +356,31 @@ export function fetchBudgets(accountId: number | null, month?: string) {
   return request<BudgetSummary>(`/budgets${qs({ accountId, month })}`);
 }
 
-/** Upsert: sets the target for a category whether or not one already exists. */
-export function setBudget(category: string, monthlyLimit: number) {
+/** An escalation schedule to attach to a budget -- see {@link EscalationType}. */
+export interface BudgetEscalation {
+  type: EscalationType;
+  value: number;
+  frequencyMonths: number;
+  /** YYYY-MM; omit to start counting from the current calendar month. */
+  startMonth?: string;
+}
+
+/**
+ * Upsert: sets the target for a category whether or not one already exists. Omitting
+ * `escalation` clears any schedule the budget previously had -- the whole row is replaced,
+ * same as the target itself.
+ */
+export function setBudget(category: string, monthlyLimit: number, escalation?: BudgetEscalation) {
   return request<Budget>("/budgets", {
     method: "POST",
-    body: JSON.stringify({ category, monthly_limit: monthlyLimit }),
+    body: JSON.stringify({
+      category,
+      monthly_limit: monthlyLimit,
+      escalation_type: escalation?.type ?? null,
+      escalation_value: escalation?.value ?? null,
+      escalation_frequency_months: escalation?.frequencyMonths ?? null,
+      escalation_start_month: escalation?.startMonth ?? null,
+    }),
   });
 }
 

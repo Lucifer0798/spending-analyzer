@@ -64,6 +64,17 @@ class BudgetControllerTest {
         return map;
     }
 
+    private static Map<String, Object> bodyWithEscalation(
+            String category, Object limit, Object type, Object value, Object frequencyMonths, Object startMonth
+    ) {
+        Map<String, Object> map = body(category, limit);
+        map.put("escalation_type", type);
+        map.put("escalation_value", value);
+        map.put("escalation_frequency_months", frequencyMonths);
+        map.put("escalation_start_month", startMonth);
+        return map;
+    }
+
     private BudgetProgress progressFor(String category, String month) {
         return controller.list(null, month).budgets().stream()
                 .filter(b -> b.category().equals(category))
@@ -230,6 +241,95 @@ class BudgetControllerTest {
     void rejectsMalformedMonth() {
         assertThat(catchThrowable(() -> controller.list(null, "June 2026")))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // --- escalation schedule -----------------------------------------------------
+
+    @Test
+    @DisplayName("a fixed escalation adds a flat amount per elapsed period, on top of the base")
+    void appliesFixedEscalation() {
+        // 2025-12 to 2026-06 is 6 months; a 3-month frequency means 2 periods have elapsed.
+        controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 3, "2025-12"));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.baseLimit()).isEqualTo(400.0);
+        assertThat(p.monthlyLimit()).isEqualTo(500.0); // 400 + 50*2
+    }
+
+    @Test
+    @DisplayName("a percent escalation compounds per elapsed period, not a flat multiple")
+    void appliesPercentEscalation() {
+        controller.set(bodyWithEscalation("Groceries", 400, "percent", 10, 3, "2025-12"));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.baseLimit()).isEqualTo(400.0);
+        assertThat(p.monthlyLimit()).isCloseTo(484.0, org.assertj.core.data.Offset.offset(0.01)); // 400 * 1.1^2
+    }
+
+    @Test
+    @DisplayName("measuring before the schedule starts reports the base target, unchanged")
+    void ignoresEscalationBeforeItStarts() {
+        controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 3, "2026-07"));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.monthlyLimit()).isEqualTo(400.0);
+    }
+
+    @Test
+    @DisplayName("omitting escalation on a later save clears whatever schedule was there")
+    void savingWithoutEscalationClearsExistingSchedule() {
+        controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 3, "2025-12"));
+        controller.set(body("Groceries", 400));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.monthlyLimit()).isEqualTo(400.0);
+        assertThat(p.escalationType()).isNull();
+    }
+
+    @Test
+    @DisplayName("an unspecified start month defaults to the current calendar month, not the latest imported one")
+    void escalationStartDefaultsToNow() {
+        controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 1, null));
+
+        assertThat(budgets.findByCategory("Groceries")).get()
+                .extracting(Budget::escalationStartMonth)
+                .isEqualTo(java.time.YearMonth.now().toString());
+    }
+
+    @Test
+    @DisplayName("rejects an unknown escalation type")
+    void rejectsUnknownEscalationType() {
+        ResponseEntity<?> response =
+                controller.set(bodyWithEscalation("Groceries", 400, "doubling", 50, 3, "2025-12"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("rejects an escalation type with no value or frequency to go with it")
+    void rejectsIncompleteEscalation() {
+        assertThat(controller.set(bodyWithEscalation("Groceries", 400, "fixed", null, 3, null))
+                .getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, null, null))
+                .getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("rejects a zero or negative escalation value or frequency")
+    void rejectsNonPositiveEscalationFields() {
+        assertThat(controller.set(bodyWithEscalation("Groceries", 400, "fixed", 0, 3, null))
+                .getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 0, null))
+                .getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("rejects a malformed escalation start month")
+    void rejectsMalformedEscalationStartMonth() {
+        ResponseEntity<?> response =
+                controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 3, "not-a-month"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
     }
 
     // --- deleting ---------------------------------------------------------------
