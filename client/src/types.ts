@@ -272,11 +272,13 @@ export interface PeriodComparison {
   changePercent: number | null;
   /** Biggest increase first, biggest decrease last. */
   categories: CategoryComparison[];
+  /** True when `previousRange` was picked outright rather than auto-derived from `currentRange`'s length. */
+  custom: boolean;
 }
 
-/** False for "all time" or a half-open filter -- a comparison needs two well-defined,
- *  equal-length windows, which neither has -- or when "all accounts" spans more than one
- *  currency, since a comparison would mix them. `currency` is null exactly when this is. */
+/** False for "all time" or a half-open filter -- a comparison needs two well-defined
+ *  windows, which neither has -- or when "all accounts" spans more than one currency, since a
+ *  comparison would mix them. `currency` is null exactly when this is. */
 export interface ComparisonResponse {
   applicable: boolean;
   comparison: PeriodComparison | null;

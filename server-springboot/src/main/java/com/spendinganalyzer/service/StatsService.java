@@ -108,17 +108,39 @@ public class StatsService {
      * something arbitrary would be worse than not comparing at all.
      */
     public Optional<PeriodComparison> computeComparison(Long accountId, DateRange range) {
+        return computeComparison(accountId, range, null);
+    }
+
+    /**
+     * Same as {@link #computeComparison(Long, DateRange)}, except {@code explicitPreviousRange}
+     * -- when given -- is compared against directly instead of being derived by mirroring
+     * {@code range}'s length. Unlike the auto-derived case, a custom pair of ranges is not
+     * required to share a length: "this March" against "last March" is a comparison worth making
+     * even though a leap year makes them different lengths, and there is no length to defend
+     * from a full-year filter against a full-year filter of a different actual year regardless.
+     * Both ranges still need both bounds set -- the same "no arbitrary guessing" rule the
+     * auto-derived case already applies to {@code range} alone.
+     */
+    public Optional<PeriodComparison> computeComparison(Long accountId, DateRange range, DateRange explicitPreviousRange) {
         if (range.from() == null || range.to() == null) {
             return Optional.empty();
         }
 
-        LocalDate from = LocalDate.parse(range.from());
-        LocalDate to = LocalDate.parse(range.to());
-        long lengthInDays = ChronoUnit.DAYS.between(from, to) + 1;
+        DateRange previousRange;
+        if (explicitPreviousRange != null) {
+            if (explicitPreviousRange.from() == null || explicitPreviousRange.to() == null) {
+                return Optional.empty();
+            }
+            previousRange = explicitPreviousRange;
+        } else {
+            LocalDate from = LocalDate.parse(range.from());
+            LocalDate to = LocalDate.parse(range.to());
+            long lengthInDays = ChronoUnit.DAYS.between(from, to) + 1;
 
-        LocalDate previousTo = from.minusDays(1);
-        LocalDate previousFrom = previousTo.minusDays(lengthInDays - 1);
-        DateRange previousRange = new DateRange(previousFrom.toString(), previousTo.toString());
+            LocalDate previousTo = from.minusDays(1);
+            LocalDate previousFrom = previousTo.minusDays(lengthInDays - 1);
+            previousRange = new DateRange(previousFrom.toString(), previousTo.toString());
+        }
 
         Map<String, Double> current = totalsByCategory(accountId, range);
         Map<String, Double> previous = totalsByCategory(accountId, previousRange);
@@ -146,7 +168,8 @@ public class StatsService {
                 round2(currentTotal), round2(previousTotal),
                 round2(currentTotal - previousTotal),
                 changePercent(currentTotal, previousTotal),
-                categories));
+                categories,
+                explicitPreviousRange != null));
     }
 
     private Map<String, Double> totalsByCategory(Long accountId, DateRange range) {

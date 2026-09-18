@@ -137,4 +137,49 @@ class StatsServiceComparisonTest {
         assertThat(statsService.computeComparison(null, DateRange.of("2026-03-01", null))).isEmpty();
         assertThat(statsService.computeComparison(null, DateRange.of(null, "2026-03-31"))).isEmpty();
     }
+
+    @Test
+    @DisplayName("the auto-derived comparison is not flagged custom")
+    void autoDerivedComparisonIsNotCustom() {
+        assertThat(compare("2026-03-01", "2026-03-31").orElseThrow().custom()).isFalse();
+    }
+
+    // --- an explicit, independently-chosen comparison range -----------------------
+
+    private Optional<PeriodComparison> compareAgainst(String from, String to, String compareFrom, String compareTo) {
+        return statsService.computeComparison(null, DateRange.of(from, to), DateRange.of(compareFrom, compareTo));
+    }
+
+    @Test
+    @DisplayName("an explicit previous range is used verbatim, not mirrored from the primary range's length")
+    void explicitPreviousRangeIsUsedVerbatim() {
+        // A single week compared against all of February -- deliberately unequal lengths.
+        PeriodComparison comparison =
+                compareAgainst("2026-03-01", "2026-03-07", "2026-02-01", "2026-02-28").orElseThrow();
+
+        assertThat(comparison.previousRange().from()).isEqualTo("2026-02-01");
+        assertThat(comparison.previousRange().to()).isEqualTo("2026-02-28");
+        assertThat(comparison.previousTotal()).isEqualTo(190.00);
+        assertThat(comparison.custom()).isTrue();
+    }
+
+    @Test
+    @DisplayName("null falls back to the auto-derived range, same as the two-argument overload")
+    void nullExplicitRangeFallsBackToAutoDerive() {
+        PeriodComparison viaOverload = statsService.computeComparison(null, DateRange.of("2026-03-01", "2026-03-31"))
+                .orElseThrow();
+        PeriodComparison viaNull = statsService
+                .computeComparison(null, DateRange.of("2026-03-01", "2026-03-31"), null)
+                .orElseThrow();
+
+        assertThat(viaNull.previousRange()).isEqualTo(viaOverload.previousRange());
+        assertThat(viaNull.custom()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a half-open explicit range is not applicable, same as a half-open primary range")
+    void halfOpenExplicitRangeIsNotApplicable() {
+        assertThat(compareAgainst("2026-03-01", "2026-03-31", "2026-02-01", null)).isEmpty();
+        assertThat(compareAgainst("2026-03-01", "2026-03-31", null, "2026-02-28")).isEmpty();
+    }
 }

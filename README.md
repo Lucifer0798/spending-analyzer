@@ -160,7 +160,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V16)
-  src/test/                 361 tests
+  src/test/                 369 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -249,7 +249,7 @@ All endpoints live under `/api`.
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
-| `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it, per category |
+| `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
 | `GET` | `/recurring` | Detected recurring charges |
 | `GET` | `/anomalies` | Transactions well above their category's typical amount |
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
@@ -403,6 +403,16 @@ render rather than comparing against something arbitrary; `/summary/comparison` 
 already applies. A category can appear in only one of the two periods — a subscription just
 started, or one that ended — in which case its missing side is zero and the percentage change is
 left out rather than reported as an infinite or invented number.
+
+**A comparison's second period can be picked outright instead of mirrored.** `/summary/comparison`
+accepts an optional `compareFrom`/`compareTo` pair; when given, that exact range is compared
+against instead of the auto-derived one, and — unlike the mirrored case — the two ranges don't
+need to share a length. "This March vs last March" or "this week vs a specific week last year"
+are both a custom pick, not a mirror. A half-open custom range (only one of the two given) is
+refused the same honest way a half-open primary filter already is, rather than guessing at the
+missing bound. `PeriodComparison.custom` says which kind of comparison actually ran, so the
+dashboard card can label a custom pick differently from the default "previous period" language
+without needing to compare the two date ranges itself to work it out.
 
 **Predictions are always full-history, and the dashboard says so.** The forecast covers every
 transaction on an account, never just the date range currently selected — a projection built
@@ -558,7 +568,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (361).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (369).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -631,6 +641,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Custom date-range comparison~~ — the dashboard's comparison card can compare the active
+  range against any independently-chosen range instead of only the auto-derived previous period
 - ~~Category groups~~ — roll several categories up under one label (e.g. "Food" over Groceries
   and Dining & Coffee) for a coarser view on the dashboard and in the categories CSV export
 - ~~Scheduled/recurring budgets~~ — a budget can auto-increase by a fixed amount or a percentage
