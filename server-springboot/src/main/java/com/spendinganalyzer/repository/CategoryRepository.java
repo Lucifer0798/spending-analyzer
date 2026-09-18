@@ -25,7 +25,8 @@ public class CategoryRepository {
             rs.getInt("is_builtin") == 1,
             rs.getInt("is_income") == 1,
             rs.getInt("is_transfer") == 1,
-            rs.getInt("sort_order")
+            rs.getInt("sort_order"),
+            rs.getString("group_name")
     );
 
     public List<Category> findAll() {
@@ -107,6 +108,12 @@ public class CategoryRepository {
         return jdbc.update("UPDATE categories SET " + String.join(", ", sets) + " WHERE id = :id", params) > 0;
     }
 
+    /** {@code groupName} null (or blank, from the controller) clears the category's group. */
+    public boolean updateGroup(long id, String groupName) {
+        return jdbc.update("UPDATE categories SET group_name = :groupName WHERE id = :id",
+                new MapSqlParameterSource().addValue("groupName", groupName).addValue("id", id)) > 0;
+    }
+
     public int transactionCount(String categoryName) {
         Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM transactions WHERE category = :name",
                 new MapSqlParameterSource("name", categoryName), Integer.class);
@@ -149,12 +156,13 @@ public class CategoryRepository {
                         .addValue("isBuiltin", c.isBuiltin() ? 1 : 0)
                         .addValue("isIncome", c.isIncome() ? 1 : 0)
                         .addValue("isTransfer", c.isTransfer() ? 1 : 0)
-                        .addValue("sortOrder", c.sortOrder()))
+                        .addValue("sortOrder", c.sortOrder())
+                        .addValue("groupName", c.groupName()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
-                INSERT INTO categories (id, name, is_builtin, is_income, is_transfer, sort_order)
-                VALUES (:id, :name, :isBuiltin, :isIncome, :isTransfer, :sortOrder)
+                INSERT INTO categories (id, name, is_builtin, is_income, is_transfer, sort_order, group_name)
+                VALUES (:id, :name, :isBuiltin, :isIncome, :isTransfer, :sortOrder, :groupName)
                 """, params);
     }
 }

@@ -50,6 +50,8 @@ export interface CategoryDetail {
   is_income: boolean;
   is_transfer: boolean;
   sort_order: number;
+  /** Null means ungrouped -- rolls up as its own group of one on the dashboard and in exports. */
+  group_name: string | null;
   transactionCount: number;
 }
 

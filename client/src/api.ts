@@ -320,7 +320,7 @@ export function createCategory(name: string, flags: { is_income?: boolean; is_tr
 
 export function updateCategory(
   id: number,
-  changes: { name?: string; is_income?: boolean; is_transfer?: boolean }
+  changes: { name?: string; is_income?: boolean; is_transfer?: boolean; group_name?: string | null }
 ) {
   return request<CategoryDetail>(`/categories/${id}`, {
     method: "PATCH",

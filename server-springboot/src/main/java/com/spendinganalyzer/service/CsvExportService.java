@@ -15,6 +15,7 @@ import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Renders the data behind the dashboard and the transactions table as CSV.
@@ -87,14 +88,19 @@ public class CsvExportService {
      * {@code currency} is repeated on every row for the same reason the transactions export
      * carries one per row — every total here is scoped to a single currency by the time it
      * reaches this method, so there is exactly one value to repeat.
+     *
+     * <p>{@code groupByCategory} names each row's rollup group, falling back to the category's
+     * own name when it has none set — a spreadsheet pivot on this column groups consistently
+     * either way, with no blank cells forming their own accidental bucket.
      */
-    public byte[] categoryTotals(List<CategoryTotal> totals, String currency) {
+    public byte[] categoryTotals(List<CategoryTotal> totals, String currency, Map<String, String> groupByCategory) {
         double grandTotal = totals.stream().mapToDouble(CategoryTotal::total).sum();
 
-        return toCsv(new String[]{"category", "total", "currency", "transactions", "share_percent"}, printer -> {
+        return toCsv(new String[]{"category", "group", "total", "currency", "transactions", "share_percent"}, printer -> {
             for (CategoryTotal c : totals) {
                 double share = grandTotal == 0 ? 0 : (c.total() / grandTotal) * 100;
-                printer.printRecord(c.category(), c.total(), currency, c.count(), round2(share));
+                String group = groupByCategory.getOrDefault(c.category(), c.category());
+                printer.printRecord(c.category(), group, c.total(), currency, c.count(), round2(share));
             }
         });
     }

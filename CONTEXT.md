@@ -512,6 +512,42 @@ owns that: `rename` carries the budget (and merchant memory) across, `deleteAndR
 the budget rather than folding it into the fallback category. Anything else that starts storing
 a category name belongs in those two methods too.
 
+**A category group is a flat label on the category row, not a parent-category relationship.**
+`categories.group_name` is a plain nullable `TEXT` column, not a self-referential `parent_id` —
+the ask was "roll several categories up under one coarser bucket," which a shared string
+satisfies exactly, and a real tree would add cascade-on-rename/delete questions and arbitrary
+depth this app has no use for. Two categories sharing a group is the entire relationship; nothing
+else references it, so unlike a budget or merchant-memory entry, deleting or renaming a category
+needs no group-side cleanup at all — the group lives and dies with the row it's a column on.
+
+**Category-group rollup is computed client-side, not as a second backend aggregate query.**
+`StatsService.computeCategoryTotals` is unchanged; the frontend already has every category's
+totals from `/api/summary` and every category's group from `/api/categories`, so `Dashboard.tsx`'s
+`groupTotals` folds one into the other in memory. The one thing that *is* server-side is the
+categories CSV export's `group` column (`ExportController.groupByCategory`, a
+`Map<String,String>` built once per request) — a CSV has no client afterward to do the folding,
+so the same category→group lookup has to be resolved before the file leaves the server. Both
+sides apply the identical fallback (a category with no group rolls up under its own name) so a
+spreadsheet pivot and the dashboard chart never disagree about what "grouped" means for a category
+nobody has grouped.
+
+**A category's group can be set on a built-in category — renaming one still can't be.** These are
+different guarantees: a built-in's *name* is load-bearing (recurring detection, merchant memory,
+and every hardcoded default assume `"Groceries"` keeps meaning `"Groceries"`), but its *group* is
+just a label a user chose, no different in kind from a custom category's group. `CategoryController
+.update` gates the name change on `!category.isBuiltin()` and does not gate the group change at
+all.
+
+**Setting a category's group uses `body.containsKey("group_name")`, not a null check, to decide
+whether to touch it.** A `Map<String, Object>` body returns `null` from `.get()` both when a key
+is absent and when it's present with a `null` value, so a plain `body.get("group_name") != null`
+check would be unable to tell "this PATCH doesn't mention the group" (leave it alone) apart from
+"this PATCH explicitly clears the group" (an omitted key can't express that). `containsKey` is
+what lets a rename-only or flags-only `PATCH` leave an existing group untouched while a `PATCH`
+that explicitly sends `"group_name": null` (or a blank string) clears it — the same
+whole-field-not-a-merge contract an upsert gives everywhere else in this app, applied to one
+field of a `PATCH` instead of a whole row.
+
 **A budget's escalation schedule is computed on read, not applied by a background job that
 mutates `monthly_limit` over time.** This app has no scheduler or cron equivalent — everything
 derived here (recurring detection, anomalies, net worth history) is recomputed fresh from stored

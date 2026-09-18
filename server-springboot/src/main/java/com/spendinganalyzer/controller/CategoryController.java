@@ -23,7 +23,7 @@ public class CategoryController {
 
     public record CategoryWithCount(
             long id, String name, boolean is_builtin, boolean is_income,
-            boolean is_transfer, int sort_order, int transactionCount
+            boolean is_transfer, int sort_order, String group_name, int transactionCount
     ) {}
 
     /**
@@ -35,7 +35,7 @@ public class CategoryController {
         List<Category> all = categoryRepository.findAll();
         List<CategoryWithCount> detailed = all.stream()
                 .map(c -> new CategoryWithCount(c.id(), c.name(), c.isBuiltin(), c.isIncome(),
-                        c.isTransfer(), c.sortOrder(), categoryRepository.transactionCount(c.name())))
+                        c.isTransfer(), c.sortOrder(), c.groupName(), categoryRepository.transactionCount(c.name())))
                 .toList();
         return Map.of(
                 "categories", all.stream().map(Category::name).toList(),
@@ -95,6 +95,15 @@ public class CategoryController {
                         .body(new ErrorResponse("A category cannot be both income and transfer."));
             }
             categoryRepository.updateFlags(id, isIncome, isTransfer);
+        }
+
+        // containsKey, not just a non-null check: the key's presence is what says "touch the
+        // group", so a rename- or flag-only PATCH that never mentions it leaves it alone, while
+        // an explicit null (or blank) clears it -- the same "whole field, not a merge" contract
+        // an upsert gives everywhere else in this app.
+        if (body.containsKey("group_name")) {
+            String groupName = body.get("group_name") instanceof String s && !s.isBlank() ? s.trim() : null;
+            categoryRepository.updateGroup(id, groupName);
         }
 
         return ResponseEntity.ok(categoryRepository.findById(id).orElseThrow());
