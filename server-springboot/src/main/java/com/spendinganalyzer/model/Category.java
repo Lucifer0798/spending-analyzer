@@ -8,5 +8,7 @@ public record Category(
         @JsonProperty("is_builtin") boolean isBuiltin,
         @JsonProperty("is_income") boolean isIncome,
         @JsonProperty("is_transfer") boolean isTransfer,
-        @JsonProperty("sort_order") int sortOrder
+        @JsonProperty("sort_order") int sortOrder,
+        /** Null means ungrouped -- the category rolls up as its own group of one. */
+        @JsonProperty("group_name") String groupName
 ) {}

@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V14)
-  src/test/                 352 tests
+    db/migration/           Versioned schema migrations (V1–V16)
+  src/test/                 361 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -205,7 +205,7 @@ Thirteen tables, all created automatically:
 | `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V15__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V17__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -270,7 +270,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/filter-presets` | Save, list, or delete a named combination of Transactions filters |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
-| `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories |
+| `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
 | `DELETE` | `/reset` | Delete all transactions (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
@@ -357,6 +357,19 @@ being measured is always named on the card, so it can't quietly disagree with yo
 Targets are stored per category name, which means a category rename or delete has to reach them.
 A rename carries the budget across; a delete drops it rather than folding it into whichever
 category the transactions moved to, since that would silently change a number you set.
+
+**A category can belong to a group, rolled up client-side rather than in a second backend
+query.** A group is a free-form label on the category itself (`group_name`, nullable) — not a
+parent category or a second table — so "Food" over Groceries and Dining & Coffee is just two
+rows sharing a string, the same flat shape a tag's name already is. The dashboard's per-category
+totals already carry everything needed to fold them into a rollup client-side: a category with no
+group is treated as its own group of one, so "spending by category group" and "spending by
+category" agree exactly until a group is actually set. The categories CSV export does the same
+fallback server-side for the same reason a spreadsheet pivot needs it: a blank cell would form
+its own accidental bucket instead of grouping an ungrouped row under its own name. Built-in
+categories can be grouped too, unlike renaming — a group is just a label, not an identity, so
+there's nothing about grouping "Groceries" under "Food" that a built-in category needs protecting
+from the way its literal name is protected from a rename.
 
 **A budget can auto-increase on a schedule, computed on read rather than mutated by a background
 job.** The stored `monthly_limit` is always the original base the user set; a budget with an
@@ -545,7 +558,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (352).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (361).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -618,6 +631,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Category groups~~ — roll several categories up under one label (e.g. "Food" over Groceries
+  and Dining & Coffee) for a coarser view on the dashboard and in the categories CSV export
 - ~~Scheduled/recurring budgets~~ — a budget can auto-increase by a fixed amount or a percentage
   every month, quarter, or year, so a target set once keeps pace without a manual bump each time
 - ~~Saved filter presets~~ — save the Transactions page's current category, tag, search, account,

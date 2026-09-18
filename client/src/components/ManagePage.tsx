@@ -308,7 +308,8 @@ export function ManagePage({ onAccountsChanged }: Props) {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Categories</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Custom categories are offered to the AI when it categorizes transactions. Anything marked
-          as income or transfer is left out of spending totals.
+          as income or transfer is left out of spending totals. A group rolls several categories
+          up under one label on the dashboard and in exports — built-in categories can be grouped too.
         </p>
 
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
@@ -332,12 +333,31 @@ export function ManagePage({ onAccountsChanged }: Props) {
                       {!c.is_builtin && (
                         <span className="ml-2 text-[10px] uppercase text-indigo-500">custom</span>
                       )}
+                      {c.group_name && (
+                        <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] uppercase text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                          {c.group_name}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-slate-500">{c.transactionCount} transactions</div>
                   </td>
                   <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => {
+                        const group = prompt(
+                          `Roll "${c.name}" up under a group (e.g. "Food"). Leave blank to ungroup:`,
+                          c.group_name ?? ""
+                        );
+                        if (group !== null) {
+                          run(() => updateCategory(c.id, { group_name: group.trim() || null }));
+                        }
+                      }}
+                      className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    >
+                      {c.group_name ? "Change group" : "+ Group"}
+                    </button>
                     {c.is_builtin ? (
-                      <span className="text-xs text-slate-400">built-in</span>
+                      <span className="ml-1 text-xs text-slate-400">built-in</span>
                     ) : (
                       <>
                         <button
@@ -347,7 +367,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                               run(() => updateCategory(c.id, { name: name.trim() }));
                             }
                           }}
-                          className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                          className="ml-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                         >
                           Rename
                         </button>

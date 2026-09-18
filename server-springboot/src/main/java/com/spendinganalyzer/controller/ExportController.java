@@ -2,6 +2,8 @@ package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
+import com.spendinganalyzer.model.Category;
+import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.CsvExportService;
 import com.spendinganalyzer.service.InsightsService;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * CSV downloads of whatever the user is currently looking at. Every export takes the same
@@ -46,18 +50,27 @@ public class ExportController {
     private final TransactionRepository transactionRepository;
     private final StatsService statsService;
     private final InsightsService insightsService;
+    private final CategoryRepository categoryRepository;
     private final CsvExportService csv;
 
     public ExportController(
             TransactionRepository transactionRepository,
             StatsService statsService,
             InsightsService insightsService,
+            CategoryRepository categoryRepository,
             CsvExportService csv
     ) {
         this.transactionRepository = transactionRepository;
         this.statsService = statsService;
         this.insightsService = insightsService;
+        this.categoryRepository = categoryRepository;
         this.csv = csv;
+    }
+
+    /** Every category's name mapped to its rollup group, falling back to its own name when unset. */
+    private Map<String, String> groupByCategory() {
+        return categoryRepository.findAll().stream()
+                .collect(Collectors.toMap(Category::name, c -> c.groupName() != null ? c.groupName() : c.name()));
     }
 
     @GetMapping("/transactions.csv")
@@ -87,7 +100,7 @@ public class ExportController {
         }
         DateRange range = DateRange.of(from, to);
         return attachment("spend-by-category", csv.categoryTotals(
-                statsService.computeCategoryTotals(accountId, range), currency));
+                statsService.computeCategoryTotals(accountId, range), currency, groupByCategory()));
     }
 
     @GetMapping("/monthly.csv")

@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -104,7 +105,7 @@ class CsvExportServiceTest {
     void computesCategoryShare() throws IOException {
         byte[] csv = service.categoryTotals(List.of(
                 new CategoryTotal("Groceries", 750.00, 30),
-                new CategoryTotal("Travel", 250.00, 2)), "EUR");
+                new CategoryTotal("Travel", 250.00, 2)), "EUR", Map.of("Groceries", "Food"));
 
         List<CSVRecord> rows = parse(csv);
         assertThat(rows.get(0).get("share_percent")).isEqualTo("75.0");
@@ -114,9 +115,17 @@ class CsvExportServiceTest {
     }
 
     @Test
+    @DisplayName("a category with no group falls back to its own name, not a blank cell")
+    void ungroupedCategoryFallsBackToOwnName() throws IOException {
+        byte[] csv = service.categoryTotals(List.of(new CategoryTotal("Travel", 100.00, 1)), "USD", Map.of());
+
+        assertThat(parse(csv).get(0).get("group")).isEqualTo("Travel");
+    }
+
+    @Test
     @DisplayName("does not divide by zero when every total is zero")
     void survivesZeroTotals() throws IOException {
-        byte[] csv = service.categoryTotals(List.of(new CategoryTotal("Groceries", 0.0, 0)), "USD");
+        byte[] csv = service.categoryTotals(List.of(new CategoryTotal("Groceries", 0.0, 0)), "USD", Map.of());
 
         assertThat(parse(csv).get(0).get("share_percent")).isEqualTo("0.0");
     }

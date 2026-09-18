@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { exportUrl, fetchPredictions, fetchSummary, refreshPredictions } from "../api";
+import { exportUrl, fetchCategories, fetchPredictions, fetchSummary, refreshPredictions } from "../api";
 import type { CategoryTotal, DateRangeValue, MonthlyTotal, PredictionsPayload, SummaryResponse } from "../types";
 import { currency } from "../format";
 import { ExportLink } from "./ExportLink";
@@ -109,13 +109,16 @@ function MonthlyTrendChart({
   );
 }
 
-/** The top-12 category bar chart, reused for the single combined view and for each currency's own slice. */
+/** The top-12 category bar chart, reused for the single combined view, each currency's own
+ *  slice, and the group rollup below it (same shape, coarser rows). */
 function CategoryBarChart({
+  title = "Spending by category",
   data,
   currencyCode,
   exportHref,
   exportTitle,
 }: {
+  title?: string;
   data: CategoryTotal[];
   currencyCode: string;
   exportHref?: string;
@@ -128,7 +131,7 @@ function CategoryBarChart({
   return (
     <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Spending by category</h2>
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{title}</h2>
         {exportHref && <ExportLink compact href={exportHref} label="Export CSV" title={exportTitle} />}
       </div>
       <ResponsiveContainer width="100%" height={Math.max(240, bars.length * 32)}>
@@ -144,12 +147,37 @@ function CategoryBarChart({
   );
 }
 
+/** Rolls category totals up to their group, falling back to a category's own name when it has
+ *  none -- same convention the backend's CSV export uses, so both agree on what "grouped" means. */
+function groupTotals(categoryTotals: CategoryTotal[], groupByCategory: Record<string, string>): CategoryTotal[] {
+  const byGroup = new Map<string, { total: number; count: number }>();
+  for (const c of categoryTotals) {
+    const group = groupByCategory[c.category] ?? c.category;
+    const existing = byGroup.get(group) ?? { total: 0, count: 0 };
+    byGroup.set(group, { total: existing.total + c.total, count: existing.count + c.count });
+  }
+  return Array.from(byGroup, ([category, v]) => ({ category, total: v.total, count: v.count }));
+}
+
 export function Dashboard({ accountId, range }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Category -> group name, only for categories that actually have one set. Categories don't
+  // depend on the account or date filter, so this loads once rather than alongside the summary.
+  const [groupByCategory, setGroupByCategory] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchCategories().then((r) => {
+      const groups: Record<string, string> = {};
+      for (const c of r.detailed) {
+        if (c.group_name) groups[c.name] = c.group_name;
+      }
+      setGroupByCategory(groups);
+    });
+  }, []);
 
   useEffect(() => {
     // Clearing stale data before refetching from the API is synchronizing with an external
@@ -226,6 +254,13 @@ export function Dashboard({ accountId, range }: Props) {
               <StatTile label="Total spend" value={currency(total, 0, breakdown.currency)} />
               <MonthlyTrendChart data={breakdown.monthlyTotals} currencyCode={breakdown.currency} />
               <CategoryBarChart data={breakdown.categoryTotals} currencyCode={breakdown.currency} />
+              {Object.keys(groupByCategory).length > 0 && (
+                <CategoryBarChart
+                  title="Spending by category group"
+                  data={groupTotals(breakdown.categoryTotals, groupByCategory)}
+                  currencyCode={breakdown.currency}
+                />
+              )}
             </div>
           );
         })}
@@ -295,6 +330,16 @@ export function Dashboard({ accountId, range }: Props) {
         exportHref={exportUrl("categories", { accountId, range })}
         exportTitle="Download every category, not just the top 12 shown"
       />
+
+      {/* Renders nothing until at least one category has a group set, so the dashboard is
+          unchanged for anyone not using them. */}
+      {Object.keys(groupByCategory).length > 0 && (
+        <CategoryBarChart
+          title="Spending by category group"
+          data={groupTotals(summary.categoryTotals, groupByCategory)}
+          currencyCode={cur}
+        />
+      )}
 
       {error && (
         <div className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
