@@ -87,17 +87,22 @@ public class InsightsController {
     }
 
     /**
-     * The active range against the period immediately before it, of the same length. Only
-     * meaningful for a fully-bounded range -- {@code applicable} is false for "all time" or a
-     * half-open filter, rather than the endpoint guessing at a period nobody asked for. Also not
-     * applicable when "all accounts" spans more than one currency: the totals it computes would
-     * mix them, the same reason {@code /recurring} and budgets refuse in that case.
+     * The active range against another period -- by default the one immediately before it, of
+     * the same length. Passing {@code compareFrom}/{@code compareTo} compares against that exact
+     * range instead, picked independently of {@code from}/{@code to} and not required to share
+     * its length. Only meaningful for fully-bounded ranges -- {@code applicable} is false for
+     * "all time", a half-open primary filter, or a half-open custom one, rather than the endpoint
+     * guessing at a period nobody asked for. Also not applicable when "all accounts" spans more
+     * than one currency: the totals it computes would mix them, the same reason {@code /recurring}
+     * and budgets refuse in that case.
      */
     @GetMapping("/summary/comparison")
     public ComparisonResponse comparison(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String compareFrom,
+            @RequestParam(required = false) String compareTo
     ) {
         String currency = statsService.resolveCurrency(accountId);
         if (currency == null) {
@@ -105,7 +110,15 @@ public class InsightsController {
         }
 
         DateRange range = DateRange.of(from, to);
-        return statsService.computeComparison(accountId, range)
+        // Only build an explicit comparison range when the caller actually asked for one --
+        // neither param given means "use the default, auto-derived previous period" -- but once
+        // either is given, DateRange.of validates and the half-open case is handled the same way
+        // computeComparison already handles a half-open primary range: not applicable, not a guess.
+        DateRange explicitPreviousRange = (compareFrom != null || compareTo != null)
+                ? DateRange.of(compareFrom, compareTo)
+                : null;
+
+        return statsService.computeComparison(accountId, range, explicitPreviousRange)
                 .map(comparison -> ComparisonResponse.of(comparison, currency))
                 .orElse(ComparisonResponse.NOT_APPLICABLE);
     }

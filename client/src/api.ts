@@ -466,9 +466,25 @@ export function fetchSummary(accountId: number | null, range: DateRangeValue = A
   return request<SummaryResponse>(`/summary${qs({ accountId, from: range.from, to: range.to })}`);
 }
 
-/** applicable is false for "all time" or a half-open range -- see ComparisonResponse. */
-export function fetchComparison(accountId: number | null, range: DateRangeValue = ALL_TIME) {
-  return request<ComparisonResponse>(`/summary/comparison${qs({ accountId, from: range.from, to: range.to })}`);
+/**
+ * applicable is false for "all time" or a half-open range -- see ComparisonResponse. Passing
+ * `compareAgainst` compares against that exact range instead of the auto-derived previous period;
+ * omit it (or pass null) to keep the default behavior.
+ */
+export function fetchComparison(
+  accountId: number | null,
+  range: DateRangeValue = ALL_TIME,
+  compareAgainst?: DateRangeValue | null
+) {
+  return request<ComparisonResponse>(
+    `/summary/comparison${qs({
+      accountId,
+      from: range.from,
+      to: range.to,
+      compareFrom: compareAgainst?.from,
+      compareTo: compareAgainst?.to,
+    })}`
+  );
 }
 
 export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {

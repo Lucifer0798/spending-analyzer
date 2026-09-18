@@ -130,6 +130,38 @@ and that changes size every time new data is imported. `ComparisonResponse.appli
 that decision to the frontend explicitly, rather than the client having to infer "not applicable"
 from an empty-looking payload.
 
+**A custom comparison range is a third overload parameter, not a second code path.**
+`StatsService.computeComparison(accountId, range)` still auto-derives the previous period exactly
+as before; the new `computeComparison(accountId, range, explicitPreviousRange)` overload only
+skips that derivation when a non-null range is actually passed, so every existing caller (and
+every existing test) kept working unchanged. `explicitPreviousRange` still needs both of its own
+bounds set — the same "no arbitrary guessing" rule `range` alone already had to satisfy — but,
+unlike the auto-derived case, does *not* need to share `range`'s length: "this March vs last
+March" is a real comparison worth making even though a leap year makes them different lengths,
+and there's no length to defend once both ranges are independently chosen anyway.
+`InsightsController.comparison` only builds that explicit range when the caller actually supplies
+`compareFrom` or `compareTo` — if just one is given, `DateRange.of` produces a half-open range,
+which `computeComparison` refuses the same honest way it already refuses a half-open primary
+filter, rather than the controller having a second, different validation path to keep in sync
+with the first.
+
+**`PeriodComparison.custom` exists so the frontend doesn't have to compare two `DateRange`s to
+find out which kind of comparison it's looking at.** The field is one boolean
+(`explicitPreviousRange != null` at the point `computeComparison` builds the result), and it's
+what lets `ComparisonCard` swap its heading between "Compared to the previous period" and "Custom
+comparison" without re-deriving what the server already knows.
+
+**`ComparisonCard`'s custom-range inputs stay visible through a half-typed pick, but the whole
+card still hides by default.** The original behavior — render nothing for "all time," a half-open
+filter, or mixed currencies — is preserved exactly when the user hasn't touched the new control:
+`if (!applicable && !customizing) return null`. Once `customizing` is true, though, the card stays
+up even if the in-progress custom range isn't complete yet (or comes back not-applicable), so
+typing the first of two dates doesn't make the card vanish out from under the user mid-edit.
+`customizing` can only become true by clicking a button that itself only exists on an
+already-visible card, so this never makes the card appear before there is something to compare in
+the first place — the discoverability of "you can customize this" is gated on the same
+applicability check the card always had.
+
 **Flyway owns the schema.** Never edit an applied migration — add `V6__*.sql`. SQLite cannot
 alter a CHECK constraint in place, so widening one means the copy-and-swap rebuild used in `V5`.
 
