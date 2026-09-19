@@ -59,21 +59,33 @@ public class CsvExportService {
      * <p>{@code amount} is the stored value, which is always positive because direction is
      * carried by {@code type}. That makes a naive SUM over the column wrong, so
      * {@code signed_amount} is included alongside it: negative for debits, positive for credits.
+     *
+     * <p>{@code your_share}/{@code signed_your_share} mirror that pair but for what you're
+     * actually responsible for: the split share when the transaction has one, the full amount
+     * otherwise — the same fallback the dashboard's totals use, so a spreadsheet SUM over
+     * {@code signed_your_share} matches what the app already shows for "spend."
+     * {@code split_note} is blank for an unsplit transaction, same as an unset category.
      */
     public byte[] transactions(List<Transaction> transactions) {
         String[] header = {
                 "date", "description", "category", "type",
-                "amount", "signed_amount", "account", "currency", "category_source"
+                "amount", "signed_amount", "your_share", "signed_your_share", "split_note",
+                "account", "currency", "category_source"
         };
         return toCsv(header, printer -> {
             for (Transaction t : transactions) {
+                double yourShare = t.splitShare() != null ? t.splitShare() : t.amount();
+                boolean debit = "debit".equals(t.type());
                 printer.printRecord(
                         t.date(),
                         t.description(),
                         t.category() == null ? "" : t.category(),
                         t.type(),
                         t.amount(),
-                        "debit".equals(t.type()) ? -t.amount() : t.amount(),
+                        debit ? -t.amount() : t.amount(),
+                        yourShare,
+                        debit ? -yourShare : yourShare,
+                        t.splitNote() == null ? "" : t.splitNote(),
                         t.accountName() == null ? "" : t.accountName(),
                         t.accountCurrency() == null ? "" : t.accountCurrency(),
                         t.categorySource() == null ? "" : t.categorySource()

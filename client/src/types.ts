@@ -12,6 +12,10 @@ export interface Transaction {
   account_id: number;
   account_name: string | null;
   account_currency: string | null;
+  /** What you're responsible for, out of `amount`. Null means unsplit -- the full amount is yours. */
+  split_share: number | null;
+  /** Who the rest belongs to; null whenever split_share is. */
+  split_note: string | null;
 }
 
 /** A transaction as the list endpoint returns it, with its tags attached. */

@@ -167,7 +167,11 @@ export function updateTransactionCategory(id: number, category: string) {
   return updateTransaction(id, { category });
 }
 
-/** Any subset of the editable fields; omitted fields are left unchanged. */
+/**
+ * Any subset of the editable fields; omitted fields are left unchanged. `split_share` is what
+ * actually sets or clears a split -- `null` clears the note along with it -- while `split_note`
+ * alone can only update the note on a split that already exists.
+ */
 export function updateTransaction(
   id: number,
   changes: {
@@ -176,12 +180,23 @@ export function updateTransaction(
     description?: string;
     amount?: number;
     type?: "debit" | "credit";
+    split_share?: number | null;
+    split_note?: string | null;
   }
 ) {
   return request<{ ok: true; transaction: Transaction; learnedMerchant: string }>(
     `/transactions/${id}`,
     { method: "PATCH", body: JSON.stringify(changes) }
   );
+}
+
+/** Sets or replaces a transaction's split; share must be between 0 and the transaction's amount. */
+export function setTransactionSplit(id: number, shareAmount: number, note: string) {
+  return updateTransaction(id, { split_share: shareAmount, split_note: note });
+}
+
+export function clearTransactionSplit(id: number) {
+  return updateTransaction(id, { split_share: null });
 }
 
 export function deleteTransaction(id: number) {

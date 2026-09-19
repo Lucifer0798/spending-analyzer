@@ -4,6 +4,7 @@ import {
   bulkAddTag,
   bulkCategorize,
   bulkDeleteTransactions,
+  clearTransactionSplit,
   deleteFilterPreset,
   deleteTransaction,
   exportUrl,
@@ -13,6 +14,7 @@ import {
   fetchTransactions,
   removeTransactionTag,
   saveFilterPreset,
+  setTransactionSplit,
   updateTransaction,
   updateTransactionCategory,
 } from "../api";
@@ -238,6 +240,42 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
       setError(e instanceof Error ? e.message : "Failed to save changes.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSetSplit = async (t: TransactionWithTags) => {
+    const fullAmount = currencyPrecise(t.amount, t.account_currency ?? undefined);
+    const shareInput = prompt(
+      `Your share of the ${fullAmount} charge:`,
+      String(t.split_share ?? t.amount)
+    );
+    if (shareInput === null) return;
+    const share = Number(shareInput);
+    if (!Number.isFinite(share) || share < 0 || share > t.amount) {
+      setError(`Split share must be a number between 0 and ${fullAmount}.`);
+      return;
+    }
+    // A cancelled note prompt still saves the share -- there's no reason to discard a share the
+    // user already confirmed just because they had nothing to add for who owes what.
+    const note = prompt("Note for who owes what (optional):", t.split_note ?? "") ?? "";
+
+    setError(null);
+    try {
+      await setTransactionSplit(t.id, share, note);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save the split.");
+    }
+  };
+
+  const handleClearSplit = async (t: TransactionWithTags) => {
+    if (!confirm(`Clear the split on "${t.description}"? The full amount will count as yours again.`)) return;
+    setError(null);
+    try {
+      await clearTransactionSplit(t.id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to clear the split.");
     }
   };
 
@@ -596,6 +634,30 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
                   >
                     {t.type === "credit" ? "+" : "-"}
                     {currencyPrecise(t.amount, t.account_currency ?? undefined)}
+                    <div className="mt-0.5 text-right text-[10px] font-normal normal-case text-slate-400">
+                      {t.split_share != null ? (
+                        <span title={t.split_note ?? undefined}>
+                          your {currencyPrecise(t.split_share, t.account_currency ?? undefined)}
+                          <button
+                            onClick={() => handleSetSplit(t)}
+                            className="ml-1 text-indigo-500 hover:underline"
+                          >
+                            edit
+                          </button>
+                          <button
+                            onClick={() => handleClearSplit(t)}
+                            className="ml-1 text-slate-400 hover:text-red-600"
+                            title="Clear split"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ) : (
+                        <button onClick={() => handleSetSplit(t)} className="text-indigo-500 hover:underline">
+                          split
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-2 text-sm">
                     <select

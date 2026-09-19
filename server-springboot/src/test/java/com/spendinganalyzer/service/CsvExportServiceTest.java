@@ -26,7 +26,16 @@ class CsvExportServiceTest {
     private static Transaction transaction(
             String date, String description, double amount, String type, String category, String account) {
         return new Transaction(
-                1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD");
+                1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD",
+                null, null);
+    }
+
+    private static Transaction splitTransaction(
+            String date, String description, double amount, String type, String category,
+            String account, Double splitShare, String splitNote) {
+        return new Transaction(
+                1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD",
+                splitShare, splitNote);
     }
 
     /** Reads an export back the way a spreadsheet would, so escaping is exercised rather than assumed. */
@@ -87,6 +96,32 @@ class CsvExportServiceTest {
         CSVRecord row = parse(csv).get(0);
         assertThat(row.get("category")).isEmpty();
         assertThat(row.get("account")).isEmpty();
+        assertThat(row.get("split_note")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an unsplit transaction's share is the full signed amount")
+    void unsplitTransactionSharesTheFullAmount() throws IOException {
+        byte[] csv = service.transactions(List.of(
+                transaction("2026-06-01", "DINNER", 90.00, "debit", "Dining & Coffee", "Visa")));
+
+        CSVRecord row = parse(csv).get(0);
+        assertThat(row.get("your_share")).isEqualTo("90.0");
+        assertThat(row.get("signed_your_share")).isEqualTo("-90.0");
+    }
+
+    @Test
+    @DisplayName("a split transaction's share and note reflect what was actually split")
+    void splitTransactionReportsShareAndNote() throws IOException {
+        byte[] csv = service.transactions(List.of(
+                splitTransaction("2026-06-01", "DINNER", 90.00, "debit", "Dining & Coffee", "Visa",
+                        30.00, "Split 3 ways with Alex and Sam")));
+
+        CSVRecord row = parse(csv).get(0);
+        assertThat(row.get("amount")).isEqualTo("90.0");
+        assertThat(row.get("your_share")).isEqualTo("30.0");
+        assertThat(row.get("signed_your_share")).isEqualTo("-30.0");
+        assertThat(row.get("split_note")).isEqualTo("Split 3 ways with Alex and Sam");
     }
 
     @Test

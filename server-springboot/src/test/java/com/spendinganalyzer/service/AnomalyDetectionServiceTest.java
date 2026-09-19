@@ -16,7 +16,7 @@ class AnomalyDetectionServiceTest {
 
     private static Transaction tx(String date, String description, double amount, String category) {
         return new Transaction(0, date, description, amount, "debit", category,
-                "ai", "batch", "2026-01-01", 1L, "Default", "USD");
+                "ai", "batch", "2026-01-01", 1L, "Default", "USD", null, null);
     }
 
     private static List<Transaction> groceries(double... amounts) {
