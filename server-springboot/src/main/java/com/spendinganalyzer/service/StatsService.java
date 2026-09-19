@@ -51,6 +51,15 @@ public class StatsService {
               AND COALESCE(c.is_transfer, 0) = 0
             """;
 
+    /**
+     * What actually counts as spent on a transaction — the split share when one is set, the
+     * full amount otherwise. Every total this service computes (category totals, monthly
+     * totals, the per-category series behind predictions) is built from this, not {@code
+     * t.amount} directly, so a split is reflected everywhere "spend" is measured without each
+     * call site needing its own COALESCE.
+     */
+    private static final String EFFECTIVE_AMOUNT = "COALESCE(t.split_share, t.amount)";
+
     /** Account, currency and date-range predicates, appended to {@link #SPEND_FILTER}. */
     private static String filters(Long accountId, DateRange range, String currency) {
         StringBuilder sql = new StringBuilder();
@@ -94,7 +103,7 @@ public class StatsService {
 
     public List<CategoryTotal> computeCategoryTotals(Long accountId, DateRange range, String currency) {
         String sql = "SELECT COALESCE(t.category, 'Uncategorized') AS category, "
-                + "ROUND(SUM(t.amount), 2) AS total, COUNT(*) AS count "
+                + "ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total, COUNT(*) AS count "
                 + SPEND_FILTER + filters(accountId, range, currency)
                 + " GROUP BY t.category ORDER BY total DESC";
 
@@ -191,7 +200,7 @@ public class StatsService {
     }
 
     public List<MonthlyTotal> computeMonthlyTotals(Long accountId, DateRange range, String currency) {
-        String sql = "SELECT strftime('%Y-%m', t.date) AS month, ROUND(SUM(t.amount), 2) AS total "
+        String sql = "SELECT strftime('%Y-%m', t.date) AS month, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total "
                 + SPEND_FILTER + filters(accountId, range, currency)
                 + " GROUP BY month ORDER BY month";
 
@@ -202,7 +211,7 @@ public class StatsService {
     public List<CategoryMonthlySeries> computeMonthlyCategorySeries(Long accountId, DateRange range) {
         record Row(String date, String category, double amount) {}
 
-        String sql = "SELECT t.date, t.category, t.amount "
+        String sql = "SELECT t.date, t.category, " + EFFECTIVE_AMOUNT + " AS amount "
                 + SPEND_FILTER + " AND t.category IS NOT NULL" + filters(accountId, range, null);
 
         List<Row> rows = jdbc.query(sql, params(accountId, range, null), (rs, rowNum) ->

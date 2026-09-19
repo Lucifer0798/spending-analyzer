@@ -103,6 +103,13 @@ public class TransactionController {
      *
      * <p>Changing the category also teaches merchant memory — that correction is what makes
      * the fix durable, otherwise the same merchant is re-guessed on the next import.
+     *
+     * <p>{@code split_share}/{@code split_note} work like a category rename in one respect and
+     * differently in another: like every other field here, omitting them entirely leaves an
+     * existing split untouched. But {@code split_share} is what actually sets or clears the
+     * split — sending it as {@code null} clears both columns together, since a note with no
+     * share is meaningless — while {@code split_note} alone can only update the note on a split
+     * that already exists.
      */
     @PatchMapping("/transactions/{id}")
     public ResponseEntity<?> update(@PathVariable long id, @RequestBody Map<String, Object> body) {
@@ -160,9 +167,38 @@ public class TransactionController {
             changedAnything = true;
         }
 
+        if (body.containsKey("split_share")) {
+            Object rawShare = body.get("split_share");
+            if (rawShare == null) {
+                repository.updateSplit(id, null, null);
+            } else if (rawShare instanceof Number n) {
+                double share = n.doubleValue();
+                double effectiveAmount = amount != null ? amount : existing.get().amount();
+                if (share < 0 || share > effectiveAmount) {
+                    return ResponseEntity.badRequest().body(new ErrorResponse(
+                            "split_share must be between 0 and the transaction amount (" + effectiveAmount + ")."));
+                }
+                String note = body.containsKey("split_note")
+                        ? asTrimmedString(body.get("split_note"))
+                        : existing.get().splitNote();
+                repository.updateSplit(id, share, (note == null || note.isEmpty()) ? null : note);
+            } else {
+                return ResponseEntity.badRequest().body(new ErrorResponse("split_share must be a number or null."));
+            }
+            changedAnything = true;
+        } else if (body.containsKey("split_note")) {
+            if (existing.get().splitShare() == null) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("Set split_share before adding a note."));
+            }
+            String note = asTrimmedString(body.get("split_note"));
+            repository.updateSplit(id, existing.get().splitShare(), (note == null || note.isEmpty()) ? null : note);
+            changedAnything = true;
+        }
+
         if (!changedAnything) {
             return ResponseEntity.badRequest().body(new ErrorResponse(
-                    "Nothing to update. Supply at least one of: category, date, description, amount, type."));
+                    "Nothing to update. Supply at least one of: category, date, description, amount, type, split_share, split_note."));
         }
 
         Transaction updated = repository.findById(id).orElseThrow();

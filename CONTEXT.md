@@ -651,6 +651,38 @@ only relabels its numbers going forward; nothing recomputes past amounts, since 
 exchange rate to recompute them with. Validation accepts any code `java.util.Currency` recognizes,
 not just `Account.CURRENCIES` — that list is the dropdown's curated shortlist, not the whole rule.
 
+**A split doesn't touch the stored `amount` — it adds a separate `split_share`.** `amount` is
+always what the bank actually charged; splitting a transaction never rewrites it, the same way
+categorizing one never rewrites its description. `split_share`/`split_note` are two new nullable
+columns on `transactions` (`V17__transaction_splits.sql`), always set and cleared together since
+a note with no share is meaningless. `TransactionController.update` treats `split_share` as the
+field that actually sets or clears the pair — sending it `null` clears the note along with it —
+while `split_note` alone can only edit the note on a split that already exists, mirroring how
+`CategoryController.update` uses `body.containsKey("group_name")` to decide whether a `PATCH`
+touches a field at all versus explicitly clearing it.
+
+**"Spend" is computed from one `EFFECTIVE_AMOUNT` SQL fragment, not `t.amount`, everywhere
+`StatsService` totals a category or a month.** `COALESCE(t.split_share, t.amount)` replaces
+`t.amount` in `computeCategoryTotals`, `computeMonthlyTotals`, and `computeMonthlyCategorySeries`
+— the three queries every "spend" number in this app is built from (the dashboard's charts,
+budgets via `computeCategoryTotals`, period comparison, the categories/monthly CSV exports, and
+the per-category series predictions read). Centralizing it there, rather than patching each call
+site, is only possible because this app already routes every aggregate through `StatsService` —
+the same chokepoint `resolveCurrency` already exploits for the mixed-currency check. Anomaly
+detection and recurring detection deliberately do *not* get this treatment: both read `Transaction
+.amount()` directly rather than through `StatsService`, and both are about recognizing what a
+charge *is* (a subscription's cadence, an outlier against a category's typical amount), not what
+share of it belongs to the signed-in person — using the split share there would flag a normal
+$90 dinner as a shrunken $30 "typical" amount for reasons that have nothing to do with spending
+behavior.
+
+**The transactions CSV carries both the actual charge and your share, never just one.**
+`amount`/`signed_amount` stay the literal charge, unaffected by a split — an export is supposed to
+match what the bank statement said. `your_share`/`signed_your_share` sit alongside, falling back
+to the full amount when there's no split, the same fallback `EFFECTIVE_AMOUNT` uses — so a
+spreadsheet `SUM` over `signed_your_share` reproduces exactly what the dashboard already shows as
+total spend, without the sheet author needing to know which rows happen to be split.
+
 **Exports are links, not fetches.** `/api/export/*.csv` are plain GETs returning an attachment,
 so the frontend renders an `<a download>` and the browser does the rest. Fetching them into a blob
 would discard the `Content-Disposition` filename and force the client to invent one. They are also

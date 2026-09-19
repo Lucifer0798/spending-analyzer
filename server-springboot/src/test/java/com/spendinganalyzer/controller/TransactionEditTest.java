@@ -113,6 +113,104 @@ class TransactionEditTest {
         assertThat(merchants.findByKey("EDIT ME LTD")).isEmpty();
     }
 
+    // --- splitting ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("sets a split share and note")
+    void setsASplit() {
+        ResponseEntity<?> response = controller.update(transactionId,
+                body("split_share", 14.00, "split_note", "Split 3 ways with Alex and Sam"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        Transaction updated = reload();
+        assertThat(updated.splitShare()).isEqualTo(14.00);
+        assertThat(updated.splitNote()).isEqualTo("Split 3 ways with Alex and Sam");
+        assertThat(updated.amount()).isEqualTo(42.00); // the full charge is untouched
+    }
+
+    @Test
+    @DisplayName("a share can be set with no note yet")
+    void splitShareWithoutANoteYet() {
+        controller.update(transactionId, body("split_share", 14.00));
+
+        Transaction updated = reload();
+        assertThat(updated.splitShare()).isEqualTo(14.00);
+        assertThat(updated.splitNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("updating the note alone leaves an existing share untouched")
+    void updatingNoteAloneLeavesShareUntouched() {
+        controller.update(transactionId, body("split_share", 14.00, "split_note", "First note"));
+
+        controller.update(transactionId, body("split_note", "Corrected note"));
+
+        Transaction updated = reload();
+        assertThat(updated.splitShare()).isEqualTo(14.00);
+        assertThat(updated.splitNote()).isEqualTo("Corrected note");
+    }
+
+    @Test
+    @DisplayName("changing the share alone carries the existing note forward")
+    void changingShareAloneKeepsTheExistingNote() {
+        controller.update(transactionId, body("split_share", 14.00, "split_note", "Split with Sam"));
+
+        controller.update(transactionId, body("split_share", 21.00));
+
+        Transaction updated = reload();
+        assertThat(updated.splitShare()).isEqualTo(21.00);
+        assertThat(updated.splitNote()).isEqualTo("Split with Sam");
+    }
+
+    @Test
+    @DisplayName("an explicit null share clears both the share and the note together")
+    void nullShareClearsSplit() {
+        controller.update(transactionId, body("split_share", 14.00, "split_note", "Split with Sam"));
+
+        controller.update(transactionId, body("split_share", null));
+
+        Transaction updated = reload();
+        assertThat(updated.splitShare()).isNull();
+        assertThat(updated.splitNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("a zero share is allowed -- the whole charge belongs to someone else")
+    void zeroShareIsAllowed() {
+        assertThat(controller.update(transactionId, body("split_share", 0.0)).getStatusCode().value())
+                .isEqualTo(200);
+        assertThat(reload().splitShare()).isEqualTo(0.0);
+    }
+
+    @Test
+    @DisplayName("rejects a share outside the transaction's amount")
+    void rejectsShareOutsideAmount() {
+        assertThat(controller.update(transactionId, body("split_share", -1.0)).getStatusCode().value())
+                .isEqualTo(400);
+        assertThat(controller.update(transactionId, body("split_share", 100.0)).getStatusCode().value())
+                .isEqualTo(400);
+        assertThat(reload().splitShare()).isNull();
+    }
+
+    @Test
+    @DisplayName("a share is validated against a same-request amount change, not the old amount")
+    void shareValidatedAgainstNewAmount() {
+        // 42 -> 20 in the same request; 14 is valid against the new amount, invalid against the old.
+        ResponseEntity<?> response = controller.update(transactionId,
+                body("amount", 20.00, "split_share", 14.00));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(reload().splitShare()).isEqualTo(14.00);
+    }
+
+    @Test
+    @DisplayName("a note with no share, ever, is rejected")
+    void rejectsNoteWithoutAShare() {
+        assertThat(controller.update(transactionId, body("split_note", "Split with Sam")).getStatusCode().value())
+                .isEqualTo(400);
+        assertThat(reload().splitNote()).isNull();
+    }
+
     // --- validation -------------------------------------------------------------
 
     @Test

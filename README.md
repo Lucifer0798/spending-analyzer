@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V16)
-  src/test/                 369 tests
+    db/migration/           Versioned schema migrations (V1–V17)
+  src/test/                 385 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -205,7 +205,7 @@ Thirteen tables, all created automatically:
 | `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V17__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V18__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -243,7 +243,7 @@ All endpoints live under `/api`.
 |---|---|---|
 | `POST` | `/upload` | Import a statement (`?accountId=`, `?skipDuplicates=`) |
 | `GET` | `/transactions` | List transactions (filter by category, month, account, tag, description search) |
-| `PATCH` | `/transactions/{id}` | Change a category — also teaches merchant memory |
+| `PATCH` | `/transactions/{id}` | Change a category (also teaches merchant memory), or set/clear a split |
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
@@ -259,7 +259,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
 | `GET` `DELETE` | `/tags` `/tags/{name}` | Every tag with its usage count, or delete one everywhere it's applied |
-| `GET` | `/export/transactions.csv` | Download transactions, filters and all |
+| `GET` | `/export/transactions.csv` | Download transactions, filters and all — including each one's split share and note |
 | `GET` | `/export/categories.csv` | Download spend per category |
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
@@ -462,6 +462,20 @@ truncated export is worse than none. Amounts are stored unsigned with direction 
 alongside: negative for debits. The files start with a byte-order mark, without which Excel reads
 them in the OS codepage and mangles any accented merchant name.
 
+**A split transaction has one stored amount and a separate "your share."** Splitting a $90 dinner
+three ways doesn't change what was actually charged — `amount` stays $90, exactly what the bank
+shows — it adds an optional `split_share` (what you're responsible for) and a free-text
+`split_note` for who owes what. Every total this app computes (the dashboard's charts, budgets,
+period comparison, the categories and monthly CSV exports, the numbers predictions are built
+from) is measured from the share when one is set, the full amount otherwise — the same fallback
+everywhere, so a category with one split transaction in it doesn't suddenly disagree with itself
+depending on which chart you're looking at. The transactions CSV export carries both: `amount`/
+`signed_amount` are still the actual charge, and a `your_share`/`signed_your_share` pair sits
+alongside for a spreadsheet SUM that matches what the app already shows as "spend." Recurring
+detection and anomaly detection are deliberately left out of this — they're about recognizing
+*what a charge is*, not what your portion of it happens to be, so they still compare against the
+full amount.
+
 **Savings goals track logged contributions, not a real balance.** Budgets, recurring detection,
 and everything else in this app is derived from categorized transactions — but nothing here
 represents an account's actual balance, so there's no number to point a "how much have I saved"
@@ -568,7 +582,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (369).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (385).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -641,6 +655,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Shared/split transactions~~ — mark a transaction as split between people and only your share
+  counts toward totals, budgets, and exports; a free-text note records who owes what
 - ~~Custom date-range comparison~~ — the dashboard's comparison card can compare the active
   range against any independently-chosen range instead of only the auto-derived previous period
 - ~~Category groups~~ — roll several categories up under one label (e.g. "Food" over Groceries

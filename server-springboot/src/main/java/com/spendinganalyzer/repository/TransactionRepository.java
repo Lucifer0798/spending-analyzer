@@ -40,8 +40,15 @@ public class TransactionRepository {
             rs.getString("created_at"),
             rs.getLong("account_id"),
             rs.getString("account_name"),
-            rs.getString("account_currency")
+            rs.getString("account_currency"),
+            nullableDouble(rs, "split_share"),
+            rs.getString("split_note")
     );
+
+    private static Double nullableDouble(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        double v = rs.getDouble(column);
+        return rs.wasNull() ? null : v;
+    }
 
     public void insertBatch(List<ParsedTransaction> transactions, String batchId, long accountId) {
         String sql = """
@@ -339,14 +346,33 @@ public class TransactionRepository {
                         .addValue("categorySource", t.categorySource())
                         .addValue("batchId", t.uploadBatchId())
                         .addValue("createdAt", t.createdAt())
-                        .addValue("accountId", t.accountId()))
+                        .addValue("accountId", t.accountId())
+                        .addValue("splitShare", t.splitShare())
+                        .addValue("splitNote", t.splitNote()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
                 INSERT INTO transactions
-                  (id, date, description, amount, type, category, category_source, upload_batch_id, created_at, account_id)
+                  (id, date, description, amount, type, category, category_source, upload_batch_id, created_at,
+                   account_id, split_share, split_note)
                 VALUES
-                  (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt, :accountId)
+                  (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt,
+                   :accountId, :splitShare, :splitNote)
                 """, params);
+    }
+
+    /**
+     * Sets or clears the split -- {@code splitShare} null clears both columns together, since a
+     * note with no share is meaningless. The controller resolves what the final pair should be
+     * (carrying an existing note forward, validating the share against the amount) before calling
+     * this; the repository just writes whatever it's given.
+     */
+    public boolean updateSplit(long id, Double splitShare, String splitNote) {
+        return jdbc.update(
+                "UPDATE transactions SET split_share = :splitShare, split_note = :splitNote WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("splitShare", splitShare)
+                        .addValue("splitNote", splitNote)) > 0;
     }
 }
