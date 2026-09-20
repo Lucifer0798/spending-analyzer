@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { clearRecurringOverride, fetchRecurring, saveRecurringOverride } from "../api";
-import type { DateRangeValue, RecurringResponse, RecurringSeries } from "../types";
+import { clearRecurringOverride, fetchRecurring, fetchRecurringIncome, saveRecurringOverride } from "../api";
+import type { DateRangeValue, RecurringIncomeResponse, RecurringResponse, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
 
 interface Props {
@@ -80,7 +80,135 @@ function RecurringActions({
   );
 }
 
-export function RecurringPage({ accountId, range }: Props) {
+function monthLabel(month: string) {
+  const [year, m] = month.split("-");
+  const date = new Date(Number(year), Number(m) - 1, 1);
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+/**
+ * Regular deposits, detected the exact same way the charges above are -- a separate section
+ * rather than one merged list, since "cadence + steady amount" means something different on the
+ * credit side (a paycheck, not a subscription) and has no cancel/exclude actions to offer.
+ */
+function RecurringIncomeSection({ accountId, range }: Props) {
+  const [data, setData] = useState<RecurringIncomeResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Synchronizing with an external system on mount and on every filter change; there is no
+    // render-time equivalent for "start loading before the fetch resolves."
+    // oxlint-disable-next-line react/set-state-in-effect
+    setLoading(true);
+    fetchRecurringIncome(accountId, range)
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [accountId, range]);
+
+  if (loading) {
+    return <p className="mt-10 text-sm text-slate-500">Finding recurring income…</p>;
+  }
+
+  const series = data?.recurring ?? [];
+  const cur = data?.currency ?? "USD";
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Recurring income</h2>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+        Deposits that repeat on a regular schedule for a consistent amount — paychecks and the
+        like. A one-off deposit, or one that varies each time, won't show up here.
+      </p>
+
+      {data?.mixedCurrencies ? (
+        <p className="mt-6 rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500 dark:bg-slate-900">
+          These accounts use different currencies. Select one account above to see its recurring
+          income.
+        </p>
+      ) : series.length === 0 ? (
+        <p className="mt-6 rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500 dark:bg-slate-900">
+          No recurring income detected yet. This needs at least three deposits from the same
+          source at a steady interval and amount.
+        </p>
+      ) : (
+        <>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Per month</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                {currency(data!.totalMonthlyEquivalent, 0, cur)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">average, not a prediction for any one month</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Received in {monthLabel(data!.month)}
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                {currency(data!.actualThisMonth, 0, cur)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">actual income that month, recurring or not</p>
+            </div>
+          </div>
+
+          <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-900">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Source</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Cadence</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500">Typical</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500">Per year</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Next due</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-slate-500">Seen</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
+                {series.map((r) => (
+                  <tr key={r.merchant}>
+                    <td className="px-4 py-2">
+                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.merchant}</div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
+                      {CADENCE_LABELS[r.cadence] ?? r.cadence}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right text-sm font-medium text-slate-800 dark:text-slate-200">
+                      {currencyPrecise(r.average_amount, cur)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-600 dark:text-slate-400">
+                      {currency(r.annualized_cost, 0, cur)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
+                      {r.next_expected_date}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-sm">
+                      <span className="text-slate-600 dark:text-slate-400">{r.occurrences}×</span>
+                      <span
+                        className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
+                          CONFIDENCE_STYLES[r.confidence]
+                        }`}
+                      >
+                        {r.confidence}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The original page content -- self-contained with its own loading/error state so a slow or
+ * failed fetch here doesn't block {@link RecurringIncomeSection} from rendering below it; the
+ * two sections load independently.
+ */
+function RecurringChargesSection({ accountId, range }: Props) {
   const [data, setData] = useState<RecurringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,15 +228,13 @@ export function RecurringPage({ accountId, range }: Props) {
   useEffect(load, [accountId, range]);
 
   if (loading) {
-    return <div className="px-4 py-10 text-center text-sm text-slate-500">Finding recurring charges…</div>;
+    return <p className="mt-6 text-sm text-slate-500">Finding recurring charges…</p>;
   }
 
   if (error) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-          {error}
-        </div>
+      <div className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+        {error}
       </div>
     );
   }
@@ -117,13 +243,7 @@ export function RecurringPage({ accountId, range }: Props) {
   const cur = data?.currency ?? "USD";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Recurring charges</h1>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        Charges that repeat on a regular schedule for a consistent amount. Merchants you visit often
-        but spend a different amount at each time — groceries, coffee — are deliberately excluded.
-      </p>
-
+    <>
       {data?.mixedCurrencies ? (
         <p className="mt-8 rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500 dark:bg-slate-900">
           These accounts use different currencies. Select one account above to see its recurring
@@ -217,6 +337,21 @@ export function RecurringPage({ accountId, range }: Props) {
           </p>
         </>
       )}
+    </>
+  );
+}
+
+export function RecurringPage({ accountId, range }: Props) {
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-8">
+      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Recurring charges</h1>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+        Charges that repeat on a regular schedule for a consistent amount. Merchants you visit often
+        but spend a different amount at each time — groceries, coffee — are deliberately excluded.
+      </p>
+
+      <RecurringChargesSection accountId={accountId} range={range} />
+      <RecurringIncomeSection accountId={accountId} range={range} />
     </div>
   );
 }

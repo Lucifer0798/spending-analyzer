@@ -22,6 +22,7 @@ import type {
   NetWorthResponse,
   PredictionsResponse,
   RecurringAction,
+  RecurringIncomeResponse,
   RecurringOverride,
   RecurringResponse,
   SummaryResponse,
@@ -504,6 +505,21 @@ export function fetchComparison(
 
 export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<RecurringResponse>(`/recurring${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/**
+ * `range` narrows which income transactions feed detection, same as {@link fetchRecurring}.
+ * Omit `month` to get the newest month with income data for `actualThisMonth`, independent of
+ * whatever `range` is filtering the detected list to.
+ */
+export function fetchRecurringIncome(
+  accountId: number | null,
+  range: DateRangeValue = ALL_TIME,
+  month?: string
+) {
+  return request<RecurringIncomeResponse>(
+    `/recurring-income${qs({ accountId, from: range.from, to: range.to, month })}`
+  );
 }
 
 /** Transactions whose amount stood out against their own category's typical spend. */

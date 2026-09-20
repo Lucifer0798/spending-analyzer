@@ -60,6 +60,15 @@ public class StatsService {
      */
     private static final String EFFECTIVE_AMOUNT = "COALESCE(t.split_share, t.amount)";
 
+    /** The mirror of {@link #SPEND_FILTER} for the credit side: deposits in income categories. */
+    private static final String INCOME_FILTER = """
+            FROM transactions t
+            LEFT JOIN categories c ON c.name = t.category
+            LEFT JOIN accounts a ON a.id = t.account_id
+            WHERE t.type = 'credit'
+              AND COALESCE(c.is_income, 0) = 1
+            """;
+
     /** Account, currency and date-range predicates, appended to {@link #SPEND_FILTER}. */
     private static String filters(Long accountId, DateRange range, String currency) {
         StringBuilder sql = new StringBuilder();
@@ -263,6 +272,28 @@ public class StatsService {
         return jdbc.query(sql, params(accountId, DateRange.ALL, null), (rs, rowNum) ->
                         new DateRange(rs.getString("min_date"), rs.getString("max_date")))
                 .stream().findFirst().orElse(DateRange.ALL);
+    }
+
+    /**
+     * Total income received in a range — the credit-side mirror of a category total, but
+     * summed across every income category at once since "how much came in" doesn't need a
+     * per-category breakdown the way spend does. Uses {@link #EFFECTIVE_AMOUNT} too: a deposit
+     * split with someone else counts only your share, same as a shared expense.
+     */
+    public double computeIncomeTotal(Long accountId, DateRange range) {
+        String sql = "SELECT ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) " + INCOME_FILTER + filters(accountId, range, null);
+        Double total = jdbc.queryForObject(sql, params(accountId, range, null), Double.class);
+        return total != null ? total : 0.0;
+    }
+
+    /**
+     * The newest date any income has landed on, for defaulting "which month" the same way
+     * {@code BudgetService.resolveMonth} does for budgets — statements land well after the
+     * fact, so today's calendar date is the wrong anchor.
+     */
+    public String latestIncomeDate(Long accountId) {
+        String sql = "SELECT MAX(t.date) " + INCOME_FILTER + filters(accountId, DateRange.ALL, null);
+        return jdbc.queryForObject(sql, params(accountId, DateRange.ALL, null), String.class);
     }
 
     /** Projects the next value of a series by least-squares fit. Package-private for testing. */

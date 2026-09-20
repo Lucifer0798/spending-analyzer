@@ -150,6 +150,23 @@ export interface RecurringResponse {
   mixedCurrencies: boolean;
 }
 
+/**
+ * The mirror of RecurringResponse for the credit side. `totalMonthlyEquivalent` is an average
+ * (annualized income / 12), not a prediction for `month` specifically — `actualThisMonth` is
+ * what actually came in during `month`, put alongside it rather than compared outright.
+ */
+export interface RecurringIncomeResponse {
+  recurring: RecurringSeries[];
+  totalAnnualizedIncome: number;
+  totalMonthlyEquivalent: number;
+  /** The month `actualThisMonth` was measured over — the newest with income data, by default. */
+  month: string;
+  actualThisMonth: number;
+  currency: string;
+  /** True when "all accounts" spans more than one currency — recurring is left empty above. */
+  mixedCurrencies: boolean;
+}
+
 /** A transaction whose amount stood out against its own category's typical spend. */
 export interface SpendingAnomaly {
   transactionId: number;

@@ -316,6 +316,30 @@ public class TransactionRepository {
         return jdbc.query(sql.toString(), params, ROW_MAPPER);
     }
 
+    /** All credit rows in income categories, the mirror of {@link #findSpendingTransactions} for detecting recurring income. */
+    public List<Transaction> findIncomeTransactions(Long accountId, DateRange range) {
+        StringBuilder sql = new StringBuilder(SELECT_WITH_ACCOUNT).append("""
+                 LEFT JOIN categories c ON c.name = t.category
+                 WHERE t.type = 'credit'
+                   AND COALESCE(c.is_income, 0) = 1
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (accountId != null) {
+            sql.append(" AND t.account_id = :accountId");
+            params.addValue("accountId", accountId);
+        }
+        if (range != null && range.from() != null) {
+            sql.append(" AND t.date >= :from");
+            params.addValue("from", range.from());
+        }
+        if (range != null && range.to() != null) {
+            sql.append(" AND t.date <= :to");
+            params.addValue("to", range.to());
+        }
+        sql.append(" ORDER BY t.date");
+        return jdbc.query(sql.toString(), params, ROW_MAPPER);
+    }
+
     public void reassignAccount(long fromAccountId, long toAccountId) {
         jdbc.update("UPDATE transactions SET account_id = :to WHERE account_id = :from",
                 new MapSqlParameterSource().addValue("to", toAccountId).addValue("from", fromAccountId));
