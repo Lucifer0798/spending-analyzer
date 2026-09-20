@@ -160,7 +160,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V17)
-  src/test/                 385 tests
+  src/test/                 399 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -251,6 +251,7 @@ All endpoints live under `/api`.
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
 | `GET` | `/recurring` | Detected recurring charges |
+| `GET` | `/recurring-income` | Detected recurring income, plus actual income received in a given month |
 | `GET` | `/anomalies` | Transactions well above their category's typical amount |
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
 | `GET` | `/predictions` | Last saved forecast |
@@ -299,6 +300,18 @@ merchant name recurring detection and merchant memory already agree on. "Cancel"
 that stays next to the series until you clear it; "exclude" hides the merchant from the list for
 good. Both are set from the Recurring page, in context next to the charge they apply to, but
 listed and cleared from Manage — the same split merchant memory's own rules follow.
+
+**Recurring income reuses the exact same detector, fed credits instead of debits.** A paycheck
+is "a steady rhythm and a steady amount" just as much as a subscription is, so
+`RecurringDetectionService` needed no changes at all — only a mirrored query (credits in income
+categories, rather than debits outside them) to feed it. It has no cancel/exclude override,
+unlike spending recurring: "cancel" describes dropping a subscription, which has no income
+equivalent, and a false-positive income source is rare enough on a personal account not to need
+its own management screen. The "per month" figure is the same kind of average
+`totalMonthlyEquivalent` already is for spending (annualized ÷ 12) — not a claim that this
+specific month will see that much, which is what the separate "received this month" figure is
+for. The two are shown side by side rather than compared outright, since a quarterly bonus
+averaged into a monthly figure will honestly disagree with most months by design.
 
 **Anomaly detection compares a transaction to its own category's median, not a mean.** A single
 $400 grocery run would drag a category's *average* up toward itself — the very transaction being
@@ -582,7 +595,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (385).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (399).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -655,6 +668,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Recurring income tracking~~ — regular deposits (paychecks and the like) are detected the same
+  way recurring charges are, with average-per-month income shown alongside what actually came in
 - ~~Shared/split transactions~~ — mark a transaction as split between people and only your share
   counts toward totals, budgets, and exports; a free-text note records who owes what
 - ~~Custom date-range comparison~~ — the dashboard's comparison card can compare the active

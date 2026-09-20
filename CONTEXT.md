@@ -264,6 +264,53 @@ Both look the override up by `s.merchant()`, which is already the normalized key
 > it," and guessing wrong silently would be worse than a stale row sitting in a list built
 > specifically so stale rows have somewhere to be found and removed.
 
+**Recurring income needed zero changes to `RecurringDetectionService` itself.** `detect(List
+<Transaction>)` was already fully agnostic about spending vs. income — cadence and consistent
+amount are the only signals it looks at, computed the same way regardless of what the list
+contains. The only new code is `TransactionRepository.findIncomeTransactions`, the mirror of
+`findSpendingTransactions` (credits in income categories, instead of debits outside them), and
+`InsightsController.recurringIncome` wiring that list into the same detector. This is the payoff
+of the detector taking a plain `List<Transaction>` rather than querying for spending transactions
+itself.
+
+**Recurring income deliberately has no cancel/exclude override, unlike `/recurring`.** "Cancel"
+describes dropping a subscription you're paying for; there's no income-side equivalent of that
+intent. "Exclude" (a false positive) is still theoretically possible, but a personal account has
+far fewer income sources than spending merchants, making a whole override management screen for
+it not worth building until it's actually needed. `RecurringSeries` objects returned from
+`recurringIncome()` are used exactly as `detect()` produces them, with no `withOverride(...)`
+pass the way `/recurring` has.
+
+**`actualThisMonth` and `totalMonthlyEquivalent` are deliberately not compared against each
+other.** `totalMonthlyEquivalent` is `annualizedIncome / 12`, the exact same smoothing
+`/recurring`'s figure of the same name already does for spending — an average, not a claim that
+the measured month specifically will see that much. A quarterly bonus averaged into a monthly
+figure will honestly disagree with most individual months by design, so presenting the two as
+"expected vs. actual" with an implied should-match relationship would be a precision the detector
+doesn't have. They're computed independently and shown side by side instead:
+`StatsService.computeIncomeTotal` sums actual income for one resolved month (mirroring
+`BudgetService.resolveMonth`'s "newest month with data, not today" default, via
+`StatsService.latestIncomeDate`), while the recurring list and its monthly-equivalent figure are
+computed from whatever `from`/`to` range the page has active, same as `/recurring`'s own list.
+
+**`computeIncomeTotal`/`latestIncomeDate` use `jdbc.queryForObject`, not
+`jdbc.query(...).stream().findFirst()`.** The latter is a real trap for a nullable scalar
+aggregate: `Stream.findFirst()` wraps its result in `Optional.of(...)`, which throws
+`NullPointerException` outright when the single row's mapped value is itself `null` — exactly
+what `MAX(t.date)` produces when there's no income yet. `availableRange` gets away with the
+`.stream().findFirst()` pattern because its `RowMapper` wraps the nullable columns inside a
+`DateRange` record — the record itself is never null, only its fields are — but a bare nullable
+`String`/`Double` result has no such wrapper to hide behind. `queryForObject` doesn't have this
+problem: for a single-row, single-column aggregate, it returns `null` directly rather than
+throwing, which is exactly what every other single-scalar query in this codebase
+(`CategoryRepository.exists`, `BudgetRepository`'s counts) already uses it for.
+
+**`EFFECTIVE_AMOUNT` (the split-share fallback) applies to income the same as it does to
+spend.** `computeIncomeTotal` sums `COALESCE(t.split_share, t.amount)`, not `t.amount` — a
+deposit split with someone else (a shared reimbursement, a joint account payroll) counts only
+your share toward "actual income," the same symmetry a shared expense already gets. No special
+case was needed to make this true; it fell out of reusing the same constant.
+
 **`AnomalyDetectionService` uses the median, not the mean, deliberately.** A category's "typical"
 amount has to survive the very outlier it's being used to judge — a mean would get dragged toward
 a $400 charge sitting in an otherwise-$80 category, quietly raising the bar the $400 charge itself

@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -179,6 +181,77 @@ public class InsightsController {
                 "currency", currency,
                 "mixedCurrencies", false
         );
+    }
+
+    /**
+     * Regular deposits — paychecks, and anything else that lands on a steady schedule for a
+     * steady amount — detected with the exact same {@link RecurringDetectionService} used for
+     * spending, just fed income transactions instead. Unlike {@code /recurring}, there is no
+     * cancel/exclude override here: "cancel" describes a subscription you're dropping, which has
+     * no income equivalent, and a false-positive income source is rare enough on a personal
+     * account not to need its own management screen yet.
+     *
+     * <p>{@code totalMonthlyEquivalent} is the same average-per-month figure {@code /recurring}
+     * already reports (annualized cost divided by twelve) — not a prediction that this specific
+     * month will see that much, which is what {@code actualThisMonth} is for. The two are put
+     * side by side rather than compared outright, since a quarterly bonus averaged into a
+     * monthly figure will honestly disagree with most months by design.
+     */
+    @GetMapping("/recurring-income")
+    public Map<String, Object> recurringIncome(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String month
+    ) {
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return Map.of(
+                    "recurring", List.of(),
+                    "totalAnnualizedIncome", 0,
+                    "totalMonthlyEquivalent", 0,
+                    "month", "",
+                    "actualThisMonth", 0,
+                    "currency", "",
+                    "mixedCurrencies", true
+            );
+        }
+
+        DateRange range = DateRange.of(from, to);
+        List<RecurringSeries> series = recurringDetectionService.detect(
+                transactionRepository.findIncomeTransactions(accountId, range));
+        double totalAnnualized = series.stream().mapToDouble(RecurringSeries::annualizedCost).sum();
+
+        String resolvedMonth = resolveIncomeMonth(accountId, month);
+        double actualThisMonth = statsService.computeIncomeTotal(accountId, monthRange(resolvedMonth));
+
+        return Map.of(
+                "recurring", series,
+                "totalAnnualizedIncome", Math.round(totalAnnualized * 100.0) / 100.0,
+                "totalMonthlyEquivalent", Math.round((totalAnnualized / 12.0) * 100.0) / 100.0,
+                "month", resolvedMonth,
+                "actualThisMonth", actualThisMonth,
+                "currency", currency,
+                "mixedCurrencies", false
+        );
+    }
+
+    /** Same "newest month with data, not today" default {@code BudgetService.resolveMonth} uses. */
+    private String resolveIncomeMonth(Long accountId, String requested) {
+        if (requested != null && !requested.isBlank()) {
+            try {
+                return YearMonth.parse(requested.trim()).toString();
+            } catch (DateTimeParseException e) {
+                throw new IllegalArgumentException("'month' must be in YYYY-MM form, got: " + requested);
+            }
+        }
+        String latest = statsService.latestIncomeDate(accountId);
+        return latest != null ? latest.substring(0, 7) : YearMonth.now().toString();
+    }
+
+    private static DateRange monthRange(String month) {
+        YearMonth ym = YearMonth.parse(month);
+        return new DateRange(ym.atDay(1).toString(), ym.atEndOfMonth().toString());
     }
 
     /**
