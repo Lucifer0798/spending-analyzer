@@ -384,9 +384,16 @@ export interface BudgetEscalation {
 /**
  * Upsert: sets the target for a category whether or not one already exists. Omitting
  * `escalation` clears any schedule the budget previously had -- the whole row is replaced,
- * same as the target itself.
+ * same as the target itself. `rollover: true` turns on carrying unused budget (or overspend)
+ * into the next month; the server manages the actual start month, preserving it across a
+ * resave so re-enabling never loses already-accumulated carry-in.
  */
-export function setBudget(category: string, monthlyLimit: number, escalation?: BudgetEscalation) {
+export function setBudget(
+  category: string,
+  monthlyLimit: number,
+  escalation?: BudgetEscalation,
+  rollover?: boolean
+) {
   return request<Budget>("/budgets", {
     method: "POST",
     body: JSON.stringify({
@@ -396,6 +403,7 @@ export function setBudget(category: string, monthlyLimit: number, escalation?: B
       escalation_value: escalation?.value ?? null,
       escalation_frequency_months: escalation?.frequencyMonths ?? null,
       escalation_start_month: escalation?.startMonth ?? null,
+      rollover: rollover ?? false,
     }),
   });
 }

@@ -1,6 +1,7 @@
 package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.dto.ErrorResponse;
+import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.service.BudgetService;
@@ -114,8 +115,23 @@ public class BudgetController {
             }
         }
 
+        // Unlike escalation, rollover has no value of its own to configure -- "rollover: true"
+        // is the whole request. Re-enabling an already-enabled rollover preserves its original
+        // start month rather than resetting to now, so a resave (changing the limit, say) never
+        // discards months of already-accumulated carry-in; the client never needs to know or
+        // resend that date itself.
+        boolean rolloverRequested = Boolean.TRUE.equals(body.get("rollover"));
+        String rolloverStartMonth = null;
+        if (rolloverRequested) {
+            String existingStart = budgets.findByCategory(category)
+                    .map(Budget::rolloverStartMonth)
+                    .orElse(null);
+            rolloverStartMonth = existingStart != null ? existingStart : YearMonth.now().toString();
+        }
+
         return ResponseEntity.ok(budgets.upsert(
-                category, limit, escalationType, escalationValue, escalationFrequencyMonths, escalationStartMonth));
+                category, limit, escalationType, escalationValue, escalationFrequencyMonths, escalationStartMonth,
+                rolloverStartMonth));
     }
 
     @DeleteMapping("/budgets/{id}")

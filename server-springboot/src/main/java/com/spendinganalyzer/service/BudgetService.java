@@ -58,13 +58,19 @@ public class BudgetService {
         }
 
         YearMonth measuredMonth = YearMonth.parse(month);
+        // Rollover re-derives every prior month's spend for a category since its start month, so
+        // budgets sharing a history of months would otherwise repeat that query once per budget.
+        // Memoized here, scoped to one progress() call, rather than as a field: there is no
+        // reason for one request's history to leak into or stale-cache across another's.
+        Map<YearMonth, Map<String, Double>> spendByMonth = new HashMap<>();
         List<BudgetProgress> rows = new ArrayList<>();
         double totalLimit = 0;
         double totalSpent = 0;
 
         for (Budget budget : budgets.findAll()) {
             double used = spent.getOrDefault(budget.category(), 0.0);
-            double limit = effectiveLimit(budget, measuredMonth);
+            double carryIn = rolloverCarryIn(accountId, budget, measuredMonth, spendByMonth);
+            double limit = effectiveLimit(budget, measuredMonth) + carryIn;
             double percent = (used / limit) * 100;
 
             rows.add(new BudgetProgress(
@@ -79,7 +85,9 @@ public class BudgetService {
                     budget.escalationType(),
                     budget.escalationValue(),
                     budget.escalationFrequencyMonths(),
-                    budget.escalationStartMonth()
+                    budget.escalationStartMonth(),
+                    budget.rolloverStartMonth(),
+                    round2(carryIn)
             ));
 
             totalLimit += limit;
@@ -87,6 +95,39 @@ public class BudgetService {
         }
 
         return new BudgetSummary(month, rows, round2(totalLimit), round2(totalSpent), currency, false);
+    }
+
+    /**
+     * Unused budget (or overspend, negative) carried in from every month between {@code
+     * rolloverStartMonth} and {@code month}, exclusive of {@code month} itself. Each historical
+     * month's own contribution is {@code effectiveLimit(that month) - actualSpend(that month)} --
+     * escalation and rollover compose for free this way, since a historical month's limit already
+     * accounts for its own escalation, and the loop simply keeps walking forward one month at a
+     * time from the start. Measuring the start month itself (or anything before it) carries in
+     * nothing, the same "no schedule yet" honesty {@code effectiveLimit} already applies to a
+     * month before an escalation schedule starts.
+     */
+    private double rolloverCarryIn(
+            Long accountId, Budget budget, YearMonth month, Map<YearMonth, Map<String, Double>> spendByMonth
+    ) {
+        if (budget.rolloverStartMonth() == null) return 0.0;
+
+        YearMonth start = YearMonth.parse(budget.rolloverStartMonth());
+        double carry = 0.0;
+        for (YearMonth m = start; m.isBefore(month); m = m.plusMonths(1)) {
+            Map<String, Double> spendThatMonth = spendByMonth.computeIfAbsent(m, k -> spendByCategory(accountId, k));
+            double spentThatMonth = spendThatMonth.getOrDefault(budget.category(), 0.0);
+            carry += effectiveLimit(budget, m) - spentThatMonth;
+        }
+        return carry;
+    }
+
+    private Map<String, Double> spendByCategory(Long accountId, YearMonth month) {
+        Map<String, Double> byCategory = new HashMap<>();
+        for (CategoryTotal total : stats.computeCategoryTotals(accountId, monthRange(month.toString()))) {
+            byCategory.put(total.category(), total.total());
+        }
+        return byCategory;
     }
 
     /**

@@ -661,6 +661,42 @@ base and erase the schedule's growth curve retroactively.
 > calendar month for — "starts now" is a real-time action, not tied to the newest imported month
 > the rest of this app's date defaults chase.
 
+**Rollover carry-in is a sum of independent per-month contributions, not a compounding "available
+balance" tracked month to month.** `BudgetService.rolloverCarryIn` walks every month from
+`rolloverStartMonth` up to (not including) the measured month and sums
+`effectiveLimit(thatMonth) - actualSpend(thatMonth)` for each one. This looks like it should
+diverge from the more intuitive "May's available budget is April's leftover plus May's own
+target, and May's leftover is what carries to June" framing — it doesn't, because leftover is a
+purely additive quantity and addition doesn't care about grouping: `(base_April - spent_April) +
+(base_May - spent_May)` and `((base_April - spent_April) + base_May) - spent_May` are the same
+number. The additive form was chosen because it needs no extra state threaded through the loop
+(no running "available" variable to carry between iterations) and it makes overspend "eating
+into" a future month fall out for free — a negative contribution added is just subtraction,
+requiring no separate code path from the underspend case.
+
+**Rollover composes with escalation with no code aware of both at once.** Each historical month's
+own contribution calls `effectiveLimit(budget, thatMonth)`, which already resolves that month's
+own escalated base if a schedule is active — rollover never computes an escalation-free number
+and never needs to. This is the same "derive it, don't special-case it" payoff `RecurringSeries`
+detection got when income tracking needed zero changes to the detector itself.
+
+> `BudgetService.progress` memoizes `computeCategoryTotals` per historical `YearMonth` in a map
+> scoped to one `progress()` call (`spendByMonth`), not a field on the service. Several budgets
+> can share overlapping rollover histories in one request — memoizing avoids re-querying the same
+> month's spend once per budget, while keeping the cache request-scoped avoids the far worse bug
+> of one request's history leaking into another's.
+
+**Rollover has no value of its own, unlike escalation — which is what let the server manage its
+start month entirely instead of asking the client to.** `BudgetController.set` takes a plain
+`rollover: boolean`; when true, it checks the *existing* saved budget's `rollover_start_month`
+and carries it forward if already set, defaulting to the current calendar month only when this is
+a genuinely new enable. Escalation couldn't work this way — a change to its type, value, or
+frequency is real configuration the client has to supply, so the client also has to resend the
+existing start month on an unrelated save (the exact bug fixed during that feature's manual
+verification). Rollover sidesteps the whole class of bug: there is no configuration for the
+client to get out of sync with, so there was never a way for it to lose track of the start month
+in the first place.
+
 **`predictions_cache` is keyed by account id, same 0-sentinel trick as the merchant bands.**
 It used to be one global row (`id = 1`) with no account attached — generate a forecast while
 looking at one account, switch to another, and the dashboard kept showing the first account's

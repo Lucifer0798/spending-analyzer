@@ -325,6 +325,8 @@ export interface Budget {
   escalation_frequency_months: number | null;
   /** YYYY-MM the schedule starts counting periods from. */
   escalation_start_month: string | null;
+  /** YYYY-MM rollover starts accumulating from, or null when unused budget doesn't carry forward. */
+  rollover_start_month: string | null;
   updated_at: string;
 }
 
@@ -336,7 +338,7 @@ export interface BudgetProgress {
   category: string;
   /** The limit actually in effect for the measured month -- what `spent` is compared against. */
   monthlyLimit: number;
-  /** The raw target as originally set, before any escalation. */
+  /** The raw target as originally set, before escalation or rollover. */
   baseLimit: number;
   spent: number;
   /** Negative once the budget is blown. */
@@ -348,6 +350,9 @@ export interface BudgetProgress {
   escalationValue: number | null;
   escalationFrequencyMonths: number | null;
   escalationStartMonth: string | null;
+  rolloverStartMonth: string | null;
+  /** Unused budget (or overspend, negative) carried in from prior months; zero when off. */
+  rolloverCarryIn: number;
 }
 
 export interface BudgetSummary {

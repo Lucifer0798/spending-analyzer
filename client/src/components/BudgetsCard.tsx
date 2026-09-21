@@ -58,6 +58,13 @@ function BudgetRow({ budget, currencyCode }: { budget: BudgetProgress; currencyC
             : `${budget.escalationFrequencyMonths} months`}
         </p>
       )}
+
+      {budget.rolloverStartMonth && budget.rolloverCarryIn !== 0 && (
+        <p className="mt-0.5 text-[11px] text-slate-400">
+          {budget.rolloverCarryIn >= 0 ? "+" : "−"}
+          {currency(Math.abs(budget.rolloverCarryIn), 0, currencyCode)} rolled over from last month
+        </p>
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ public class BudgetRepository {
             nullableDouble(rs, "escalation_value"),
             nullableInt(rs, "escalation_frequency_months"),
             rs.getString("escalation_start_month"),
+            rs.getString("rollover_start_month"),
             rs.getString("updated_at")
     );
 
@@ -66,6 +67,12 @@ public class BudgetRepository {
      * included, so a save that omits it clears whatever schedule was there before. Upsert
      * rather than separate create and update endpoints because "budget Groceries at 500" is
      * one intent, and the caller should not have to know whether a row already exists.
+     *
+     * <p>{@code rolloverStartMonth} is the one exception to "omitting it clears it": the
+     * controller is responsible for resolving what value to pass here (carrying an existing
+     * start month forward, or defaulting a freshly-enabled one to the current month) before
+     * calling this -- the repository just writes whatever it's given, the same division of
+     * responsibility {@code TransactionRepository.updateSplit} follows.
      */
     public Budget upsert(
             String category,
@@ -73,15 +80,18 @@ public class BudgetRepository {
             String escalationType,
             Double escalationValue,
             Integer escalationFrequencyMonths,
-            String escalationStartMonth
+            String escalationStartMonth,
+            String rolloverStartMonth
     ) {
         jdbc.update("""
                 INSERT INTO budgets (
                   category, monthly_limit,
-                  escalation_type, escalation_value, escalation_frequency_months, escalation_start_month
+                  escalation_type, escalation_value, escalation_frequency_months, escalation_start_month,
+                  rollover_start_month
                 ) VALUES (
                   :category, :limit,
-                  :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth
+                  :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth,
+                  :rolloverStartMonth
                 )
                 ON CONFLICT(category) DO UPDATE SET
                   monthly_limit = excluded.monthly_limit,
@@ -89,6 +99,7 @@ public class BudgetRepository {
                   escalation_value = excluded.escalation_value,
                   escalation_frequency_months = excluded.escalation_frequency_months,
                   escalation_start_month = excluded.escalation_start_month,
+                  rollover_start_month = excluded.rollover_start_month,
                   updated_at = datetime('now')
                 """,
                 new MapSqlParameterSource()
@@ -97,7 +108,8 @@ public class BudgetRepository {
                         .addValue("escalationType", escalationType)
                         .addValue("escalationValue", escalationValue)
                         .addValue("escalationFrequencyMonths", escalationFrequencyMonths)
-                        .addValue("escalationStartMonth", escalationStartMonth));
+                        .addValue("escalationStartMonth", escalationStartMonth)
+                        .addValue("rolloverStartMonth", rolloverStartMonth));
 
         return findByCategory(category).orElseThrow();
     }
@@ -121,6 +133,7 @@ public class BudgetRepository {
                         .addValue("escalationValue", b.escalationValue())
                         .addValue("escalationFrequencyMonths", b.escalationFrequencyMonths())
                         .addValue("escalationStartMonth", b.escalationStartMonth())
+                        .addValue("rolloverStartMonth", b.rolloverStartMonth())
                         .addValue("updatedAt", b.updatedAt()))
                 .toArray(MapSqlParameterSource[]::new);
 
@@ -128,11 +141,11 @@ public class BudgetRepository {
                 INSERT INTO budgets (
                   id, category, monthly_limit,
                   escalation_type, escalation_value, escalation_frequency_months, escalation_start_month,
-                  updated_at
+                  rollover_start_month, updated_at
                 ) VALUES (
                   :id, :category, :limit,
                   :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth,
-                  :updatedAt
+                  :rolloverStartMonth, :updatedAt
                 )
                 """, params);
     }
