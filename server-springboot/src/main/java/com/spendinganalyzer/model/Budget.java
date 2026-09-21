@@ -3,13 +3,16 @@ package com.spendinganalyzer.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * A monthly spending target for one category, with an optional auto-increase schedule.
+ * A monthly spending target for one category, with an optional auto-increase schedule and an
+ * optional envelope/rollover.
  *
- * @param monthlyLimit               the base target the user set, before any escalation
+ * @param monthlyLimit               the base target the user set, before escalation or rollover
  * @param escalationType             {@code fixed}, {@code percent}, or null for no schedule
  * @param escalationValue            dollars per period (fixed) or percent per period (percent)
  * @param escalationFrequencyMonths  how many months between increases
  * @param escalationStartMonth       the {@code YYYY-MM} the schedule starts counting periods from
+ * @param rolloverStartMonth         the {@code YYYY-MM} rollover starts accumulating from, or
+ *                                   null when unused budget doesn't carry into the next month
  */
 public record Budget(
         long id,
@@ -19,5 +22,6 @@ public record Budget(
         @JsonProperty("escalation_value") Double escalationValue,
         @JsonProperty("escalation_frequency_months") Integer escalationFrequencyMonths,
         @JsonProperty("escalation_start_month") String escalationStartMonth,
+        @JsonProperty("rollover_start_month") String rolloverStartMonth,
         @JsonProperty("updated_at") String updatedAt
 ) {}

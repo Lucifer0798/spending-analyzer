@@ -75,6 +75,12 @@ class BudgetControllerTest {
         return map;
     }
 
+    private static Map<String, Object> bodyWithRollover(String category, Object limit, boolean rollover) {
+        Map<String, Object> map = body(category, limit);
+        map.put("rollover", rollover);
+        return map;
+    }
+
     private BudgetProgress progressFor(String category, String month) {
         return controller.list(null, month).budgets().stream()
                 .filter(b -> b.category().equals(category))
@@ -330,6 +336,101 @@ class BudgetControllerTest {
                 controller.set(bodyWithEscalation("Groceries", 400, "fixed", 50, 3, "not-a-month"));
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
+    }
+
+    // --- rollover ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("underspending a month carries the leftover into the next month's limit")
+    void rolloverCarriesLeftoverForward() {
+        budgets.upsert("Groceries", 500.0, null, null, null, null, "2026-05");
+
+        // May: 500 budgeted, 100 spent (from the shared seed) -- 400 left over into June.
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.rolloverCarryIn()).isEqualTo(400.0);
+        assertThat(p.monthlyLimit()).isEqualTo(900.0); // 500 base + 400 carried in
+    }
+
+    @Test
+    @DisplayName("overspending a month eats into the next month's limit")
+    void rolloverLetsOverspendEatIntoNextMonth() {
+        budgets.upsert("Groceries", 50.0, null, null, null, null, "2026-05");
+
+        // May: 50 budgeted, 100 spent -- 50 over, which comes straight out of June's limit.
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.rolloverCarryIn()).isEqualTo(-50.0);
+        assertThat(p.monthlyLimit()).isEqualTo(0.0); // 50 base - 50 carried-in deficit
+    }
+
+    @Test
+    @DisplayName("measuring the rollover start month itself carries in nothing yet")
+    void startMonthItselfCarriesInNothing() {
+        budgets.upsert("Groceries", 500.0, null, null, null, null, "2026-06");
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.rolloverCarryIn()).isZero();
+        assertThat(p.monthlyLimit()).isEqualTo(500.0);
+    }
+
+    @Test
+    @DisplayName("rollover accumulates additively across more than one prior month")
+    void rolloverAccumulatesAcrossMultipleMonths() {
+        transactions.insertBatch(List.of(
+                new ParsedTransaction("2026-04-10", "APRIL SHOP", 50.00, "debit", "Groceries")
+        ), "rollover-multi-month-batch", 1L);
+        budgets.upsert("Groceries", 500.0, null, null, null, null, "2026-04");
+
+        // April: 500 - 50 = 450 leftover. May: 500 - 100 = 400 leftover. Both carry into June.
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.rolloverCarryIn()).isEqualTo(850.0);
+        assertThat(p.monthlyLimit()).isEqualTo(1350.0);
+    }
+
+    @Test
+    @DisplayName("rollover and escalation compose: each historical month carries its own escalated leftover")
+    void rolloverComposesWithEscalation() {
+        // Escalation: +50 every 3 months from 2025-12. Rollover: starts 2026-05.
+        budgets.upsert("Groceries", 400.0, "fixed", 50.0, 3, "2025-12", "2026-05");
+
+        // May (5 months after 2025-12, 1 period elapsed): escalated limit 450, spent 100 -> 350 leftover.
+        // June's own escalated limit (2 periods elapsed): 500, plus May's 350 carried in.
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.monthlyLimit()).isEqualTo(850.0);
+    }
+
+    @Test
+    @DisplayName("omitting rollover on a later save disables it and drops any carry-in")
+    void disablingRolloverStopsCarryingIn() {
+        budgets.upsert("Groceries", 500.0, null, null, null, null, "2026-05");
+        controller.set(body("Groceries", 500));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.rolloverStartMonth()).isNull();
+        assertThat(p.rolloverCarryIn()).isZero();
+        assertThat(p.monthlyLimit()).isEqualTo(500.0);
+    }
+
+    @Test
+    @DisplayName("an unspecified start defaults to the current calendar month, not the latest imported one")
+    void rolloverStartDefaultsToNow() {
+        controller.set(bodyWithRollover("Groceries", 400, true));
+
+        assertThat(budgets.findByCategory("Groceries")).get()
+                .extracting(Budget::rolloverStartMonth)
+                .isEqualTo(java.time.YearMonth.now().toString());
+    }
+
+    @Test
+    @DisplayName("re-enabling an already-enabled rollover preserves its original start month")
+    void reenablingRolloverPreservesOriginalStartMonth() {
+        budgets.upsert("Groceries", 500.0, null, null, null, null, "2025-01");
+
+        // A resave that changes the limit but still asks for rollover must not reset progress.
+        controller.set(bodyWithRollover("Groceries", 600, true));
+
+        assertThat(budgets.findByCategory("Groceries")).get()
+                .extracting(Budget::rolloverStartMonth)
+                .isEqualTo("2025-01");
     }
 
     // --- deleting ---------------------------------------------------------------

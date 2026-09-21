@@ -159,8 +159,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V17)
-  src/test/                 399 tests
+    db/migration/           Versioned schema migrations (V1–V18)
+  src/test/                 407 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -205,7 +205,7 @@ Thirteen tables, all created automatically:
 | `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V18__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V19__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -256,7 +256,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
-| `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them and an optional auto-increase schedule |
+| `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them, an optional auto-increase schedule, and optional rollover |
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
 | `GET` `DELETE` | `/tags` `/tags/{name}` | Every tag with its usage count, or delete one everywhere it's applied |
@@ -396,6 +396,20 @@ schedule starts reports the plain base, same as having no schedule at all. Editi
 limit has to leave an existing schedule's start month untouched — carrying it forward, not
 resetting it to "now" on every save, is what makes the increases keep counting from when the
 schedule actually began rather than restarting every time someone touches the target.
+
+**A budget can roll unused amounts (or overspend) into the next month, computed the same
+on-read way escalation is.** Turning rollover on adds nothing to configure beyond "since when" —
+no value or frequency, just a start month the server manages entirely. The carry-in for a
+measured month is the sum of every prior month's own `(that month's effective limit − that
+month's actual spend)`, walked forward from the start month one month at a time; a month that
+came in under target contributes a positive number, one that ran over contributes a negative
+one, and both simply add. This composes with escalation for free — each historical month's
+contribution already uses that month's own escalated limit — without either feature needing to
+know about the other. Measuring the start month itself carries in nothing yet, the same honesty
+an escalation schedule's first month already has. Re-enabling an already-enabled rollover
+preserves its original start month rather than resetting to "now", the same care an escalation
+schedule's start month gets on an unrelated save — except here the server manages it entirely,
+since rollover (unlike escalation) has no other value the client needs to carry forward itself.
 
 **The header's over-budget badge fetches independently of the Dashboard.** It has to: the badge
 is meant to be visible from Upload, Transactions, Manage — everywhere, not just the one screen
@@ -595,7 +609,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (399).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (407).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -668,6 +682,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Envelope/rollover budgets~~ — unused budget from a month carries into the next month's limit
+  (or overspend eats into it), so a category that comes in under target has more room next month
 - ~~Recurring income tracking~~ — regular deposits (paychecks and the like) are detected the same
   way recurring charges are, with average-per-month income shown alongside what actually came in
 - ~~Shared/split transactions~~ — mark a transaction as split between people and only your share
