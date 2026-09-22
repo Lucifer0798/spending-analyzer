@@ -160,7 +160,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V18)
-  src/test/                 407 tests
+  src/test/                 416 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -259,6 +259,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them, an optional auto-increase schedule, and optional rollover |
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
+| `POST` | `/goals/contributions/split` | Log one contribution split across several goals at once |
 | `GET` `DELETE` | `/tags` `/tags/{name}` | Every tag with its usage count, or delete one everywhere it's applied |
 | `GET` | `/export/transactions.csv` | Download transactions, filters and all — including each one's split share and note |
 | `GET` | `/export/categories.csv` | Download spend per category |
@@ -514,6 +515,19 @@ in. Deleting a goal deletes its contributions too, done explicitly at the applic
 than by a database cascade — this schema doesn't enforce foreign keys anywhere, the same as every
 other table that references an id.
 
+**Splitting one contribution across goals needed no new table.** A paycheck split across several
+goals is still just several ordinary contribution rows underneath — `/goals/contributions/split`
+validates every entry up front (each goal exists, no goal repeated, every amount nonzero) and
+writes them together as one atomic operation, so a bad entry rejects the whole request rather
+than leaving some goals updated and others not. There's nothing recorded to say "these came from
+the same split" beyond a shared date and an optional shared note; each row is independently
+removable afterward like any other contribution, the same as if it had been logged one at a time.
+Splitting a total by percentage only makes sense when the selected goals share a currency — this
+app has no exchange rate to convert "$500, 60% to a EUR goal" into anything honest — so that
+constraint is enforced client-side, where the percentages are turned into concrete amounts before
+the request is ever sent; the endpoint itself only ever sees plain per-goal amounts and has no
+concept of "percent" or "total" at all.
+
 **A goal's pace is measured from its first contribution, not a trailing window.** The dashboard's
 spend forecast has months of transactions to average over, so a three-month moving window makes
 sense there; a goal might have one or two logged contributions total, and averaging those over
@@ -609,7 +623,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (407).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (416).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -682,6 +696,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Multi-goal contribution split~~ — log one contribution and divide it across several savings
+  goals at once by percentage or fixed amount, instead of recording each goal separately
 - ~~Envelope/rollover budgets~~ — unused budget from a month carries into the next month's limit
   (or overspend eats into it), so a category that comes in under target has more room next month
 - ~~Recurring income tracking~~ — regular deposits (paychecks and the like) are detected the same

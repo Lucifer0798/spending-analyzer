@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   addGoalContribution,
+  addSplitGoalContribution,
   createGoal,
   deleteGoal,
   deleteGoalContribution,
@@ -284,6 +285,188 @@ function GoalCard({ goal, onChanged }: { goal: GoalProgress; onChanged: () => vo
   );
 }
 
+type SplitMode = "fixed" | "percent";
+
+/**
+ * Logs one real-world contribution split across several goals at once, instead of visiting each
+ * goal's own "Log contribution" form in turn. Percentage mode needs one shared total and one
+ * shared currency to mean anything -- splitting "$500, 60/40" across a USD goal and a EUR goal
+ * has no honest answer without an exchange rate this app doesn't model, so it's restricted to
+ * goals sharing the currency of whichever goal is checked first. Fixed-amount mode has no such
+ * restriction: each entry is already an independent absolute amount, the same as logging each
+ * goal's contribution separately would produce, just sent as one request.
+ */
+function SplitContributionForm({ goals, onChanged }: { goals: GoalProgress[]; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<SplitMode>("fixed");
+  const [date, setDate] = useState(todayIsoDate());
+  const [note, setNote] = useState("");
+  const [total, setTotal] = useState("");
+  const [values, setValues] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const checkedGoals = goals.filter((g) => (values[g.id] ?? "").trim() !== "");
+  const splitCurrency = checkedGoals[0]?.currency;
+  const currencyMismatch =
+    mode === "percent" && checkedGoals.some((g) => g.currency !== splitCurrency);
+
+  const totalParsed = Number(total);
+  const entries = checkedGoals
+    .map((g) => {
+      const raw = Number(values[g.id]);
+      if (!Number.isFinite(raw)) return null;
+      const amount =
+        mode === "percent"
+          ? Math.round(((totalParsed * raw) / 100) * 100) / 100
+          : raw;
+      return amount !== 0 ? { goal_id: g.id, amount } : null;
+    })
+    .filter((e): e is { goal_id: number; amount: number } => e !== null);
+
+  const percentSum = mode === "percent"
+    ? checkedGoals.reduce((sum, g) => sum + (Number(values[g.id]) || 0), 0)
+    : null;
+
+  const canSubmit =
+    date.trim() !== "" &&
+    entries.length > 0 &&
+    !currencyMismatch &&
+    (mode === "fixed" || (Number.isFinite(totalParsed) && totalParsed > 0));
+
+  const reset = () => {
+    setValues({});
+    setTotal("");
+    setNote("");
+    setOpen(false);
+  };
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await addSplitGoalContribution({ date, note: note.trim() || undefined, splits: entries });
+      reset();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to log the split contribution.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (goals.length < 2) return null; // nothing to split across with fewer than two goals
+
+  return (
+    <div className="mt-6 rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-sm font-medium text-slate-800 hover:text-indigo-600 dark:text-slate-200 dark:hover:text-indigo-400"
+      >
+        {open ? "− " : "+ "}Split a contribution across goals
+      </button>
+
+      {open && (
+        <div className="mt-3">
+          {error && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as SplitMode)}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            >
+              <option value="fixed">Fixed amounts</option>
+              <option value="percent">By percentage</option>
+            </select>
+            {mode === "percent" && (
+              <input
+                type="number"
+                step="0.01"
+                value={total}
+                onChange={(e) => setTotal(e.target.value)}
+                placeholder="Total amount"
+                className="w-32 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+            )}
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Note (optional, shared by every entry)"
+              className="min-w-48 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+          </div>
+
+          <div className="mt-3 space-y-1.5">
+            {goals.map((g) => {
+              const checked = (values[g.id] ?? "").trim() !== "";
+              const raw = Number(values[g.id]);
+              const computed =
+                mode === "percent" && Number.isFinite(raw) && Number.isFinite(totalParsed)
+                  ? (totalParsed * raw) / 100
+                  : null;
+              return (
+                <div key={g.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) =>
+                      setValues((v) => ({ ...v, [g.id]: e.target.checked ? "0" : "" }))
+                    }
+                  />
+                  <span className="w-40 truncate text-slate-700 dark:text-slate-300">{g.name}</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!checked}
+                    value={values[g.id] ?? ""}
+                    onChange={(e) => setValues((v) => ({ ...v, [g.id]: e.target.value }))}
+                    placeholder={mode === "percent" ? "%" : "Amount"}
+                    className="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900"
+                  />
+                  {mode === "percent" && (
+                    <span className="text-xs text-slate-500">
+                      {computed !== null ? currencyPrecise(computed, g.currency) : ""}
+                    </span>
+                  )}
+                  {mode === "percent" && checked && g.currency !== splitCurrency && (
+                    <span className="text-xs text-red-600 dark:text-red-400">
+                      different currency ({g.currency}) — percentage split needs a shared one
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              disabled={busy || !canSubmit}
+              onClick={submit}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Log split contribution"}
+            </button>
+            {mode === "percent" && percentSum !== null && checkedGoals.length > 0 && (
+              <span className={`text-xs ${Math.abs(percentSum - 100) < 0.01 ? "text-slate-500" : "text-amber-600 dark:text-amber-400"}`}>
+                {Math.round(percentSum * 100) / 100}% allocated
+                {Math.abs(percentSum - 100) >= 0.01 && " (doesn't add up to 100%, but that's allowed)"}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function GoalsPage() {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
   const [currencies, setCurrencies] = useState<string[]>(["USD"]);
@@ -388,6 +571,8 @@ export function GoalsPage() {
           </button>
         </div>
       </div>
+
+      {goals !== null && <SplitContributionForm goals={goals} onChanged={load} />}
 
       {goals === null ? (
         <p className="mt-8 text-center text-sm text-slate-500">Loading…</p>

@@ -468,6 +468,36 @@ foreign keys aren't enforced here, a standing choice explained in `V2__accounts.
 `contributions.deleteByGoalId(id)` right after `goals.delete(id)` succeeds; skip that call and a
 deleted goal's contributions become permanently orphaned rows with no UI path to reach them.
 
+**Splitting a contribution across goals added no schema and no new concept -- it's N ordinary
+`goal_contributions` inserts sharing a date and note, made atomic.**
+`GoalService.addSplitContributions` is `@Transactional` and does nothing but loop calling
+`GoalContributionRepository.add` once per entry; `GoalController.addSplitContribution` validates
+every entry (goal exists, no duplicate `goal_id`, nonzero amount) *before* calling it, so a bad
+entry never reaches the transactional method at all and nothing partial gets written. There is no
+`split_group_id` or any other column tying the resulting rows together -- once written, a split
+contribution's rows are indistinguishable from rows logged one at a time, findable only by
+sharing a date and note. That's a deliberate scope cut: the ask was reducing the effort of
+*logging* several goals from one event, not building grouped-undo bookkeeping on top of it: each
+row already deletes independently through the existing single-contribution endpoint, and a
+correction to one goal's share was never meant to need touching the others'.
+
+> `@Transactional` has to live on a method Spring can proxy -- calling `contributions.add(...)` in
+> a loop from inside `GoalController` itself would not get transactional semantics, since
+> self-invocation bypasses the proxy. That's why the loop is a method on `GoalService` (already a
+> `@Service`, and already home to the pace-projection math `progress()` does), not inlined in the
+> controller the way most of this controller's other logic already is.
+
+**Percentage-based splitting needs one shared currency across the selected goals; fixed-amount
+splitting doesn't, and the backend enforces neither.** `POST /goals/contributions/split` only
+ever receives concrete per-goal amounts — it has no "percent" or "total" concept, so there's
+nothing for it to validate about currency at all. The constraint lives entirely in
+`SplitContributionForm` on the frontend: percentages are only meaningful once turned into a
+concrete amount of one specific currency, and "$500, 60% to a EUR goal" has no honest answer
+without an exchange rate this app doesn't model anywhere else either. The UI locks percentage
+mode's implied currency to whichever goal is checked first and flags any other checked goal whose
+currency disagrees, disabling submission until it's resolved -- fixed-amount mode has no such
+lock, since each entry is already an independent absolute amount with nothing to convert.
+
 **Adding goals to the backup bumped `BackupData.CURRENT_VERSION` from 1 to 2, which is a breaking
 change on purpose.** `BackupController.restore` rejects anything whose `version` doesn't match
 exactly — there's no upgrade path between backup versions, only "supported" or "400." A version-1

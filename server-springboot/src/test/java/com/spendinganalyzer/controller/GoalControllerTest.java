@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -157,6 +158,154 @@ class GoalControllerTest {
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat((java.util.List<?>) response.getBody()).hasSize(1);
         assertThat(controller.listContributions(9999L).getStatusCode().value()).isEqualTo(404);
+    }
+
+    // --- split contribution ------------------------------------------------------
+
+    @Test
+    @DisplayName("splits one contribution across several goals in one request")
+    void splitsAcrossGoals() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+        Goal b = goals.create("Emergency fund", 5000.0, null, "USD");
+
+        ResponseEntity<?> response = controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "note", "Paycheck savings",
+                "splits", java.util.List.of(
+                        Map.of("goal_id", a.id(), "amount", 300.0),
+                        Map.of("goal_id", b.id(), "amount", 200.0))));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        @SuppressWarnings("unchecked")
+        var created = (List<GoalContribution>) response.getBody();
+        assertThat(created).hasSize(2);
+        assertThat(contributions.findByGoalId(a.id())).singleElement()
+                .extracting(GoalContribution::amount, GoalContribution::note)
+                .containsExactly(300.0, "Paycheck savings");
+        assertThat(contributions.findByGoalId(b.id())).singleElement()
+                .extracting(GoalContribution::amount, GoalContribution::note)
+                .containsExactly(200.0, "Paycheck savings");
+    }
+
+    @Test
+    @DisplayName("a split contribution needs no shared currency across goals -- each amount is its own goal's face value")
+    void splitAcrossDifferentCurrenciesIsAllowed() {
+        Goal usd = goals.create("US trip", 1000.0, null, "USD");
+        Goal eur = goals.create("EU trip", 1000.0, null, "EUR");
+
+        ResponseEntity<?> response = controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(
+                        Map.of("goal_id", usd.id(), "amount", 300.0),
+                        Map.of("goal_id", eur.id(), "amount", 200.0))));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(contributions.findByGoalId(usd.id())).singleElement()
+                .extracting(GoalContribution::amount).isEqualTo(300.0);
+        assertThat(contributions.findByGoalId(eur.id())).singleElement()
+                .extracting(GoalContribution::amount).isEqualTo(200.0);
+    }
+
+    @Test
+    @DisplayName("a note is optional on a split contribution, same as a single one")
+    void splitContributionNoteIsOptional() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+
+        controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(Map.of("goal_id", a.id(), "amount", 100.0))));
+
+        assertThat(contributions.findByGoalId(a.id())).singleElement()
+                .extracting(GoalContribution::note).isNull();
+    }
+
+    @Test
+    @DisplayName("rejects a missing or malformed date")
+    void rejectsSplitWithBadDate() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+        var oneSplit = java.util.List.of(Map.of("goal_id", (Object) a.id(), "amount", (Object) 100.0));
+
+        assertThat(controller.addSplitContribution(Map.of("splits", oneSplit)).getStatusCode().value())
+                .isEqualTo(400);
+        assertThat(controller.addSplitContribution(Map.of("date", "not-a-date", "splits", oneSplit))
+                .getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("rejects an empty or missing splits list")
+    void rejectsEmptySplits() {
+        assertThat(controller.addSplitContribution(Map.of("date", "2026-06-01")).getStatusCode().value())
+                .isEqualTo(400);
+        assertThat(controller.addSplitContribution(Map.of("date", "2026-06-01", "splits", java.util.List.of()))
+                .getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("rejects an entry with a zero amount or a missing goal_id, and writes nothing")
+    void rejectsInvalidSplitEntry() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+
+        ResponseEntity<?> zeroAmount = controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(Map.of("goal_id", a.id(), "amount", 0.0))));
+        assertThat(zeroAmount.getStatusCode().value()).isEqualTo(400);
+
+        ResponseEntity<?> missingGoalId = controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(Map.of("amount", 100.0))));
+        assertThat(missingGoalId.getStatusCode().value()).isEqualTo(400);
+
+        assertThat(contributions.findByGoalId(a.id())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("rejects an unknown goal_id, and writes nothing for the goals that did exist")
+    void rejectsUnknownGoalIdAndWritesNothing() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+
+        ResponseEntity<?> response = controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(
+                        Map.of("goal_id", a.id(), "amount", 100.0),
+                        Map.of("goal_id", 999999L, "amount", 50.0))));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        // The valid entry must not have been written either -- a rejected request writes nothing.
+        assertThat(contributions.findByGoalId(a.id())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("rejects the same goal_id appearing twice in one split")
+    void rejectsDuplicateGoalIdInSplit() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+
+        ResponseEntity<?> response = controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(
+                        Map.of("goal_id", a.id(), "amount", 100.0),
+                        Map.of("goal_id", a.id(), "amount", 50.0))));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(contributions.findByGoalId(a.id())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("each split entry becomes its own independently-removable contribution")
+    void splitEntriesAreIndependentlyRemovable() {
+        Goal a = goals.create("Vacation", 1000.0, null, "USD");
+        Goal b = goals.create("Emergency fund", 5000.0, null, "USD");
+
+        controller.addSplitContribution(Map.of(
+                "date", "2026-06-01",
+                "splits", java.util.List.of(
+                        Map.of("goal_id", a.id(), "amount", 100.0),
+                        Map.of("goal_id", b.id(), "amount", 50.0))));
+
+        long aContributionId = contributions.findByGoalId(a.id()).get(0).id();
+        controller.deleteContribution(a.id(), aContributionId);
+
+        assertThat(contributions.findByGoalId(a.id())).isEmpty();
+        assertThat(contributions.findByGoalId(b.id())).hasSize(1); // untouched
     }
 
     @Test
