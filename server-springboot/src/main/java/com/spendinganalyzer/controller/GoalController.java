@@ -10,9 +10,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Currency;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Savings goals: a target amount, optionally a date, with progress measured from contributions
@@ -125,6 +128,66 @@ public class GoalController {
         }
 
         return ResponseEntity.ok(contributions.add(id, amount, date, note));
+    }
+
+    /**
+     * Logs one real-world contribution split across several goals in one request, instead of
+     * calling {@code POST /{id}/contributions} once per goal. Every entry shares the same date
+     * and (optional) note; each still becomes its own ordinary contribution row afterward -- this
+     * endpoint only saves the repetition of typing the date and note N times, and of second-
+     * guessing whether all N calls actually went through, since a validation failure on any entry
+     * here rejects the whole request before anything is written.
+     *
+     * <p>There is no currency check across the selected goals: an entry's amount is that goal's
+     * own contribution, taken at face value, the same as a single contribution always has been.
+     * Splitting one figure into percentages only makes sense when the target goals share a
+     * currency, but that is the client's concern when computing each entry's amount -- by the
+     * time a request reaches here, "goal A gets $300, goal B gets €200" and "a $500 payday split
+     * 60/40" are indistinguishable, and neither needs to be.
+     */
+    @PostMapping("/contributions/split")
+    public ResponseEntity<?> addSplitContribution(@RequestBody Map<String, Object> body) {
+        String date = asTrimmedString(body.get("date"));
+        String note = body.get("note") instanceof String s && !s.isBlank() ? s.trim() : null;
+
+        if (date == null) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("date is required."));
+        }
+        if (!isValidDate(date)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("date must be in YYYY-MM-DD form."));
+        }
+        if (!(body.get("splits") instanceof List<?> rawSplits) || rawSplits.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("splits is required and must not be empty."));
+        }
+
+        List<GoalService.SplitEntry> splits = new ArrayList<>();
+        Set<Long> seenGoalIds = new HashSet<>();
+        for (Object rawEntry : rawSplits) {
+            if (!(rawEntry instanceof Map<?, ?> entry)) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("each split entry must be an object with goal_id and amount."));
+            }
+            Long goalId = entry.get("goal_id") instanceof Number n ? n.longValue() : null;
+            Double amount = entry.get("amount") instanceof Number n ? n.doubleValue() : null;
+
+            if (goalId == null) {
+                return ResponseEntity.badRequest().body(new ErrorResponse("each split entry needs a goal_id."));
+            }
+            if (amount == null || amount == 0) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("each split entry needs a nonzero amount."));
+            }
+            if (!seenGoalIds.add(goalId)) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("goal_id " + goalId + " appears more than once in splits."));
+            }
+            if (goals.findById(goalId).isEmpty()) {
+                return ResponseEntity.badRequest().body(new ErrorResponse("Goal not found: " + goalId));
+            }
+            splits.add(new GoalService.SplitEntry(goalId, amount));
+        }
+
+        return ResponseEntity.ok(goalService.addSplitContributions(splits, date, note));
     }
 
     /** Removes one logged contribution — undoing a mistaken entry rather than editing it in place. */

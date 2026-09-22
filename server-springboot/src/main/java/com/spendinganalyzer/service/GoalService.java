@@ -2,11 +2,13 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.GoalProgress;
 import com.spendinganalyzer.model.Goal;
+import com.spendinganalyzer.model.GoalContribution;
 import com.spendinganalyzer.repository.GoalContributionRepository;
 import com.spendinganalyzer.repository.GoalContributionRepository.GoalTotals;
 import com.spendinganalyzer.repository.GoalRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -81,6 +83,30 @@ public class GoalService {
             ));
         }
         return rows;
+    }
+
+    /** One goal's share of a single real-world contribution split across several goals. */
+    public record SplitEntry(long goalId, double amount) {}
+
+    /**
+     * Logs one contribution per entry, sharing the same date and note, as a single atomic
+     * operation -- if inserting one entry fails partway through, none of them stick. Each
+     * resulting row is otherwise an ordinary, independent {@code goal_contributions} row; there
+     * is no separate "this was one split event" record; a shared note is the only thing tying
+     * them together for a human reading the history back later, and each can be individually
+     * removed like any other contribution if one goal's share needs correcting.
+     *
+     * <p>Every {@code goalId} is assumed already validated to exist -- this schema has no foreign
+     * key to catch a bad one, and the controller checks each one before calling this, the same
+     * division of responsibility {@code BudgetController} keeps from {@code BudgetRepository}.
+     */
+    @Transactional
+    public List<GoalContribution> addSplitContributions(List<SplitEntry> splits, String date, String note) {
+        List<GoalContribution> created = new ArrayList<>();
+        for (SplitEntry entry : splits) {
+            created.add(contributions.add(entry.goalId(), entry.amount(), date, note));
+        }
+        return created;
     }
 
     private static double round2(double v) {

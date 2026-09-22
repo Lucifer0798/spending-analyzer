@@ -450,6 +450,24 @@ export function deleteGoalContribution(goalId: number, contributionId: number) {
   return request<{ ok: true }>(`/goals/${goalId}/contributions/${contributionId}`, { method: "DELETE" });
 }
 
+/**
+ * Logs one real-world contribution split across several goals in a single request, sharing the
+ * same date and note. Each entry's amount is that goal's own contribution taken at face value --
+ * there's no currency conversion, so splitting by percentage of one total only makes sense when
+ * the selected goals share a currency, which is the caller's job to arrange before computing
+ * each entry's amount.
+ */
+export function addSplitGoalContribution(split: {
+  date: string;
+  note?: string;
+  splits: { goal_id: number; amount: number }[];
+}) {
+  return request<GoalContribution[]>("/goals/contributions/split", {
+    method: "POST",
+    body: JSON.stringify(split),
+  });
+}
+
 // --- insights ---------------------------------------------------------------
 
 export function runCategorization() {
