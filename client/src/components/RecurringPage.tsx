@@ -22,6 +22,37 @@ const CONFIDENCE_STYLES: Record<string, string> = {
   low: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
 };
 
+/** A short countdown next to next_expected_date — red once it's passed, amber inside a week. */
+function DueBadge({ daysAway }: { daysAway: number }) {
+  let text: string;
+  let className: string;
+  if (daysAway < 0) {
+    text = `overdue ${Math.abs(daysAway)}d`;
+    className = "text-red-600 dark:text-red-400";
+  } else if (daysAway === 0) {
+    text = "due today";
+    className = "text-amber-700 dark:text-amber-400";
+  } else if (daysAway <= 7) {
+    text = `in ${daysAway}d`;
+    className = "text-amber-700 dark:text-amber-400";
+  } else {
+    text = `in ${daysAway}d`;
+    className = "text-slate-400 dark:text-slate-500";
+  }
+  return <span className={`ml-1.5 text-xs ${className}`}>({text})</span>;
+}
+
+/** Called out under the merchant name when the latest charge drifted from what it used to be. */
+function PriceChangeNote({ series, currencyCode }: { series: RecurringSeries; currencyCode: string }) {
+  if (!series.price_changed || series.previous_amount == null) return null;
+  const rose = series.last_amount > series.previous_amount;
+  return (
+    <div className={`text-xs ${rose ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+      {rose ? "↑" : "↓"} was {currencyPrecise(series.previous_amount, currencyCode)}
+    </div>
+  );
+}
+
 function RecurringActions({
   series,
   onChanged,
@@ -181,6 +212,7 @@ function RecurringIncomeSection({ accountId, range }: Props) {
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
                       {r.next_expected_date}
+                      <DueBadge daysAway={r.due_in_days} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm">
                       <span className="text-slate-600 dark:text-slate-400">{r.occurrences}×</span>
@@ -299,6 +331,7 @@ function RecurringChargesSection({ accountId, range }: Props) {
                     <td className="px-4 py-2">
                       <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.merchant}</div>
                       {r.category && <div className="text-xs text-slate-500">{r.category}</div>}
+                      <PriceChangeNote series={r} currencyCode={cur} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
                       {CADENCE_LABELS[r.cadence] ?? r.cadence}
@@ -311,6 +344,7 @@ function RecurringChargesSection({ accountId, range }: Props) {
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
                       {r.next_expected_date}
+                      <DueBadge daysAway={r.due_in_days} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm">
                       <span className="text-slate-600 dark:text-slate-400">{r.occurrences}×</span>

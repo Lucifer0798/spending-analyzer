@@ -264,6 +264,27 @@ Both look the override up by `s.merchant()`, which is already the normalized key
 > it," and guessing wrong silently would be worse than a stale row sitting in a list built
 > specifically so stale rows have somewhere to be found and removed.
 
+**`due_in_days` and `price_changed` are computed inside `analyseGroup`, not bolted on afterward.**
+Both need data `analyseGroup` already has in scope — `nextExpected` for the countdown, the full
+`occurrences` list for the price comparison — so extending the same method that builds the rest of
+`RecurringSeries` was simpler than a second pass over the detected list. `RecurringDetectionService`
+gained a `Clock` field via the same package-private-constructor-plus-`Clock.systemDefaultZone()`-default
+pattern `GoalService` and `LoginAttemptLimiter` already use, so `RecurringDetectionServiceTest` can
+fix "today" with `Clock.fixed(...)` instead of asserting `due_in_days` against a moving target. The
+price comparison uses the average of every occurrence *except* the last, not just the immediately
+prior one — a single prior charge could itself be a one-off blip that the steady-amount check
+happened to let through, where an average of everything before the change is a steadier baseline to
+measure the jump against. `PRICE_CHANGE_THRESHOLD = 0.02` exists to separate "the price actually
+changed" from cent-level rounding noise between otherwise-identical charges; it deliberately doesn't
+need to relate to `MAX_AMOUNT_VARIATION` (0.15), since that threshold already ran on the *pre-change*
+occurrences either way — a real price hike concentrated in one occurrence moves the coefficient of
+variation far less than it moves a two-point average comparison.
+
+> `due_in_days`/`price_changed`/`previous_amount` ride along on `/recurring-income` too, since both
+> endpoints share one detector and one DTO. A negative `due_in_days` there just reads as "the usual
+> payday came and went" rather than a bill being overdue — harmless, and cheaper than forking the
+> DTO to hide a field one of the two callers doesn't have a use for yet.
+
 **Recurring income needed zero changes to `RecurringDetectionService` itself.** `detect(List
 <Transaction>)` was already fully agnostic about spending vs. income — cadence and consistent
 amount are the only signals it looks at, computed the same way regardless of what the list
