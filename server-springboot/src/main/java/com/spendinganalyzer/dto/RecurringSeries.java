@@ -17,7 +17,13 @@ public record RecurringSeries(
         /** True when there's a "cancel" override for this merchant — see {@link com.spendinganalyzer.model.RecurringOverride}. */
         @JsonProperty("flagged_for_cancellation") boolean flaggedForCancellation,
         /** The override's id, so the frontend can clear it — null unless {@code flaggedForCancellation}. */
-        @JsonProperty("override_id") Long overrideId
+        @JsonProperty("override_id") Long overrideId,
+        /** Days until {@code nextExpectedDate}; negative once that date has passed without a newer charge. */
+        @JsonProperty("due_in_days") int dueInDays,
+        /** True when the last charge differs from what came before it by more than a rounding blip. */
+        @JsonProperty("price_changed") boolean priceChanged,
+        /** What it used to cost, going into the change — null unless {@code priceChanged}. */
+        @JsonProperty("previous_amount") Double previousAmount
 ) {
     /**
      * Detection itself never looks at overrides — {@link
@@ -28,6 +34,6 @@ public record RecurringSeries(
     public RecurringSeries withOverride(boolean flaggedForCancellation, Long overrideId) {
         return new RecurringSeries(merchant, category, cadence, averageAmount, lastAmount, lastDate,
                 nextExpectedDate, occurrences, medianIntervalDays, annualizedCost, confidence,
-                flaggedForCancellation, overrideId);
+                flaggedForCancellation, overrideId, dueInDays, priceChanged, previousAmount);
     }
 }

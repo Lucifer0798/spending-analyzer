@@ -5,6 +5,9 @@ import com.spendinganalyzer.model.Transaction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,6 +16,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RecurringDetectionServiceTest {
 
     private final RecurringDetectionService service = new RecurringDetectionService();
+
+    private static RecurringDetectionService serviceOn(String isoDate) {
+        return new RecurringDetectionService(
+                Clock.fixed(LocalDate.parse(isoDate).atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC));
+    }
 
     private static Transaction tx(String date, String description, double amount, String category) {
         return new Transaction(0, date, description, amount, "debit", category,
@@ -172,5 +180,61 @@ class RecurringDetectionServiceTest {
 
         assertThat(found).singleElement()
                 .extracting(RecurringSeries::confidence).isEqualTo("high");
+    }
+
+    // --- due-in-days -------------------------------------------------------------
+
+    @Test
+    @DisplayName("counts down to the next expected charge")
+    void reportsDueInDays() {
+        // Last charge 2026-07-04, monthly cadence -> next expected 2026-08-04.
+        List<RecurringSeries> found = serviceOn("2026-08-01").detect(
+                monthly("NETFLIX.COM", 15.49, "Subscriptions",
+                        "2026-05-04", "2026-06-04", "2026-07-04"));
+
+        assertThat(found).singleElement()
+                .extracting(RecurringSeries::dueInDays).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("goes negative once the expected date has passed with no newer charge")
+    void reportsOverdueAsNegative() {
+        List<RecurringSeries> found = serviceOn("2026-08-10").detect(
+                monthly("NETFLIX.COM", 15.49, "Subscriptions",
+                        "2026-05-04", "2026-06-04", "2026-07-04"));
+
+        assertThat(found).singleElement()
+                .extracting(RecurringSeries::dueInDays).isEqualTo(-6);
+    }
+
+    // --- price changes -------------------------------------------------------------
+
+    @Test
+    @DisplayName("flags a price rise against what the charge used to be")
+    void flagsPriceIncrease() {
+        List<Transaction> withRise = new ArrayList<>(monthly("NETFLIX.COM", 12.99, "Subscriptions",
+                "2026-04-04", "2026-05-04", "2026-06-04"));
+        withRise.add(tx("2026-07-04", "NETFLIX.COM", 15.49, "Subscriptions"));
+
+        List<RecurringSeries> found = service.detect(withRise);
+
+        assertThat(found).singleElement().satisfies(s -> {
+            assertThat(s.priceChanged()).isTrue();
+            assertThat(s.previousAmount()).isEqualTo(12.99);
+            assertThat(s.lastAmount()).isEqualTo(15.49);
+        });
+    }
+
+    @Test
+    @DisplayName("does not flag a price change when the amount stays steady")
+    void doesNotFlagSteadyPrice() {
+        List<RecurringSeries> found = service.detect(
+                monthly("NETFLIX.COM", 15.49, "Subscriptions",
+                        "2026-05-04", "2026-06-04", "2026-07-04"));
+
+        assertThat(found).singleElement().satisfies(s -> {
+            assertThat(s.priceChanged()).isFalse();
+            assertThat(s.previousAmount()).isNull();
+        });
     }
 }

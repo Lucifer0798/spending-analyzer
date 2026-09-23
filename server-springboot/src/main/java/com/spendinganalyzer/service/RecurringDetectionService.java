@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.RecurringSeries;
 import com.spendinganalyzer.model.Transaction;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -34,7 +35,21 @@ public class RecurringDetectionService {
     /** Maximum coefficient of variation in amount for the charge to count as consistent. */
     private static final double MAX_AMOUNT_VARIATION = 0.15;
 
+    /** How far the latest charge must drift from what came before it to count as a price change, not rounding noise. */
+    private static final double PRICE_CHANGE_THRESHOLD = 0.02;
+
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE;
+
+    private final Clock clock;
+
+    public RecurringDetectionService() {
+        this(Clock.systemDefaultZone());
+    }
+
+    /** Package-private: lets tests fix "today" instead of asserting against a moving target. */
+    RecurringDetectionService(Clock clock) {
+        this.clock = clock;
+    }
 
     public List<RecurringSeries> detect(List<Transaction> transactions) {
         Map<String, List<Transaction>> byMerchant = new LinkedHashMap<>();
@@ -104,6 +119,15 @@ public class RecurringDetectionService {
         Occurrence last = occurrences.get(occurrences.size() - 1);
         String category = sorted.get(sorted.size() - 1).category();
         LocalDate nextExpected = LocalDate.parse(last.date(), ISO).plusDays(Math.round(medianInterval));
+        int dueInDays = (int) ChronoUnit.DAYS.between(LocalDate.now(clock), nextExpected);
+
+        // Compares the latest charge to the average of everything before it -- a shift big enough
+        // to clear the noise floor but too small to have failed the steady-amount check above,
+        // the way a subscription's price hike usually reads against its own past charges.
+        List<Occurrence> priorOccurrences = occurrences.subList(0, occurrences.size() - 1);
+        double priorAverage = priorOccurrences.stream().mapToDouble(Occurrence::amount).average().orElse(0);
+        boolean priceChanged = priorAverage > 0
+                && Math.abs(last.amount() - priorAverage) / priorAverage > PRICE_CHANGE_THRESHOLD;
 
         return Optional.of(new RecurringSeries(
                 merchant,
@@ -118,7 +142,10 @@ public class RecurringDetectionService {
                 round2(mean * (365.0 / medianInterval)),
                 confidenceOf(occurrences.size(), coefficientOfVariation),
                 false,
-                null
+                null,
+                dueInDays,
+                priceChanged,
+                priceChanged ? round2(priorAverage) : null
         ));
     }
 

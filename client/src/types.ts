@@ -130,6 +130,12 @@ export interface RecurringSeries {
   flagged_for_cancellation: boolean;
   /** The override's id, for clearing it — null unless flagged_for_cancellation. */
   override_id: number | null;
+  /** Days until next_expected_date; negative once that date has passed without a newer charge. */
+  due_in_days: number;
+  /** True when the last charge differs from what came before it by more than a rounding blip. */
+  price_changed: boolean;
+  /** What it used to cost, going into the change — null unless price_changed. */
+  previous_amount: number | null;
 }
 
 export type RecurringAction = "cancel" | "exclude";

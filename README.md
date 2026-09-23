@@ -302,6 +302,18 @@ that stays next to the series until you clear it; "exclude" hides the merchant f
 good. Both are set from the Recurring page, in context next to the charge they apply to, but
 listed and cleared from Manage — the same split merchant memory's own rules follow.
 
+**Recurring detection also reports how soon the next charge is due, and whether the price moved.**
+`due_in_days` is just `next_expected_date` minus today, computed the same on-read way everything
+else derived here is — negative once the expected date has passed with no newer charge showing up
+yet, so the Recurring page can badge a row "overdue" instead of quietly letting the date scroll
+into the past. Separately, the latest charge's amount is compared against the average of
+everything that came before it: a difference past a small noise threshold is flagged as
+`price_changed`, with `previous_amount` carrying what it used to cost, so a subscription's price
+hike shows up next to the merchant rather than needing to be noticed by eye against last month's
+statement. Both figures are entirely derived from the same transaction list `detect()` already
+takes — no new table, no separate "reminder" concept to keep in sync with the transactions it's
+supposed to be reminding about.
+
 **Recurring income reuses the exact same detector, fed credits instead of debits.** A paycheck
 is "a steady rhythm and a steady amount" just as much as a subscription is, so
 `RecurringDetectionService` needed no changes at all — only a mirrored query (credits in income
@@ -696,6 +708,10 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Recurring price-change alerts~~ — a recurring charge's latest amount is compared to what it
+  used to cost; a shift past a small noise threshold is flagged right next to the merchant
+- ~~Bill due-date countdown~~ — the Recurring page shows how many days until (or past) each
+  charge's next expected date, badged red once it's overdue
 - ~~Multi-goal contribution split~~ — log one contribution and divide it across several savings
   goals at once by percentage or fixed amount, instead of recording each goal separately
 - ~~Envelope/rollover budgets~~ — unused budget from a month carries into the next month's limit
