@@ -10,5 +10,7 @@ public record Category(
         @JsonProperty("is_transfer") boolean isTransfer,
         @JsonProperty("sort_order") int sortOrder,
         /** Null means ungrouped -- the category rolls up as its own group of one. */
-        @JsonProperty("group_name") String groupName
+        @JsonProperty("group_name") String groupName,
+        /** A "#rrggbb" hex color, or null to fall back to the chart's default color. */
+        String color
 ) {}

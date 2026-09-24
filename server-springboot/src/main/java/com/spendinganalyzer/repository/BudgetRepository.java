@@ -28,6 +28,7 @@ public class BudgetRepository {
             nullableInt(rs, "escalation_frequency_months"),
             rs.getString("escalation_start_month"),
             rs.getString("rollover_start_month"),
+            rs.getString("period"),
             rs.getString("updated_at")
     );
 
@@ -83,15 +84,30 @@ public class BudgetRepository {
             String escalationStartMonth,
             String rolloverStartMonth
     ) {
+        return upsert(category, monthlyLimit, escalationType, escalationValue, escalationFrequencyMonths,
+                escalationStartMonth, rolloverStartMonth, Budget.MONTHLY);
+    }
+
+    /** Same as the seven-argument overload, plus the period -- see {@link Budget#period}. */
+    public Budget upsert(
+            String category,
+            double monthlyLimit,
+            String escalationType,
+            Double escalationValue,
+            Integer escalationFrequencyMonths,
+            String escalationStartMonth,
+            String rolloverStartMonth,
+            String period
+    ) {
         jdbc.update("""
                 INSERT INTO budgets (
                   category, monthly_limit,
                   escalation_type, escalation_value, escalation_frequency_months, escalation_start_month,
-                  rollover_start_month
+                  rollover_start_month, period
                 ) VALUES (
                   :category, :limit,
                   :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth,
-                  :rolloverStartMonth
+                  :rolloverStartMonth, :period
                 )
                 ON CONFLICT(category) DO UPDATE SET
                   monthly_limit = excluded.monthly_limit,
@@ -100,6 +116,7 @@ public class BudgetRepository {
                   escalation_frequency_months = excluded.escalation_frequency_months,
                   escalation_start_month = excluded.escalation_start_month,
                   rollover_start_month = excluded.rollover_start_month,
+                  period = excluded.period,
                   updated_at = datetime('now')
                 """,
                 new MapSqlParameterSource()
@@ -109,7 +126,8 @@ public class BudgetRepository {
                         .addValue("escalationValue", escalationValue)
                         .addValue("escalationFrequencyMonths", escalationFrequencyMonths)
                         .addValue("escalationStartMonth", escalationStartMonth)
-                        .addValue("rolloverStartMonth", rolloverStartMonth));
+                        .addValue("rolloverStartMonth", rolloverStartMonth)
+                        .addValue("period", period));
 
         return findByCategory(category).orElseThrow();
     }
@@ -134,6 +152,7 @@ public class BudgetRepository {
                         .addValue("escalationFrequencyMonths", b.escalationFrequencyMonths())
                         .addValue("escalationStartMonth", b.escalationStartMonth())
                         .addValue("rolloverStartMonth", b.rolloverStartMonth())
+                        .addValue("period", b.period())
                         .addValue("updatedAt", b.updatedAt()))
                 .toArray(MapSqlParameterSource[]::new);
 
@@ -141,11 +160,11 @@ public class BudgetRepository {
                 INSERT INTO budgets (
                   id, category, monthly_limit,
                   escalation_type, escalation_value, escalation_frequency_months, escalation_start_month,
-                  rollover_start_month, updated_at
+                  rollover_start_month, period, updated_at
                 ) VALUES (
                   :id, :category, :limit,
                   :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth,
-                  :rolloverStartMonth, :updatedAt
+                  :rolloverStartMonth, :period, :updatedAt
                 )
                 """, params);
     }

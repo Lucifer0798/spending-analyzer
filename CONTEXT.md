@@ -678,6 +678,24 @@ that explicitly sends `"group_name": null` (or a blank string) clears it — the
 whole-field-not-a-merge contract an upsert gives everywhere else in this app, applied to one
 field of a `PATCH` instead of a whole row.
 
+**A category's `color` follows `group_name`'s exact pattern, one column over.** Nullable `TEXT`
+added in `V19__category_colors.sql`, the same `containsKey("color")` PATCH semantics in
+`CategoryController.update`, no gate on built-in categories, no version bump to `BackupData` (the
+same additive-nullable-column reasoning `V15__budget_escalation.sql` used — an old export
+deserializes with `color: null`, which is the correct value for a category that predates this).
+The one addition group didn't need: `CategoryController.HEX_COLOR` (`^#[0-9a-fA-F]{6}$`) rejects
+anything that isn't what an `<input type="color">` actually sends, so a malformed value fails
+loudly at the boundary instead of reaching a chart as an invalid CSS color.
+
+> `color` is read wherever a category name already is, not threaded through as a new prop into
+> components that don't otherwise need it. `Dashboard` builds `colorByCategory` alongside the
+> `groupByCategory` map it already had (one `fetchCategories()` effect, same shape, one more
+> field read off each row) and passes it to `CategoryBarChart` for a per-bar `Cell` fill and to
+> `BudgetsCard` for a swatch; `TransactionsTable` builds its own copy from the `fetchCategories()`
+> call it was already making for the plain name list. No shared cache or context — three call
+> sites, three cheap fetches, the same duplication `groupByCategory` already accepted rather than
+> lifting category data into some app-wide store this app has never needed elsewhere.
+
 **A budget's escalation schedule is computed on read, not applied by a background job that
 mutates `monthly_limit` over time.** This app has no scheduler or cron equivalent — everything
 derived here (recurring detection, anomalies, net worth history) is recomputed fresh from stored
@@ -747,6 +765,55 @@ existing start month on an unrelated save (the exact bug fixed during that featu
 verification). Rollover sidesteps the whole class of bug: there is no configuration for the
 client to get out of sync with, so there was never a way for it to lose track of the start month
 in the first place.
+
+**A budget's `period` reuses the shared anchor month rather than giving weekly/quarterly budgets
+their own "which week" or "which quarter" control.** The page only ever had one "which month"
+input; adding a second, period-specific navigator for a handful of non-monthly budgets would be a
+new piece of UI (and a new query parameter) for a feature that doesn't need one. Instead
+`BudgetService.periodRange` derives a weekly or quarterly budget's actual measured range from the
+*same* anchor month every monthly budget already resolves — the ISO week containing that month's
+last day, or the calendar quarter containing the month itself — so every budget on the page still
+moves together when the one shared control changes, and `resolveMonth` needed no changes at all.
+`BudgetProgress.periodStart`/`periodEnd` carry the resolved range back to the frontend precisely so
+it doesn't have to duplicate that date math client-side to label a weekly or quarterly row.
+
+> `spendByRange` (a `Map<DateRange, Map<String, Double>>`, scoped to one `progress()` call) sits
+> alongside the existing `spendByMonth` rollover-history memo rather than replacing it — they
+> answer different questions. `spendByRange` memoizes *the* current measured range per budget
+> (almost always the same one `DateRange`, shared by every monthly budget on the page); `spendByMonth`
+> memoizes rollover's walk back through *prior* months one at a time, keyed by `YearMonth` since
+> that loop already thinks in whole months. Folding them into one map would mean rollover's
+> per-month keys and the current-period's arbitrary-`DateRange` keys living in the same map for no
+> shared benefit.
+
+**Escalation and rollover are gated on `Budget.MONTHLY`, not left to silently no-op for another
+period.** Both are defined in whole months (`escalation_frequency_months`, a rollover start month
+walked forward one month at a time) and have no honest translation to "every 4 weeks" or "every
+quarter" that this app has any reason to build. `BudgetController.set` rejects the *combination*
+outright (400) rather than accepting a weekly budget's escalation fields and quietly ignoring
+them — the same "say so, don't guess" instinct behind every other refusal in this app (mixed
+currencies, a half-open date range). `BudgetService.progress` still defends the invariant a second
+time regardless (`monthly ? effectiveLimit(...) : budget.monthlyLimit()`), since `budgets.upsert`
+is also called directly by tests and `BackupService.restoreAll`, neither of which goes through the
+controller's validation.
+
+**A week's or a quarter's own target is excluded from `BudgetSummary.totalLimit`/`totalSpent`,
+the same reasoning a mixed-currency "all accounts" total is refused rather than summed.** Adding a
+$50/week allowance into "this month's" combined total would either overstate it (counted as if
+due every month) or understate it (counted only once for what's actually four or five weeks) —
+there's no honest single number a monthly-shaped total could add it in as. Every budget still gets
+its own `BudgetProgress` row and its own progress bar; the `if (monthly)` guard around the two
+running totals in `BudgetService.progress` is the only place a non-monthly budget is treated any
+differently from a monthly one for arithmetic purposes.
+
+**`BudgetRepository.upsert` kept its original seven-argument signature as an overload rather than
+adding `period` as an eighth positional argument everywhere.** `BudgetControllerTest` and
+`BackupServiceTest` both call the pre-existing seven-argument form directly (not through the
+controller), and every one of those call sites means "an ordinary monthly budget" — changing the
+signature in place would have forced null-checking or an extra argument onto call sites that have
+no opinion about period at all. The seven-argument overload delegates to the eight-argument one
+with `Budget.MONTHLY`, the same "add an overload, don't touch existing callers" precedent the tag
+and search filters set on `TransactionRepository.find`/`count`.
 
 **`predictions_cache` is keyed by account id, same 0-sentinel trick as the merchant bands.**
 It used to be one global row (`id = 1`) with no account attached — generate a forecast while

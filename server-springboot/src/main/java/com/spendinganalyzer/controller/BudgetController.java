@@ -44,13 +44,19 @@ public class BudgetController {
     }
 
     private static final Set<String> ESCALATION_TYPES = Set.of("fixed", "percent");
+    private static final Set<String> PERIODS = Set.of(Budget.WEEKLY, Budget.MONTHLY, Budget.QUARTERLY);
 
     /**
-     * Sets a category's monthly target, replacing any existing one -- escalation schedule
-     * included, so leaving the escalation fields out clears whatever schedule was there before.
-     * An upsert rather than separate create and update calls: "budget Groceries at 500" is a
-     * single intent, and the caller should not have to discover whether a budget already exists
-     * to express it.
+     * Sets a category's target, replacing any existing one -- escalation schedule included, so
+     * leaving the escalation fields out clears whatever schedule was there before. An upsert
+     * rather than separate create and update calls: "budget Groceries at 500" is a single intent,
+     * and the caller should not have to discover whether a budget already exists to express it.
+     *
+     * <p>{@code period} ({@code weekly}, {@code monthly}, or {@code quarterly}) is omittable, and
+     * defaults to {@code monthly} when it is -- the same as every existing budget before this
+     * field existed. Like the target itself, it is resent on every save rather than preserved
+     * server-side, since (unlike an escalation or rollover start month) the client already shows
+     * and controls it directly.
      */
     @PostMapping("/budgets")
     public ResponseEntity<?> set(@RequestBody Map<String, Object> body) {
@@ -72,6 +78,13 @@ public class BudgetController {
         if (limit <= 0) {
             return ResponseEntity.badRequest()
                     .body(new ErrorResponse("monthly_limit must be greater than zero."));
+        }
+
+        Object rawPeriod = body.get("period");
+        String period = rawPeriod instanceof String s && !s.isBlank() ? s.trim() : Budget.MONTHLY;
+        if (!PERIODS.contains(period)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    "period must be one of: " + String.join(", ", PERIODS)));
         }
 
         Object rawType = body.get("escalation_type");
@@ -129,9 +142,17 @@ public class BudgetController {
             rolloverStartMonth = existingStart != null ? existingStart : YearMonth.now().toString();
         }
 
+        // Both are defined in whole months, so neither has a sensible meaning against a week or a
+        // quarter -- refused up front rather than silently ignored, the same "say so, don't guess"
+        // the rest of this app already applies to a mismatched request.
+        if (!Budget.MONTHLY.equals(period) && (escalationType != null || rolloverRequested)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    "escalation and rollover are only available for monthly budgets."));
+        }
+
         return ResponseEntity.ok(budgets.upsert(
                 category, limit, escalationType, escalationValue, escalationFrequencyMonths, escalationStartMonth,
-                rolloverStartMonth));
+                rolloverStartMonth, period));
     }
 
     @DeleteMapping("/budgets/{id}")

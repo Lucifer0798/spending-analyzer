@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -117,12 +118,15 @@ function CategoryBarChart({
   currencyCode,
   exportHref,
   exportTitle,
+  colorByCategory = {},
 }: {
   title?: string;
   data: CategoryTotal[];
   currencyCode: string;
   exportHref?: string;
   exportTitle?: string;
+  /** A category (or group) with no entry here just renders in the chart's default blue. */
+  colorByCategory?: Record<string, string>;
 }) {
   // Income and transfers are already excluded server-side via category flags,
   // which also covers user-created categories marked as such.
@@ -140,7 +144,11 @@ function CategoryBarChart({
           <XAxis type="number" stroke={MUTED} fontSize={12} tickLine={false} axisLine={{ stroke: GRID }} />
           <YAxis type="category" dataKey="category" stroke={MUTED} fontSize={12} width={130} tickLine={false} axisLine={false} />
           <Tooltip content={<ChartTooltip currencyCode={currencyCode} />} />
-          <Bar dataKey="total" name="Spend" fill={BLUE} radius={[0, 4, 4, 0]} />
+          <Bar dataKey="total" name="Spend" radius={[0, 4, 4, 0]}>
+            {bars.map((b) => (
+              <Cell key={b.category} fill={colorByCategory[b.category] ?? BLUE} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -168,14 +176,20 @@ export function Dashboard({ accountId, range }: Props) {
   // Category -> group name, only for categories that actually have one set. Categories don't
   // depend on the account or date filter, so this loads once rather than alongside the summary.
   const [groupByCategory, setGroupByCategory] = useState<Record<string, string>>({});
+  // Category -> its chosen color, only for categories that have one set -- anything absent here
+  // falls back to the chart's own default color, so this is unchanged for anyone not using it.
+  const [colorByCategory, setColorByCategory] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchCategories().then((r) => {
       const groups: Record<string, string> = {};
+      const colors: Record<string, string> = {};
       for (const c of r.detailed) {
         if (c.group_name) groups[c.name] = c.group_name;
+        if (c.color) colors[c.name] = c.color;
       }
       setGroupByCategory(groups);
+      setColorByCategory(colors);
     });
   }, []);
 
@@ -253,7 +267,11 @@ export function Dashboard({ accountId, range }: Props) {
               </h2>
               <StatTile label="Total spend" value={currency(total, 0, breakdown.currency)} />
               <MonthlyTrendChart data={breakdown.monthlyTotals} currencyCode={breakdown.currency} />
-              <CategoryBarChart data={breakdown.categoryTotals} currencyCode={breakdown.currency} />
+              <CategoryBarChart
+                data={breakdown.categoryTotals}
+                currencyCode={breakdown.currency}
+                colorByCategory={colorByCategory}
+              />
               {Object.keys(groupByCategory).length > 0 && (
                 <CategoryBarChart
                   title="Spending by category group"
@@ -316,7 +334,7 @@ export function Dashboard({ accountId, range }: Props) {
 
       {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
           for anyone not using them. */}
-      <BudgetsCard accountId={accountId} range={range} />
+      <BudgetsCard accountId={accountId} range={range} colorByCategory={colorByCategory} />
 
       <MonthlyTrendChart
         data={summary.monthlyTotals}
@@ -329,6 +347,7 @@ export function Dashboard({ accountId, range }: Props) {
         currencyCode={cur}
         exportHref={exportUrl("categories", { accountId, range })}
         exportTitle="Download every category, not just the top 12 shown"
+        colorByCategory={colorByCategory}
       />
 
       {/* Renders nothing until at least one category has a group set, so the dashboard is

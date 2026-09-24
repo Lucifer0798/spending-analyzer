@@ -23,8 +23,11 @@ public class CategoryController {
 
     public record CategoryWithCount(
             long id, String name, boolean is_builtin, boolean is_income,
-            boolean is_transfer, int sort_order, String group_name, int transactionCount
+            boolean is_transfer, int sort_order, String group_name, String color, int transactionCount
     ) {}
+
+    /** "#" plus exactly six hex digits -- what an {@code <input type="color">} always sends. */
+    private static final java.util.regex.Pattern HEX_COLOR = java.util.regex.Pattern.compile("^#[0-9a-fA-F]{6}$");
 
     /**
      * Returns both a plain name list (what the transaction pickers bind to) and the
@@ -35,7 +38,8 @@ public class CategoryController {
         List<Category> all = categoryRepository.findAll();
         List<CategoryWithCount> detailed = all.stream()
                 .map(c -> new CategoryWithCount(c.id(), c.name(), c.isBuiltin(), c.isIncome(),
-                        c.isTransfer(), c.sortOrder(), c.groupName(), categoryRepository.transactionCount(c.name())))
+                        c.isTransfer(), c.sortOrder(), c.groupName(), c.color(),
+                        categoryRepository.transactionCount(c.name())))
                 .toList();
         return Map.of(
                 "categories", all.stream().map(Category::name).toList(),
@@ -104,6 +108,17 @@ public class CategoryController {
         if (body.containsKey("group_name")) {
             String groupName = body.get("group_name") instanceof String s && !s.isBlank() ? s.trim() : null;
             categoryRepository.updateGroup(id, groupName);
+        }
+
+        // Same containsKey convention as group_name: absent leaves the color alone, present with
+        // null or blank clears it, present with a value sets it.
+        if (body.containsKey("color")) {
+            String color = body.get("color") instanceof String s && !s.isBlank() ? s.trim() : null;
+            if (color != null && !HEX_COLOR.matcher(color).matches()) {
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse("color must be a hex code like #4f46e5, got: " + color));
+            }
+            categoryRepository.updateColor(id, color);
         }
 
         return ResponseEntity.ok(categoryRepository.findById(id).orElseThrow());
