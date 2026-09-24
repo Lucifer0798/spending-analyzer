@@ -7,6 +7,7 @@ import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.repository.BudgetRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
@@ -50,14 +51,10 @@ public class BudgetService {
             return new BudgetSummary(month, List.of(), 0, 0, null, true);
         }
 
-        // Reuses the dashboard's own spend query, so a budget counts exactly what the category
-        // chart counts — income and transfer categories excluded, same account filter.
-        Map<String, Double> spent = new HashMap<>();
-        for (CategoryTotal total : stats.computeCategoryTotals(accountId, monthRange(month))) {
-            spent.put(total.category(), total.total());
-        }
-
         YearMonth measuredMonth = YearMonth.parse(month);
+        // Every budget sharing the same measured range (almost always true for the common case of
+        // several monthly budgets) reuses one query instead of repeating it per budget.
+        Map<DateRange, Map<String, Double>> spendByRange = new HashMap<>();
         // Rollover re-derives every prior month's spend for a category since its start month, so
         // budgets sharing a history of months would otherwise repeat that query once per budget.
         // Memoized here, scoped to one progress() call, rather than as a field: there is no
@@ -68,9 +65,16 @@ public class BudgetService {
         double totalSpent = 0;
 
         for (Budget budget : budgets.findAll()) {
-            double used = spent.getOrDefault(budget.category(), 0.0);
-            double carryIn = rolloverCarryIn(accountId, budget, measuredMonth, spendByMonth);
-            double limit = effectiveLimit(budget, measuredMonth) + carryIn;
+            boolean monthly = Budget.MONTHLY.equals(budget.period());
+            DateRange periodRange = periodRange(budget, measuredMonth);
+            Map<String, Double> spentInRange =
+                    spendByRange.computeIfAbsent(periodRange, r -> spendByCategory(accountId, r));
+            double used = spentInRange.getOrDefault(budget.category(), 0.0);
+
+            // Escalation and rollover are both defined in whole months, so neither applies once a
+            // budget measures a week or a quarter instead — the raw target is the whole limit.
+            double carryIn = monthly ? rolloverCarryIn(accountId, budget, measuredMonth, spendByMonth) : 0.0;
+            double limit = (monthly ? effectiveLimit(budget, measuredMonth) : budget.monthlyLimit()) + carryIn;
             double percent = (used / limit) * 100;
 
             rows.add(new BudgetProgress(
@@ -87,14 +91,53 @@ public class BudgetService {
                     budget.escalationFrequencyMonths(),
                     budget.escalationStartMonth(),
                     budget.rolloverStartMonth(),
-                    round2(carryIn)
+                    round2(carryIn),
+                    budget.period(),
+                    periodRange.from(),
+                    periodRange.to()
             ));
 
-            totalLimit += limit;
-            totalSpent += used;
+            // A week's or a quarter's own target is not the same unit as "this month" -- adding it
+            // into the combined total would overstate (a quarterly insurance premium counted as if
+            // due every month) or understate (a weekly allowance counted only once) what the shared
+            // total claims to represent. Only budgets that actually share the measured month
+            // contribute to it, the same reasoning a mixed-currency "all accounts" total is refused
+            // rather than summed.
+            if (monthly) {
+                totalLimit += limit;
+                totalSpent += used;
+            }
         }
 
         return new BudgetSummary(month, rows, round2(totalLimit), round2(totalSpent), currency, false);
+    }
+
+    /**
+     * The date range a budget's spend is actually measured over for {@code anchorMonth} -- the
+     * month itself for a monthly budget, or the quarter/week containing it otherwise. Every budget
+     * on the page shares the same anchor month (there is only one "which month" control), so a
+     * weekly or quarterly budget's range still moves in step with everything else when that
+     * control changes, rather than tracking today's date independently.
+     */
+    private static DateRange periodRange(Budget budget, YearMonth anchorMonth) {
+        return switch (budget.period()) {
+            case Budget.WEEKLY -> weekRange(anchorMonth.atEndOfMonth());
+            case Budget.QUARTERLY -> quarterRange(anchorMonth);
+            default -> monthRange(anchorMonth.toString());
+        };
+    }
+
+    /** The Monday-to-Sunday ISO week containing {@code anchorDate}. */
+    private static DateRange weekRange(LocalDate anchorDate) {
+        LocalDate monday = anchorDate.minusDays(anchorDate.getDayOfWeek().getValue() - 1L);
+        return new DateRange(monday.toString(), monday.plusDays(6).toString());
+    }
+
+    /** The calendar quarter (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec) containing {@code anchorMonth}. */
+    private static DateRange quarterRange(YearMonth anchorMonth) {
+        int quarterStartMonthNum = ((anchorMonth.getMonthValue() - 1) / 3) * 3 + 1;
+        YearMonth quarterStart = YearMonth.of(anchorMonth.getYear(), quarterStartMonthNum);
+        return new DateRange(quarterStart.atDay(1).toString(), quarterStart.plusMonths(2).atEndOfMonth().toString());
     }
 
     /**
@@ -115,16 +158,17 @@ public class BudgetService {
         YearMonth start = YearMonth.parse(budget.rolloverStartMonth());
         double carry = 0.0;
         for (YearMonth m = start; m.isBefore(month); m = m.plusMonths(1)) {
-            Map<String, Double> spendThatMonth = spendByMonth.computeIfAbsent(m, k -> spendByCategory(accountId, k));
+            Map<String, Double> spendThatMonth =
+                    spendByMonth.computeIfAbsent(m, k -> spendByCategory(accountId, monthRange(k.toString())));
             double spentThatMonth = spendThatMonth.getOrDefault(budget.category(), 0.0);
             carry += effectiveLimit(budget, m) - spentThatMonth;
         }
         return carry;
     }
 
-    private Map<String, Double> spendByCategory(Long accountId, YearMonth month) {
+    private Map<String, Double> spendByCategory(Long accountId, DateRange range) {
         Map<String, Double> byCategory = new HashMap<>();
-        for (CategoryTotal total : stats.computeCategoryTotals(accountId, monthRange(month.toString()))) {
+        for (CategoryTotal total : stats.computeCategoryTotals(accountId, range)) {
             byCategory.put(total.category(), total.total());
         }
         return byCategory;

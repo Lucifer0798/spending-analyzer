@@ -25,6 +25,7 @@ import {
 import type {
   Account,
   AccountType,
+  BudgetPeriod,
   BudgetProgress,
   BudgetSummary,
   CategoryDetail,
@@ -67,6 +68,11 @@ export function ManagePage({ onAccountsChanged }: Props) {
   // Rollover is a plain on/off per category -- the server manages the actual start month (see
   // setBudget), so unlike escalation there's no value to draft, just which way the box is checked.
   const [rolloverDrafts, setRolloverDrafts] = useState<Record<string, boolean>>({});
+
+  // Unlike rollover's start month, period has no server-managed value to fall back to -- the
+  // client already shows and controls it directly, so a draft here works exactly like the plain
+  // limit draft above: falls back to the saved budget's own period, or "monthly" for a new one.
+  const [periodDrafts, setPeriodDrafts] = useState<Record<string, BudgetPeriod>>({});
 
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState<AccountType>("checking");
@@ -192,6 +198,18 @@ export function ManagePage({ onAccountsChanged }: Props) {
   function rolloverSummary(b: BudgetProgress, currencyCode: string): string {
     const sign = b.rolloverCarryIn >= 0 ? "+" : "−";
     return `${sign}${currency(Math.abs(b.rolloverCarryIn), 0, currencyCode)} rolled over from last month`;
+  }
+
+  function shortDate(iso: string): string {
+    return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  /** "this month" for a monthly budget; the actual dates for a weekly or quarterly one, since
+   *  those don't line up with the single month the rest of the page is anchored to. */
+  function periodRangeLabel(b: BudgetProgress): string {
+    if (b.period === "monthly") return "this month";
+    const label = b.period === "weekly" ? "this week" : "this quarter";
+    return `${label} (${shortDate(b.periodStart)}–${shortDate(b.periodEnd)})`;
   }
 
   return (
@@ -328,6 +346,13 @@ export function ManagePage({ onAccountsChanged }: Props) {
                 <tr key={c.id}>
                   <td className="px-4 py-2">
                     <div className="text-sm text-slate-800 dark:text-slate-200">
+                      {c.color && (
+                        <span
+                          className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle"
+                          style={{ backgroundColor: c.color }}
+                          title={c.color}
+                        />
+                      )}
                       {c.name}
                       {c.is_income && (
                         <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
@@ -351,6 +376,22 @@ export function ManagePage({ onAccountsChanged }: Props) {
                     <div className="text-xs text-slate-500">{c.transactionCount} transactions</div>
                   </td>
                   <td className="px-4 py-2 text-right">
+                    <input
+                      type="color"
+                      value={c.color ?? "#94a3b8"}
+                      title="Set this category's color"
+                      onChange={(e) => run(() => updateCategory(c.id, { color: e.target.value }))}
+                      className="ml-1 h-6 w-6 cursor-pointer rounded border border-slate-300 bg-white p-0 align-middle dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    {c.color && (
+                      <button
+                        onClick={() => run(() => updateCategory(c.id, { color: null }))}
+                        title="Clear color"
+                        className="ml-0.5 rounded px-1 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                      >
+                        ×
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         const group = prompt(
@@ -361,7 +402,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                           run(() => updateCategory(c.id, { group_name: group.trim() || null }));
                         }
                       }}
-                      className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      className="ml-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
                       {c.group_name ? "Change group" : "+ Group"}
                     </button>
@@ -477,18 +518,28 @@ export function ManagePage({ onAccountsChanged }: Props) {
 
                 const rolloverChecked = rolloverDrafts[c.name] ?? saved?.rolloverStartMonth != null;
 
+                const periodDraft = periodDrafts[c.name] ?? saved?.period ?? "monthly";
+                const isMonthly = periodDraft === "monthly";
+                // Escalation and rollover only mean anything for a monthly budget -- forced off
+                // here (rather than just hidden) so switching a budget that had either one to
+                // weekly or quarterly actually clears them on save instead of silently keeping a
+                // schedule the period picker no longer shows any control for.
+                const monthlyOnlyEscalation = isMonthly ? escalationForSave : undefined;
+                const rolloverForSave = isMonthly && rolloverChecked;
+
                 const canSave =
                   draft.trim() !== "" &&
                   Number.isFinite(parsed) &&
                   parsed > 0 &&
-                  escalationValid &&
+                  (escalationValid || !isMonthly) &&
                   (parsed !== saved?.baseLimit ||
                     draftEscalationKey !== savedEscalationKey ||
-                    rolloverChecked !== (saved?.rolloverStartMonth != null));
+                    rolloverForSave !== (saved?.rolloverStartMonth != null) ||
+                    periodDraft !== (saved?.period ?? "monthly"));
 
                 const save = () =>
                   run(
-                    () => setBudget(c.name, parsed, escalationForSave, rolloverChecked),
+                    () => setBudget(c.name, parsed, monthlyOnlyEscalation, rolloverForSave, periodDraft),
                     `Budget set for ${c.name}.`
                   );
 
@@ -499,7 +550,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                         <div className="text-sm text-slate-800 dark:text-slate-200">{c.name}</div>
                         {saved && (
                           <div className="text-xs text-slate-500">
-                            {currency(saved.spent, 0, budgetCurrency)} spent of {currency(saved.monthlyLimit, 0, budgetCurrency)} this month
+                            {currency(saved.spent, 0, budgetCurrency)} spent of {currency(saved.monthlyLimit, 0, budgetCurrency)} {periodRangeLabel(saved)}
                           </div>
                         )}
                         {saved?.escalationType && !isOpen && (
@@ -511,6 +562,17 @@ export function ManagePage({ onAccountsChanged }: Props) {
                       </td>
                       <td className="px-4 py-2 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <select
+                            value={periodDraft}
+                            onChange={(e) =>
+                              setPeriodDrafts((d) => ({ ...d, [c.name]: e.target.value as BudgetPeriod }))
+                            }
+                            className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                          >
+                            <option value="weekly">per week</option>
+                            <option value="monthly">per month</option>
+                            <option value="quarterly">per quarter</option>
+                          </select>
                           <input
                             type="number"
                             min="0"
@@ -524,7 +586,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && canSave) save();
                             }}
-                            className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-900"
+                            className="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-900"
                           />
                           <button
                             disabled={!canSave}
@@ -545,6 +607,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                                 }));
                                 setEscalationOpen((o) => ({ ...o, [c.name]: false }));
                                 setRolloverDrafts((d) => ({ ...d, [c.name]: false }));
+                                setPeriodDrafts((d) => ({ ...d, [c.name]: "monthly" }));
                               })
                             }
                             className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"
@@ -552,27 +615,32 @@ export function ManagePage({ onAccountsChanged }: Props) {
                             Clear
                           </button>
                         </div>
-                        <div className="mt-1 flex items-center justify-end gap-3">
-                          <button
-                            onClick={() => setEscalationOpen((o) => ({ ...o, [c.name]: !isOpen }))}
-                            className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
-                          >
-                            {isOpen ? "Hide auto-increase" : saved?.escalationType ? "Edit auto-increase" : "+ Auto-increase"}
-                          </button>
-                          <label className="flex items-center gap-1 text-xs text-slate-500">
-                            <input
-                              type="checkbox"
-                              checked={rolloverChecked}
-                              onChange={(e) =>
-                                setRolloverDrafts((d) => ({ ...d, [c.name]: e.target.checked }))
-                              }
-                            />
-                            Roll over unused budget
-                          </label>
-                        </div>
+                        {/* Both are defined in whole months, so neither has a control once the
+                            period above is weekly or quarterly -- matching the server, which
+                            rejects the combination outright rather than silently ignoring it. */}
+                        {isMonthly && (
+                          <div className="mt-1 flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => setEscalationOpen((o) => ({ ...o, [c.name]: !isOpen }))}
+                              className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+                            >
+                              {isOpen ? "Hide auto-increase" : saved?.escalationType ? "Edit auto-increase" : "+ Auto-increase"}
+                            </button>
+                            <label className="flex items-center gap-1 text-xs text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={rolloverChecked}
+                                onChange={(e) =>
+                                  setRolloverDrafts((d) => ({ ...d, [c.name]: e.target.checked }))
+                                }
+                              />
+                              Roll over unused budget
+                            </label>
+                          </div>
+                        )}
                       </td>
                     </tr>
-                    {isOpen && (
+                    {isOpen && isMonthly && (
                       <tr>
                         <td colSpan={2} className="bg-slate-50 px-4 py-3 dark:bg-slate-900/50">
                           <div className="flex flex-wrap items-center gap-2 text-sm">

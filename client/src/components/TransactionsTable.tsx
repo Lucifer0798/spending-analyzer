@@ -47,6 +47,8 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
   const [searchInput, setSearchInput] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
+  // A category with no entry here just renders without a swatch.
+  const [colorByCategory, setColorByCategory] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<Tag[]>([]);
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,14 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
   const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
-    fetchCategories().then((r) => setCategories(r.categories));
+    fetchCategories().then((r) => {
+      setCategories(r.categories);
+      const colors: Record<string, string> = {};
+      for (const c of r.detailed) {
+        if (c.color) colors[c.name] = c.color;
+      }
+      setColorByCategory(colors);
+    });
   }, []);
 
   const loadPresets = () => {
@@ -589,6 +598,12 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
                     </div>
                   </td>
                   <td className="px-4 py-2 text-xs text-slate-500">
+                    {t.category && colorByCategory[t.category] && (
+                      <span
+                        className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
+                        style={{ backgroundColor: colorByCategory[t.category] }}
+                      />
+                    )}
                     {t.category ?? "Uncategorized"}
                   </td>
                   <td className="px-4 py-2 text-xs text-slate-500">
@@ -660,6 +675,12 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
                     </div>
                   </td>
                   <td className="px-4 py-2 text-sm">
+                    {t.category && colorByCategory[t.category] && (
+                      <span
+                        className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
+                        style={{ backgroundColor: colorByCategory[t.category] }}
+                      />
+                    )}
                     <select
                       value={t.category ?? ""}
                       onChange={(e) => handleCategoryChange(t.id, e.target.value)}

@@ -6,6 +6,8 @@ import { currency } from "../format";
 interface Props {
   accountId: number | null;
   range: DateRangeValue;
+  /** A category with no entry here just renders without a swatch. */
+  colorByCategory?: Record<string, string>;
 }
 
 const STATUS_COLOR: Record<BudgetStatus, string> = {
@@ -20,7 +22,26 @@ function monthLabel(month: string) {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-function BudgetRow({ budget, currencyCode }: { budget: BudgetProgress; currencyCode: string }) {
+function shortDate(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** "" for a monthly budget, since the card's own heading already names the measured month --
+ *  a weekly or quarterly one gets its own dates, since those don't line up with that heading. */
+function periodNote(budget: BudgetProgress) {
+  if (budget.period === "monthly") return "";
+  return ` · ${shortDate(budget.periodStart)}–${shortDate(budget.periodEnd)}`;
+}
+
+function BudgetRow({
+  budget,
+  currencyCode,
+  swatchColor,
+}: {
+  budget: BudgetProgress;
+  currencyCode: string;
+  swatchColor?: string;
+}) {
   const color = STATUS_COLOR[budget.status];
   // The bar caps at 100% so it cannot overflow its track; the number beside it carries the
   // overspend, which is the part worth reading precisely anyway.
@@ -29,7 +50,16 @@ function BudgetRow({ budget, currencyCode }: { budget: BudgetProgress; currencyC
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="font-medium text-slate-800 dark:text-slate-200">{budget.category}</span>
+        <span className="font-medium text-slate-800 dark:text-slate-200">
+          {swatchColor && (
+            <span
+              className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle"
+              style={{ backgroundColor: swatchColor }}
+            />
+          )}
+          {budget.category}
+          {periodNote(budget) && <span className="font-normal text-slate-400">{periodNote(budget)}</span>}
+        </span>
         <span className="text-slate-600 dark:text-slate-400">
           {currency(budget.spent, 0, currencyCode)} of {currency(budget.monthlyLimit, 0, currencyCode)}
         </span>
@@ -69,12 +99,13 @@ function BudgetRow({ budget, currencyCode }: { budget: BudgetProgress; currencyC
   );
 }
 
-export function BudgetsCard({ accountId, range }: Props) {
+export function BudgetsCard({ accountId, range, colorByCategory = {} }: Props) {
   const [summary, setSummary] = useState<BudgetSummary | null>(null);
 
-  // Budgets are monthly, so a range is reduced to the month it ends in. Leaving it undefined
-  // lets the server pick the newest month on record, which beats defaulting to a calendar
-  // month that has no imported data in it yet.
+  // Every budget shares one anchor month -- a weekly or quarterly budget's own range is derived
+  // from it server-side, so there's still only one "which month" control here. Leaving it
+  // undefined lets the server pick the newest month on record, which beats defaulting to a
+  // calendar month that has no imported data in it yet.
   const month = range.to ? range.to.slice(0, 7) : undefined;
 
   useEffect(() => {
@@ -87,6 +118,7 @@ export function BudgetsCard({ accountId, range }: Props) {
   const cur = summary.currency;
 
   const overall = summary.totalLimit === 0 ? 0 : (summary.totalSpent / summary.totalLimit) * 100;
+  const hasNonMonthly = summary.budgets.some((b) => b.period !== "monthly");
 
   return (
     <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -99,9 +131,16 @@ export function BudgetsCard({ accountId, range }: Props) {
         </span>
       </div>
 
+      {hasNonMonthly && (
+        <p className="mb-3 -mt-2 text-[11px] text-slate-400">
+          Weekly and quarterly targets aren't the same unit as a month, so they're left out of the
+          total above -- each still shows its own progress below.
+        </p>
+      )}
+
       <div className="space-y-4">
         {summary.budgets.map((b) => (
-          <BudgetRow key={b.id} budget={b} currencyCode={cur} />
+          <BudgetRow key={b.id} budget={b} currencyCode={cur} swatchColor={colorByCategory[b.category]} />
         ))}
       </div>
     </div>

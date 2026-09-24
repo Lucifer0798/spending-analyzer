@@ -6,6 +6,7 @@ import type {
   AuthStatus,
   BackupSummary,
   Budget,
+  BudgetPeriod,
   BudgetSummary,
   CategorizeResult,
   CategoryDetail,
@@ -336,7 +337,13 @@ export function createCategory(name: string, flags: { is_income?: boolean; is_tr
 
 export function updateCategory(
   id: number,
-  changes: { name?: string; is_income?: boolean; is_transfer?: boolean; group_name?: string | null }
+  changes: {
+    name?: string;
+    is_income?: boolean;
+    is_transfer?: boolean;
+    group_name?: string | null;
+    color?: string | null;
+  }
 ) {
   return request<CategoryDetail>(`/categories/${id}`, {
     method: "PATCH",
@@ -386,13 +393,17 @@ export interface BudgetEscalation {
  * `escalation` clears any schedule the budget previously had -- the whole row is replaced,
  * same as the target itself. `rollover: true` turns on carrying unused budget (or overspend)
  * into the next month; the server manages the actual start month, preserving it across a
- * resave so re-enabling never loses already-accumulated carry-in.
+ * resave so re-enabling never loses already-accumulated carry-in. `period` defaults to
+ * "monthly" when omitted, and (unlike rollover's start month) is always resent explicitly on
+ * every save, the same as the target itself -- escalation and rollover only make sense for a
+ * monthly period, so the server rejects combining either with "weekly" or "quarterly".
  */
 export function setBudget(
   category: string,
   monthlyLimit: number,
   escalation?: BudgetEscalation,
-  rollover?: boolean
+  rollover?: boolean,
+  period?: BudgetPeriod
 ) {
   return request<Budget>("/budgets", {
     method: "POST",
@@ -404,6 +415,7 @@ export function setBudget(
       escalation_frequency_months: escalation?.frequencyMonths ?? null,
       escalation_start_month: escalation?.startMonth ?? null,
       rollover: rollover ?? false,
+      period: period ?? "monthly",
     }),
   });
 }

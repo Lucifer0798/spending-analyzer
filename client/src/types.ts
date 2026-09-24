@@ -56,6 +56,8 @@ export interface CategoryDetail {
   sort_order: number;
   /** Null means ungrouped -- rolls up as its own group of one on the dashboard and in exports. */
   group_name: string | null;
+  /** "#rrggbb", or null to fall back to the chart's default color. */
+  color: string | null;
   transactionCount: number;
 }
 
@@ -339,6 +341,9 @@ export interface Budget {
 /** "near" is 80% or more of the target; "over" is past it. */
 export type BudgetStatus = "under" | "near" | "over";
 
+/** Escalation and rollover only ever apply to "monthly" -- both are defined in whole months. */
+export type BudgetPeriod = "weekly" | "monthly" | "quarterly";
+
 export interface BudgetProgress {
   id: number;
   category: string;
@@ -359,6 +364,11 @@ export interface BudgetProgress {
   rolloverStartMonth: string | null;
   /** Unused budget (or overspend, negative) carried in from prior months; zero when off. */
   rolloverCarryIn: number;
+  period: BudgetPeriod;
+  /** The actual range `spent` was measured over -- a week or a quarter for a non-monthly budget,
+   *  since the page as a whole is anchored to a single month. */
+  periodStart: string;
+  periodEnd: string;
 }
 
 export interface BudgetSummary {

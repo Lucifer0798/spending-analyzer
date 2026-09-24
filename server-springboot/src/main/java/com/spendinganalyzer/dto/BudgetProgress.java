@@ -15,6 +15,11 @@ package com.spendinganalyzer.dto;
  * @param rolloverCarryIn    unused budget (or overspend, negative) carried in from prior months
  *                           since {@code rolloverStartMonth}; zero when rollover is off or this
  *                           is the start month itself, with nothing yet to carry
+ * @param period      {@code weekly}, {@code monthly}, or {@code quarterly}
+ * @param periodStart the first day of the range {@code spent} was actually measured over
+ * @param periodEnd   the last day of that range -- together with {@code periodStart}, lets the
+ *                    frontend label a weekly or quarterly row with its own dates rather than the
+ *                    single month name the page as a whole is anchored to
  */
 public record BudgetProgress(
         long id,
@@ -30,5 +35,8 @@ public record BudgetProgress(
         Integer escalationFrequencyMonths,
         String escalationStartMonth,
         String rolloverStartMonth,
-        double rolloverCarryIn
+        double rolloverCarryIn,
+        String period,
+        String periodStart,
+        String periodEnd
 ) {}

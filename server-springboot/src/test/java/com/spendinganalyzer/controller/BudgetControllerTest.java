@@ -81,6 +81,12 @@ class BudgetControllerTest {
         return map;
     }
 
+    private static Map<String, Object> bodyWithPeriod(String category, Object limit, String period) {
+        Map<String, Object> map = body(category, limit);
+        map.put("period", period);
+        return map;
+    }
+
     private BudgetProgress progressFor(String category, String month) {
         return controller.list(null, month).budgets().stream()
                 .filter(b -> b.category().equals(category))
@@ -431,6 +437,121 @@ class BudgetControllerTest {
         assertThat(budgets.findByCategory("Groceries")).get()
                 .extracting(Budget::rolloverStartMonth)
                 .isEqualTo("2025-01");
+    }
+
+    // --- period --------------------------------------------------------------------
+
+    @Test
+    @DisplayName("a budget with no period specified defaults to monthly")
+    void defaultsToMonthlyPeriod() {
+        controller.set(body("Groceries", 500));
+
+        assertThat(budgets.findByCategory("Groceries")).get()
+                .extracting(Budget::period).isEqualTo("monthly");
+    }
+
+    @Test
+    @DisplayName("rejects an unknown period")
+    void rejectsUnknownPeriod() {
+        ResponseEntity<?> response = controller.set(bodyWithPeriod("Groceries", 500, "biweekly"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(budgets.findByCategory("Groceries")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("rejects an escalation schedule on a non-monthly budget")
+    void rejectsEscalationOnNonMonthlyBudget() {
+        Map<String, Object> body = bodyWithEscalation("Groceries", 400, "fixed", 50, 3, "2025-12");
+        body.put("period", "weekly");
+
+        assertThat(controller.set(body).getStatusCode().value()).isEqualTo(400);
+        assertThat(budgets.findByCategory("Groceries")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("rejects rollover on a non-monthly budget")
+    void rejectsRolloverOnNonMonthlyBudget() {
+        Map<String, Object> body = bodyWithRollover("Groceries", 400, true);
+        body.put("period", "quarterly");
+
+        assertThat(controller.set(body).getStatusCode().value()).isEqualTo(400);
+        assertThat(budgets.findByCategory("Groceries")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("omitting period on a later save resets it to monthly")
+    void omittingPeriodOnResaveResetsToMonthly() {
+        controller.set(bodyWithPeriod("Groceries", 400, "weekly"));
+
+        controller.set(body("Groceries", 400));
+
+        assertThat(budgets.findByCategory("Groceries")).get()
+                .extracting(Budget::period).isEqualTo("monthly");
+    }
+
+    @Test
+    @DisplayName("a weekly budget measures only the week containing the anchor month's last day")
+    void weeklyBudgetMeasuresOnlyItsOwnWeek() {
+        java.time.LocalDate lastDayOfJune = java.time.YearMonth.parse("2026-06").atEndOfMonth();
+        java.time.LocalDate monday = lastDayOfJune.minusDays(lastDayOfJune.getDayOfWeek().getValue() - 1L);
+        java.time.LocalDate sunday = monday.plusDays(6);
+
+        transactions.insertBatch(List.of(
+                new ParsedTransaction(monday.plusDays(3).toString(), "MIDWEEK SHOP", 40.00, "debit", "Groceries"),
+                new ParsedTransaction(monday.minusDays(1).toString(), "PREVIOUS WEEK SHOP", 999.00, "debit", "Groceries")
+        ), "weekly-budget-batch", 1L);
+
+        controller.set(bodyWithPeriod("Groceries", 100, "weekly"));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.spent()).isEqualTo(40.0);
+        assertThat(p.period()).isEqualTo("weekly");
+        assertThat(p.periodStart()).isEqualTo(monday.toString());
+        assertThat(p.periodEnd()).isEqualTo(sunday.toString());
+    }
+
+    @Test
+    @DisplayName("a quarterly budget measures the whole calendar quarter containing the anchor month")
+    void quarterlyBudgetMeasuresWholeQuarter() {
+        transactions.insertBatch(List.of(
+                // Q2 2026 (Apr-Jun) -- included alongside the shared seed's May and June spend.
+                new ParsedTransaction("2026-04-15", "APRIL SHOP", 60.00, "debit", "Groceries"),
+                // Q1 2026 -- excluded, a different quarter entirely.
+                new ParsedTransaction("2026-03-01", "MARCH SHOP", 999.00, "debit", "Groceries")
+        ), "quarterly-budget-batch", 1L);
+
+        controller.set(bodyWithPeriod("Groceries", 100, "quarterly"));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.spent()).isEqualTo(560.0); // 100 (May) + 400 (June) + 60 (April)
+        assertThat(p.period()).isEqualTo("quarterly");
+        assertThat(p.periodStart()).isEqualTo("2026-04-01");
+        assertThat(p.periodEnd()).isEqualTo("2026-06-30");
+    }
+
+    @Test
+    @DisplayName("a monthly budget's period range is exactly the measured month")
+    void monthlyBudgetPeriodRangeIsTheMonth() {
+        controller.set(body("Groceries", 500));
+
+        BudgetProgress p = progressFor("Groceries", "2026-06");
+        assertThat(p.period()).isEqualTo("monthly");
+        assertThat(p.periodStart()).isEqualTo("2026-06-01");
+        assertThat(p.periodEnd()).isEqualTo("2026-06-30");
+    }
+
+    @Test
+    @DisplayName("a non-monthly budget's own target doesn't distort the combined monthly total")
+    void nonMonthlyBudgetsExcludedFromTotals() {
+        controller.set(body("Groceries", 500));
+        controller.set(bodyWithPeriod("Travel", 50, "weekly"));
+
+        BudgetService.BudgetSummary summary = controller.list(null, "2026-06");
+        assertThat(summary.totalLimit()).isEqualTo(500.0);
+        assertThat(summary.totalSpent()).isEqualTo(400.0);
+        // The weekly budget still gets its own row -- just left out of the shared total.
+        assertThat(summary.budgets()).extracting(BudgetProgress::category).contains("Travel");
     }
 
     // --- deleting ---------------------------------------------------------------

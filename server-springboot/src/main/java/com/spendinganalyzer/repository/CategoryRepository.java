@@ -26,7 +26,8 @@ public class CategoryRepository {
             rs.getInt("is_income") == 1,
             rs.getInt("is_transfer") == 1,
             rs.getInt("sort_order"),
-            rs.getString("group_name")
+            rs.getString("group_name"),
+            rs.getString("color")
     );
 
     public List<Category> findAll() {
@@ -114,6 +115,12 @@ public class CategoryRepository {
                 new MapSqlParameterSource().addValue("groupName", groupName).addValue("id", id)) > 0;
     }
 
+    /** {@code color} null (or blank, from the controller) clears the category's color. */
+    public boolean updateColor(long id, String color) {
+        return jdbc.update("UPDATE categories SET color = :color WHERE id = :id",
+                new MapSqlParameterSource().addValue("color", color).addValue("id", id)) > 0;
+    }
+
     public int transactionCount(String categoryName) {
         Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM transactions WHERE category = :name",
                 new MapSqlParameterSource("name", categoryName), Integer.class);
@@ -157,12 +164,13 @@ public class CategoryRepository {
                         .addValue("isIncome", c.isIncome() ? 1 : 0)
                         .addValue("isTransfer", c.isTransfer() ? 1 : 0)
                         .addValue("sortOrder", c.sortOrder())
-                        .addValue("groupName", c.groupName()))
+                        .addValue("groupName", c.groupName())
+                        .addValue("color", c.color()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
-                INSERT INTO categories (id, name, is_builtin, is_income, is_transfer, sort_order, group_name)
-                VALUES (:id, :name, :isBuiltin, :isIncome, :isTransfer, :sortOrder, :groupName)
+                INSERT INTO categories (id, name, is_builtin, is_income, is_transfer, sort_order, group_name, color)
+                VALUES (:id, :name, :isBuiltin, :isIncome, :isTransfer, :sortOrder, :groupName, :color)
                 """, params);
     }
 }

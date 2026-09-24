@@ -194,7 +194,7 @@ Thirteen tables, all created automatically:
 | `accounts` | Your accounts; everything belongs to one, defaulting to "Default". Each has its own currency |
 | `categories` | The 16 built-in categories plus any you add |
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
-| `budgets` | A monthly spending target per category |
+| `budgets` | A spending target per category, weekly, monthly, or quarterly |
 | `predictions_cache` | The most recent AI forecast, one row per account |
 | `recurring_overrides` | A "cancel" reminder or "exclude" flag per merchant, set from the Recurring page |
 | `goals` | A savings target — name, amount, optional date, its own currency |
@@ -256,7 +256,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
 | `GET` | `/predictions` | Last saved forecast |
 | `POST` | `/predictions/refresh` | Generate a new forecast |
-| `GET` `POST` `DELETE` | `/budgets` | Monthly targets per category, with spend against them, an optional auto-increase schedule, and optional rollover |
+| `GET` `POST` `DELETE` | `/budgets` | Weekly, monthly, or quarterly targets per category, with spend against them; auto-increase and rollover are monthly-only |
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
 | `POST` | `/goals/contributions/split` | Log one contribution split across several goals at once |
@@ -272,7 +272,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/filter-presets` | Save, list, or delete a named combination of Transactions filters |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
-| `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group |
+| `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group and display color |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
 | `DELETE` | `/reset` | Delete all transactions (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
@@ -397,6 +397,13 @@ categories can be grouped too, unlike renaming — a group is just a label, not 
 there's nothing about grouping "Groceries" under "Food" that a built-in category needs protecting
 from the way its literal name is protected from a rename.
 
+**A category can carry a display color, used the same way everywhere it appears.** `color`
+(nullable, a `#rrggbb` hex code) sits on the category row exactly like `group_name` — set and
+cleared the same "absent leaves it alone, blank clears it" way from Manage. A category with no
+color renders exactly as it always did (the dashboard's one flat chart color), so nobody who never
+opens the picker sees any change. One with a color gets it everywhere: the dashboard's category
+bar chart, the swatch next to a budget's name, and the dot beside a transaction's category.
+
 **A budget can auto-increase on a schedule, computed on read rather than mutated by a background
 job.** The stored `monthly_limit` is always the original base the user set; a budget with an
 escalation schedule (a fixed amount or a percentage, every 1/3/12 months from a start month) has
@@ -409,6 +416,18 @@ schedule starts reports the plain base, same as having no schedule at all. Editi
 limit has to leave an existing schedule's start month untouched — carrying it forward, not
 resetting it to "now" on every save, is what makes the increases keep counting from when the
 schedule actually began rather than restarting every time someone touches the target.
+
+**A budget's period can be weekly or quarterly instead of monthly, with escalation and rollover
+staying monthly-only.** Every budget on the page still shares one anchor month — there's only one
+"which month" control — but a weekly budget measures the Monday-to-Sunday week containing that
+month's last day, and a quarterly one measures the calendar quarter containing it, so both still
+move in step when the anchor changes rather than tracking today's date on their own. Escalation
+and rollover are both defined in whole months, so neither has a sensible meaning against a week or
+a quarter; the server refuses to combine either with a non-monthly period rather than silently
+ignoring it. A week's or a quarter's own target also isn't the same unit as "this month," so the
+page's combined total only adds up budgets that actually share the measured month — a weekly or
+quarterly budget still gets its own row and its own progress bar, just left out of that sum, the
+same reasoning a mixed-currency "all accounts" total is refused rather than summed.
 
 **A budget can roll unused amounts (or overspend) into the next month, computed the same
 on-read way escalation is.** Turning rollover on adds nothing to configure beyond "since when" —
@@ -708,6 +727,10 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Category colors~~ — each category can carry a display color, used consistently across the
+  dashboard's category chart, budgets, and the transaction list
+- ~~Weekly/quarterly budgets~~ — a budget's period can be weekly or quarterly instead of monthly,
+  for a grocery allowance or a quarterly premium; auto-increase and rollover stay monthly-only
 - ~~Recurring price-change alerts~~ — a recurring charge's latest amount is compared to what it
   used to cost; a shift past a small noise threshold is flagged right next to the merchant
 - ~~Bill due-date countdown~~ — the Recurring page shows how many days until (or past) each

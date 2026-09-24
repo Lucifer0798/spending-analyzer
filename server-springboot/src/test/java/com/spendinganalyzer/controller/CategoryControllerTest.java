@@ -138,4 +138,100 @@ class CategoryControllerTest {
                 .extracting(CategoryController.CategoryWithCount::group_name)
                 .containsExactly("Personal");
     }
+
+    // --- setting a color ------------------------------------------------------------
+
+    @Test
+    @DisplayName("a newly created category has no color")
+    void createdCategoryHasNoColor() {
+        Category hobbies = categories.create("Hobbies", false, false);
+
+        assertThat(hobbies.color()).isNull();
+    }
+
+    @Test
+    @DisplayName("sets a color on a category")
+    void setsAColor() {
+        Category hobbies = categories.create("Hobbies", false, false);
+
+        controller.update(hobbies.id(), body("color", "#4f46e5"));
+
+        assertThat(categories.findById(hobbies.id())).get()
+                .extracting(Category::color).isEqualTo("#4f46e5");
+    }
+
+    @Test
+    @DisplayName("a color can be set on a built-in category, unlike renaming")
+    void colorCanBeSetOnABuiltIn() {
+        Category groceries = categories.findAll().stream()
+                .filter(c -> c.name().equals("Groceries")).findFirst().orElseThrow();
+
+        ResponseEntity<?> response = controller.update(groceries.id(), body("color", "#22c55e"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(categories.findById(groceries.id())).get()
+                .extracting(Category::color).isEqualTo("#22c55e");
+    }
+
+    @Test
+    @DisplayName("an explicit null clears an existing color")
+    void explicitNullClearsColor() {
+        Category hobbies = categories.create("Hobbies", false, false);
+        controller.update(hobbies.id(), body("color", "#4f46e5"));
+
+        controller.update(hobbies.id(), body("color", null));
+
+        assertThat(categories.findById(hobbies.id())).get()
+                .extracting(Category::color).isNull();
+    }
+
+    @Test
+    @DisplayName("a blank color clears it the same way null does")
+    void blankColorClears() {
+        Category hobbies = categories.create("Hobbies", false, false);
+        controller.update(hobbies.id(), body("color", "#4f46e5"));
+
+        controller.update(hobbies.id(), body("color", "  "));
+
+        assertThat(categories.findById(hobbies.id())).get()
+                .extracting(Category::color).isNull();
+    }
+
+    @Test
+    @DisplayName("a rename that never mentions color leaves it untouched")
+    void renameLeavesColorUntouched() {
+        Category hobbies = categories.create("Hobbies", false, false);
+        controller.update(hobbies.id(), body("color", "#4f46e5"));
+
+        controller.update(hobbies.id(), body("name", "Hobbies & Crafts"));
+
+        assertThat(categories.findById(hobbies.id())).get()
+                .extracting(Category::name, Category::color)
+                .containsExactly("Hobbies & Crafts", "#4f46e5");
+    }
+
+    @Test
+    @DisplayName("rejects a color that isn't a hex code")
+    void rejectsMalformedColor() {
+        Category hobbies = categories.create("Hobbies", false, false);
+
+        ResponseEntity<?> response = controller.update(hobbies.id(), body("color", "blue"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(categories.findById(hobbies.id())).get().extracting(Category::color).isNull();
+    }
+
+    @Test
+    @DisplayName("the detailed list includes each category's color")
+    void listIncludesColor() {
+        Category hobbies = categories.create("Hobbies", false, false);
+        controller.update(hobbies.id(), body("color", "#4f46e5"));
+
+        @SuppressWarnings("unchecked")
+        var detailed = (java.util.List<CategoryController.CategoryWithCount>) controller.list().get("detailed");
+
+        assertThat(detailed).filteredOn(c -> c.name().equals("Hobbies"))
+                .extracting(CategoryController.CategoryWithCount::color)
+                .containsExactly("#4f46e5");
+    }
 }
