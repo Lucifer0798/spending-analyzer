@@ -8,6 +8,7 @@ import { NetWorthPage } from "./components/NetWorthPage";
 import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
+import { ThemeToggle } from "./components/ThemeToggle";
 import {
   fetchAccounts,
   fetchAuthStatus,
@@ -171,6 +172,8 @@ function App() {
                 {t.label}
               </button>
             ))}
+
+            <ThemeToggle />
 
             <button
               onClick={handleReset}

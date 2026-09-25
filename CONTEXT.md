@@ -894,6 +894,34 @@ and `ExportControllerTest` seeds 250 rows specifically to catch that regression.
 run and useless in a container, where the file has to sit on a mounted volume to survive
 `docker rm`. Hence `SPENDING_ANALYZER_DB`, defaulting to the old behaviour.
 
+**Tailwind's `dark:` variant is redefined to key off a `.dark` class, not `prefers-color-scheme`
+directly.** `@custom-variant dark (&:where(.dark, .dark *));` in `index.css` is the standard
+Tailwind v4 recipe for this — every `dark:` utility already written across the app keeps working
+unchanged, since it's the same class name, just resolved a different way. Without this, a manual
+override would have nothing to override: the media-query form of `dark:` only ever reads the OS
+setting, with no class for `src/theme.ts` to toggle.
+
+> The theme picker writes "system" nowhere. `getStoredTheme` treats a missing `localStorage` key
+> as `"system"`, and `applyTheme("system")` removes the key rather than writing the word — so
+> the *absence* of a preference is what "follow the OS" means. A stored literal `"system"` would
+> have worked too, but would need `theme.ts` to re-check `matchMedia` on every future load even
+> when the OS setting hadn't actually changed since the last one; treating "no preference saved"
+> as the system state needs no such recheck, since it was never a fixed choice to begin with.
+
+> An inline `<script>` in `index.html`, not an import, applies the saved theme before first
+> paint. It has to run synchronously ahead of every bundled script (including React itself) to
+> avoid a flash of the wrong theme while the page loads — which is exactly what rules out calling
+> the real `applyTheme` from `theme.ts` here. The two are kept in sync by hand; there's no shared
+> module both could import from, since the whole point of this script is running before any
+> module resolution has happened at all.
+
+> While `theme` is `"system"`, `ThemeToggle` subscribes to
+> `matchMedia("(prefers-color-scheme: dark)")`'s `change` event so a live OS-level flip (e.g. the
+> OS's own light/dark schedule) is reflected without a reload — same as the page always behaved
+> before a manual override existed. The listener is added and removed inside one `useEffect` keyed
+> on `theme`, so switching away from "system" tears it down immediately rather than leaving a
+> stale subscription that would fight with an explicit Light/Dark choice on the next OS change.
+
 ---
 
 ## Testing
