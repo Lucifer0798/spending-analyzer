@@ -639,6 +639,17 @@ to exactly one of them. Correcting a transaction still writes a plain entry cove
 amount — correcting one charge says nothing about which amounts you meant. Ranges are set
 explicitly in **Manage → Merchant memory**, which is also where you can forget any entry.
 
+**Light/dark theme follows the OS by default, with a manual override saved per browser.** The
+header's theme picker (System / Light / Dark) writes to `localStorage`, and an inline script in
+`index.html` applies it before React ever loads, so there's no flash of the wrong theme on the
+way in. Picking "System" clears the saved value entirely rather than storing the word "system" —
+its *absence* is what "follow the OS" means, so a later change to the OS setting is picked up on
+the next load with nothing to update. Both localStorage and Tailwind's `dark:` variant are
+rewired to key off a `.dark` class on `<html>` instead of `prefers-color-scheme` directly, which
+is what makes an explicit choice able to override the OS setting at all. A browser with storage
+disabled (private mode, some sandboxes) still gets a working toggle for that page load — it just
+won't be remembered next time.
+
 ---
 
 ## Development
@@ -727,6 +738,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Manual light/dark theme toggle~~ — a System/Light/Dark picker in the header overrides the
+  OS setting, saved per browser, with no flash of the wrong theme on load
 - ~~Category colors~~ — each category can carry a display color, used consistently across the
   dashboard's category chart, budgets, and the transaction list
 - ~~Weekly/quarterly budgets~~ — a budget's period can be weekly or quarterly instead of monthly,

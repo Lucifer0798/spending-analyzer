@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Redefines dark: to key off a .dark class instead of prefers-color-scheme alone, so the theme
+   toggle in src/theme.ts can override the OS setting. Applied to <html> (or any ancestor). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: light dark;
 }
