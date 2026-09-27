@@ -452,6 +452,20 @@ same as before this existed. Once accounts disagree on currency, `/api/budgets` 
 no rows for "all accounts" (see multi-currency above), so the badge simply has nothing to count —
 an existing limitation, not a new one.
 
+**The budget-vs-income card is composed entirely client-side from two endpoints that already
+exist.** `/api/budgets` and `/api/recurring-income` each already carry everything needed — a
+combined monthly target and a month's actual (plus average recurring) income — so there was no
+reason for a third backend aggregate. The harder part is that each endpoint resolves its own
+"which month" independently by default (the newest month with *spend* data for one, the newest
+with *income* data for the other), and those can genuinely differ once one side of the ledger is
+imported before the other. So `BudgetVsIncomeCard` resolves the budgets side first, then passes
+its resolved month explicitly into the income call, pinning both to the same month rather than
+letting them silently disagree. It shows three figures side by side — budgeted, actual income,
+and average recurring income — rather than folding them into one number, the same reasoning
+`/recurring-income` itself already applies to `actualThisMonth` vs. `totalMonthlyEquivalent`: an
+average and a specific month's real figure answer different questions, and conflating them would
+be a precision neither actually has.
+
 **Period comparison mirrors the active filter's own length, whatever that is.** "This month vs
 last month" and "this quarter vs last quarter" are the same feature — the length of the current
 range is measured, then a period of that same length immediately before it is computed, so the
@@ -738,6 +752,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Budget vs. income overview~~ — a dashboard card compares total budgeted spend against actual
+  and average recurring income for the same month, so it's visible at a glance whether budgets
+  add up to less than what comes in
 - ~~Manual light/dark theme toggle~~ — a System/Light/Dark picker in the header overrides the
   OS setting, saved per browser, with no flash of the wrong theme on load
 - ~~Category colors~~ — each category can carry a display color, used consistently across the
