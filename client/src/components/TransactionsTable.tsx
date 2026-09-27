@@ -7,16 +7,19 @@ import {
   clearTransactionSplit,
   deleteFilterPreset,
   deleteTransaction,
+  deleteTransactionReceipt,
   exportUrl,
   fetchCategories,
   fetchFilterPresets,
   fetchTags,
   fetchTransactions,
+  receiptUrl,
   removeTransactionTag,
   saveFilterPreset,
   setTransactionSplit,
   updateTransaction,
   updateTransactionCategory,
+  uploadTransactionReceipt,
 } from "../api";
 import type { DateRangeValue, FilterPreset, Tag, TransactionWithTags } from "../types";
 import { currencyPrecise } from "../format";
@@ -188,6 +191,25 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
       loadTags();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to remove tag.");
+    }
+  };
+
+  const handleUploadReceipt = async (t: TransactionWithTags, file: File) => {
+    try {
+      await uploadTransactionReceipt(t.id, file);
+      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, has_receipt: true } : x)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to attach receipt.");
+    }
+  };
+
+  const handleDeleteReceipt = async (t: TransactionWithTags) => {
+    if (!confirm("Remove this receipt?")) return;
+    try {
+      await deleteTransactionReceipt(t.id);
+      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, has_receipt: false } : x)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove receipt.");
     }
   };
 
@@ -729,9 +751,46 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-2 text-right">
+                    {t.has_receipt ? (
+                      <>
+                        <a
+                          href={receiptUrl(t.id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="View receipt"
+                          className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+                        >
+                          Receipt
+                        </a>
+                        <button
+                          onClick={() => handleDeleteReceipt(t)}
+                          title="Remove receipt"
+                          className="rounded px-1 py-1 text-xs text-slate-400 hover:text-red-600"
+                        >
+                          ×
+                        </button>
+                      </>
+                    ) : (
+                      <label
+                        title="Attach a receipt image or PDF"
+                        className="cursor-pointer rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      >
+                        + Receipt
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadReceipt(t, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    )}
                     <button
                       onClick={() => startEdit(t)}
-                      className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      className="ml-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
                       Edit
                     </button>

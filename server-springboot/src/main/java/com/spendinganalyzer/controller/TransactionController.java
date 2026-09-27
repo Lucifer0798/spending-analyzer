@@ -6,14 +6,22 @@ import com.spendinganalyzer.dto.TransactionWithTags;
 import com.spendinganalyzer.dto.TransactionsListResponse;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.model.TransactionReceipt;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TagRepository;
+import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.MerchantNormalizer;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -27,22 +35,27 @@ import java.util.Set;
 public class TransactionController {
 
     private static final List<String> TYPES = List.of("debit", "credit");
+    private static final Set<String> RECEIPT_CONTENT_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf");
 
     private final TransactionRepository repository;
     private final CategoryRepository categoryRepository;
     private final MerchantCategoryRepository merchantCategoryRepository;
     private final TagRepository tagRepository;
+    private final TransactionReceiptRepository receiptRepository;
 
     public TransactionController(
             TransactionRepository repository,
             CategoryRepository categoryRepository,
             MerchantCategoryRepository merchantCategoryRepository,
-            TagRepository tagRepository
+            TagRepository tagRepository,
+            TransactionReceiptRepository receiptRepository
     ) {
         this.repository = repository;
         this.categoryRepository = categoryRepository;
         this.merchantCategoryRepository = merchantCategoryRepository;
         this.tagRepository = tagRepository;
+        this.receiptRepository = receiptRepository;
     }
 
     @GetMapping("/transactions")
@@ -64,11 +77,64 @@ public class TransactionController {
     }
 
     private List<TransactionWithTags> attachTags(List<Transaction> transactions) {
-        Map<Long, List<String>> tagsById = tagRepository.namesByTransactionId(
-                transactions.stream().map(Transaction::id).toList());
+        List<Long> ids = transactions.stream().map(Transaction::id).toList();
+        Map<Long, List<String>> tagsById = tagRepository.namesByTransactionId(ids);
+        Set<Long> withReceipts = receiptRepository.transactionIdsWithReceipts(ids);
         return transactions.stream()
-                .map(t -> new TransactionWithTags(t, tagsById.getOrDefault(t.id(), List.of())))
+                .map(t -> new TransactionWithTags(t, tagsById.getOrDefault(t.id(), List.of()), withReceipts.contains(t.id())))
                 .toList();
+    }
+
+    /**
+     * Attaches a receipt image or PDF to a transaction, replacing any existing one -- one per
+     * transaction, so a re-upload is just a correction, not a second attachment to manage.
+     */
+    @PostMapping("/transactions/{id}/receipt")
+    public ResponseEntity<?> uploadReceipt(@PathVariable long id, @RequestParam("file") MultipartFile file) {
+        if (repository.findById(id).isEmpty()) {
+            return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
+        }
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("No file uploaded. Attach a file under field name 'file'."));
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !RECEIPT_CONTENT_TYPES.contains(contentType)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    "A receipt must be a JPEG, PNG, WEBP, HEIC image, or a PDF."));
+        }
+
+        String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "receipt";
+        try {
+            receiptRepository.upsert(id, filename, contentType, file.getBytes());
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Failed to read uploaded file."));
+        }
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    /** Streams the receipt back with its original content type and filename, for viewing inline or downloading. */
+    @GetMapping("/transactions/{id}/receipt")
+    public ResponseEntity<?> getReceipt(@PathVariable long id) {
+        TransactionReceipt receipt = receiptRepository.find(id).orElse(null);
+        if (receipt == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("This transaction has no receipt."));
+        }
+
+        ContentDisposition disposition = ContentDisposition.inline()
+                .filename(receipt.filename(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentType(MediaType.parseMediaType(receipt.contentType()))
+                .body(receipt.data());
+    }
+
+    @DeleteMapping("/transactions/{id}/receipt")
+    public ResponseEntity<?> deleteReceipt(@PathVariable long id) {
+        if (!receiptRepository.delete(id)) {
+            return ResponseEntity.status(404).body(new ErrorResponse("This transaction has no receipt."));
+        }
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 
     /** Tags a transaction, creating the tag first if this is the first time it's been used. */
@@ -214,6 +280,10 @@ public class TransactionController {
         if (!repository.deleteById(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
         }
+        // No foreign key would do this automatically -- a receipt's bytes are real disk space,
+        // unlike an orphaned tag-join row, so this is worth cleaning up explicitly rather than
+        // leaving it unreachable forever.
+        receiptRepository.delete(id);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -285,6 +355,7 @@ public class TransactionController {
         }
 
         int deleted = repository.deleteBulk(ids);
+        receiptRepository.deleteBulk(ids);
         return ResponseEntity.ok(Map.of("ok", true, "deleted", deleted));
     }
 
@@ -301,6 +372,7 @@ public class TransactionController {
     @DeleteMapping("/reset")
     public Map<String, Object> reset() {
         repository.resetAll();
+        receiptRepository.deleteAll();
         return Map.of("ok", true);
     }
 

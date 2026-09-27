@@ -11,6 +11,7 @@ import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.model.Tag;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.model.TransactionReceipt;
 import com.spendinganalyzer.model.TransactionTag;
 
 import java.util.List;
@@ -19,7 +20,9 @@ import java.util.List;
  * Everything worth backing up or moving to a new instance. {@code predictions_cache} is
  * deliberately left out — it's a regenerable cache, not data, the same reasoning
  * {@code V8__predictions_cache_per_account.sql} used to justify dropping the old row rather than
- * migrating it.
+ * migrating it. Receipts are the opposite of a cache — an attached photo can't be regenerated —
+ * so unlike predictions they round-trip here; {@code TransactionReceipt.data} is a {@code byte[]},
+ * which Jackson already serializes as a base64 string with no extra code needed on either side.
  */
 public record BackupData(
         int version,
@@ -35,9 +38,10 @@ public record BackupData(
         List<Tag> tags,
         List<TransactionTag> transactionTags,
         List<AccountBalance> accountBalances,
-        List<FilterPreset> filterPresets
+        List<FilterPreset> filterPresets,
+        List<TransactionReceipt> transactionReceipts
 ) {
-    // Bumped from 4: filterPresets is a new field a version-4 file has no values for, and there
-    // is no migration path between backup versions -- see BackupController.
-    public static final int CURRENT_VERSION = 5;
+    // Bumped from 5: transactionReceipts is a new field a version-5 file has no values for, and
+    // there is no migration path between backup versions -- see BackupController.
+    public static final int CURRENT_VERSION = 6;
 }

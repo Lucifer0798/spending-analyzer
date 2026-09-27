@@ -945,6 +945,49 @@ backend query — the same call already exists elsewhere, so there was nothing n
 > above), so a page with only non-monthly budgets set has nothing honest to compare against income
 > and correctly shows nothing here, the same as a page with no budgets at all.
 
+**A receipt is a BLOB in `transaction_receipts`, not a file on disk.** The alternative — a
+receipts directory alongside `data.sqlite` — would need its own volume mount in `compose.yaml`
+and the Dockerfile, and its own answer to "does this survive `docker compose down`" that the
+existing named volume already answers for the database. Storing the bytes in the same SQLite file
+means there is nothing new to mount, nothing new to lose track of, and the existing backup
+mechanism already covers it for free.
+
+> `transaction_receipts` is a separate table, not a `BLOB` column on `transactions`, so that
+> `TransactionRepository.find`/the list query never has to pull receipt bytes along with every row
+> just to answer "does this one have a receipt." `TransactionController.attachTags` (unchanged in
+> name, extended in what it does) now also looks up
+> `TransactionReceiptRepository.transactionIdsWithReceipts(ids)` alongside the tag lookup it
+> already did, in the same one-query-per-page shape `TagRepository.namesByTransactionId` already
+> established, rather than a query per row to check for a receipt.
+
+> `transaction_id` is the table's own primary key, not an `id` column with a unique index on
+> `transaction_id` — a transaction can have at most one receipt, so there is no reason for the
+> table to have an identity independent of the transaction it belongs to. `upsert` is an ordinary
+> `ON CONFLICT(transaction_id) DO UPDATE`, the same shape `RecurringOverrideRepository.upsert`
+> already uses for its own one-row-per-key table.
+
+> No foreign key ties `transaction_receipts.transaction_id` back to `transactions.id`, consistent
+> with every other table in this schema — but unlike an orphaned `transaction_tags` row (a few
+> bytes, never cleaned up on delete, an accepted gap), an orphaned receipt is real disk space that
+> could be several megabytes. `TransactionController.delete`/`bulkDelete`/`reset` all explicitly
+> clean up the matching receipt rows, the same explicit-cleanup discipline `GoalController.delete`
+> already applies to `goal_contributions`.
+
+> Content type is validated against an explicit allow-list (JPEG, PNG, WEBP, HEIC, PDF) taken
+> from the multipart request's own `Content-Type`, not sniffed from the file's bytes — trusting
+> the browser here is the same level of trust `UploadController` already extends to a `.csv`
+> filename extension, and this app has no reason to be stricter for a receipt than it is for a
+> bank statement.
+
+> Receipts are the one exception to "left out of the backup like `predictions_cache`." A forecast
+> is a regenerable cache; a photo of a receipt is not — there is no way to reconstruct it, so
+> leaving it out of "everything as one JSON file" would be a real, surprising gap rather than a
+> neutral omission. `TransactionReceipt.data` is a plain `byte[]`, and Jackson already serializes
+> that as a base64 string with no extra code on either side of the round trip, which is what made
+> including it cheap enough to be worth doing. This bumped `BackupData.CURRENT_VERSION` from 5 to
+> 6, same reasoning as every prior bump: a version-5 file has no `transactionReceipts` field and
+> there is still no upgrade path between backup versions.
+
 ---
 
 ## Testing

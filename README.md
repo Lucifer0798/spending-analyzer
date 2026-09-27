@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Thirteen tables, all created automatically:
+Fourteen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -203,6 +203,7 @@ Thirteen tables, all created automatically:
 | `transaction_tags` | Which tags apply to which transaction — a transaction can carry any number |
 | `account_balances` | A manually-logged balance per account per date, for net worth; negative is a liability |
 | `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
+| `transaction_receipts` | A receipt image or PDF attached to a transaction, at most one each, stored as a BLOB |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
 is recorded — so upgrading never wipes your data. To change the schema, add a new `V19__*.sql`
@@ -245,6 +246,7 @@ All endpoints live under `/api`.
 | `GET` | `/transactions` | List transactions (filter by category, month, account, tag, description search) |
 | `PATCH` | `/transactions/{id}` | Change a category (also teaches merchant memory), or set/clear a split |
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
+| `GET` `POST` `DELETE` | `/transactions/{id}/receipt` | View, attach, or remove a transaction's receipt image or PDF |
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
@@ -266,7 +268,7 @@ All endpoints live under `/api`.
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
-| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances, receipts |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` | `/net-worth` | Net worth across every active account, and its history over time |
 | `GET` `POST` `DELETE` | `/filter-presets` | Save, list, or delete a named combination of Transactions filters |
@@ -274,7 +276,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group and display color |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
-| `DELETE` | `/reset` | Delete all transactions (keeps accounts and categories) |
+| `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
 | `POST` | `/auth/login` `/auth/logout` | Sign in and out |
 | `GET` | `/health` | Liveness, and whether an API key is configured |
@@ -549,6 +551,17 @@ detection and anomaly detection are deliberately left out of this — they're ab
 *what a charge is*, not what your portion of it happens to be, so they still compare against the
 full amount.
 
+**A receipt is stored as a BLOB in the same database, not a file on disk.** This app already
+promises "everything in one SQLite file, no hosted database" — a receipts folder would need its
+own volume mount in Docker and its own place in a backup, both of which storing the bytes
+alongside everything else avoids. `transaction_receipts` is its own table, keyed one-to-one by
+transaction id, rather than a column on `transactions` — the transactions list's ordinary query
+never has to pull receipt bytes along with every row just to answer "does this one have a
+receipt," which is a lightweight check instead, the same shape the tag filter already uses.
+Uploading a second receipt for the same transaction replaces the first; there's only ever one.
+Unlike an AI forecast, a receipt is irreplaceable — a photo can't be regenerated — so it does
+round-trip through the full backup and restore, unlike `predictions_cache`.
+
 **Savings goals track logged contributions, not a real balance.** Budgets, recurring detection,
 and everything else in this app is derived from categorized transactions — but nothing here
 represents an account's actual balance, so there's no number to point a "how much have I saved"
@@ -752,6 +765,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Receipt attachments~~ — attach a receipt image or PDF to a transaction, viewable and
+  removable from the transaction list; stored in the same database and included in backups
 - ~~Budget vs. income overview~~ — a dashboard card compares total budgeted spend against actual
   and average recurring income for the same month, so it's visible at a glance whether budgets
   add up to less than what comes in
