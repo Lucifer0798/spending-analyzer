@@ -15,6 +15,7 @@ import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.PredictionsCacheRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TagRepository;
+import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -76,6 +77,9 @@ class BackupServiceTest {
     @Autowired
     private PredictionsCacheRepository predictionsCache;
 
+    @Autowired
+    private TransactionReceiptRepository transactionReceipts;
+
     private long goalId;
     private long taggedTransactionId;
 
@@ -95,6 +99,7 @@ class BackupServiceTest {
         accountBalances.upsert(Account.DEFAULT_ID, "2026-06-01", 1500.0);
         filterPresets.upsert("Coffee trips", "Dining & Coffee", "business trip", null, Account.DEFAULT_ID, null, null);
         predictionsCache.upsert(Account.DEFAULT_ID, "{\"summary\":\"s\"}", "2026-06-01T00:00:00Z");
+        transactionReceipts.upsert(taggedTransactionId, "receipt.jpg", "image/jpeg", new byte[]{1, 2, 3});
     }
 
     @Test
@@ -114,6 +119,7 @@ class BackupServiceTest {
         assertThat(data.transactionTags()).extracting("transactionId").contains(taggedTransactionId);
         assertThat(data.accountBalances()).extracting("balance").contains(1500.0);
         assertThat(data.filterPresets()).extracting("name").contains("Coffee trips");
+        assertThat(data.transactionReceipts()).extracting("filename").contains("receipt.jpg");
         // Built-in categories are exported too, not just custom ones.
         assertThat(data.categories()).extracting("name").contains("Groceries");
     }
@@ -134,6 +140,10 @@ class BackupServiceTest {
         tags.addTag(taggedTransactionId, "extra tag added after the snapshot");
         accountBalances.upsert(Account.DEFAULT_ID, "2026-07-01", 9999.0);
         filterPresets.upsert("Extra preset", null, null, null, null, null, null);
+        long extraTransactionId = transactions
+                .find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 100, 0).stream()
+                .filter(t -> t.description().equals("EXTRA CHARGE")).findFirst().orElseThrow().id();
+        transactionReceipts.upsert(extraTransactionId, "extra.pdf", "application/pdf", new byte[]{9});
 
         backupService.restore(snapshot);
 
@@ -146,6 +156,7 @@ class BackupServiceTest {
         assertThat(tags.namesFor(taggedTransactionId)).containsExactly("business trip");
         assertThat(accountBalances.findByAccountId(Account.DEFAULT_ID)).extracting("balance").containsExactly(1500.0);
         assertThat(filterPresets.findAll()).extracting("name").containsExactly("Coffee trips");
+        assertThat(transactionReceipts.findAll()).extracting("filename").containsExactly("receipt.jpg");
     }
 
     @Test
@@ -177,6 +188,7 @@ class BackupServiceTest {
         assertThat(summary.tags()).isEqualTo(snapshot.tags().size());
         assertThat(summary.accountBalances()).isEqualTo(snapshot.accountBalances().size());
         assertThat(summary.filterPresets()).isEqualTo(snapshot.filterPresets().size());
+        assertThat(summary.transactionReceipts()).isEqualTo(snapshot.transactionReceipts().size());
     }
 
     @Test
@@ -184,7 +196,7 @@ class BackupServiceTest {
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of());
 
         backupService.restore(empty);
 
@@ -199,5 +211,6 @@ class BackupServiceTest {
         assertThat(tags.findAll()).isEmpty();
         assertThat(accountBalances.findAll()).isEmpty();
         assertThat(filterPresets.findAll()).isEmpty();
+        assertThat(transactionReceipts.findAll()).isEmpty();
     }
 }

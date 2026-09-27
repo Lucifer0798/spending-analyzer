@@ -13,6 +13,7 @@ import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.PredictionsCacheRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TagRepository;
+import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,7 @@ public class BackupService {
     private final AccountBalanceRepository accountBalances;
     private final FilterPresetRepository filterPresets;
     private final PredictionsCacheRepository predictionsCache;
+    private final TransactionReceiptRepository transactionReceipts;
 
     public BackupService(
             AccountRepository accounts,
@@ -55,7 +57,8 @@ public class BackupService {
             TagRepository tags,
             AccountBalanceRepository accountBalances,
             FilterPresetRepository filterPresets,
-            PredictionsCacheRepository predictionsCache
+            PredictionsCacheRepository predictionsCache,
+            TransactionReceiptRepository transactionReceipts
     ) {
         this.accounts = accounts;
         this.categories = categories;
@@ -69,6 +72,7 @@ public class BackupService {
         this.accountBalances = accountBalances;
         this.filterPresets = filterPresets;
         this.predictionsCache = predictionsCache;
+        this.transactionReceipts = transactionReceipts;
     }
 
     public record BackupSummary(
@@ -82,7 +86,8 @@ public class BackupService {
             int goalContributions,
             int tags,
             int accountBalances,
-            int filterPresets
+            int filterPresets,
+            int transactionReceipts
     ) {}
 
     public BackupData export() {
@@ -100,7 +105,8 @@ public class BackupService {
                 tags.findAll(),
                 tags.findAllAssociations(),
                 accountBalances.findAll(),
-                filterPresets.findAll()
+                filterPresets.findAll(),
+                transactionReceipts.findAll()
         );
     }
 
@@ -122,6 +128,7 @@ public class BackupService {
         tags.restoreAll(data.tags(), data.transactionTags());
         accountBalances.restoreAll(data.accountBalances());
         filterPresets.restoreAll(data.filterPresets());
+        transactionReceipts.restoreAll(data.transactionReceipts());
         predictionsCache.deleteAll();
 
         return new BackupSummary(
@@ -135,7 +142,8 @@ public class BackupService {
                 data.goalContributions().size(),
                 data.tags().size(),
                 data.accountBalances().size(),
-                data.filterPresets().size()
+                data.filterPresets().size(),
+                data.transactionReceipts().size()
         );
     }
 }

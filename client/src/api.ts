@@ -220,6 +220,22 @@ export function removeTransactionTag(id: number, name: string) {
   });
 }
 
+/** Attaches a receipt image or PDF to a transaction, replacing any existing one. */
+export function uploadTransactionReceipt(id: number, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return request<{ ok: true }>(`/transactions/${id}/receipt`, { method: "POST", body: form });
+}
+
+/** A direct, cookie-authenticated link to a transaction's receipt -- for an <a>/<img>, not a fetch. */
+export function receiptUrl(id: number) {
+  return `/api/transactions/${id}/receipt`;
+}
+
+export function deleteTransactionReceipt(id: number) {
+  return request<{ ok: true }>(`/transactions/${id}/receipt`, { method: "DELETE" });
+}
+
 /** Categorizes several transactions at once, teaching merchant memory for each one's own description. */
 export function bulkCategorize(ids: number[], category: string) {
   return request<{ ok: true; updated: number }>("/transactions/bulk-category", {

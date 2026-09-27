@@ -21,6 +21,8 @@ export interface Transaction {
 /** A transaction as the list endpoint returns it, with its tags attached. */
 export interface TransactionWithTags extends Transaction {
   tags: string[];
+  /** Whether a receipt is attached -- the receipt itself is fetched separately (receiptUrl). */
+  has_receipt: boolean;
 }
 
 /** A tag and how many transactions currently carry it. */
@@ -421,6 +423,7 @@ export interface BackupSummary {
   tags: number;
   accountBalances: number;
   filterPresets: number;
+  transactionReceipts: number;
 }
 
 export interface Goal {
