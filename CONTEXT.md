@@ -922,6 +922,29 @@ setting, with no class for `src/theme.ts` to toggle.
 > on `theme`, so switching away from "system" tears it down immediately rather than leaving a
 > stale subscription that would fight with an explicit Light/Dark choice on the next OS change.
 
+**`BudgetVsIncomeCard` added no backend endpoint, deliberately.** `/api/budgets` and
+`/api/recurring-income` already return every number the card needs; a third aggregate would just
+be those same two queries wrapped in a new response shape. This mirrors how the dashboard's
+category-group rollup reuses `/summary` and `/categories` client-side instead of a dedicated
+backend query — the same call already exists elsewhere, so there was nothing new to compute.
+
+> The two calls have to be pinned to the same month by hand. `BudgetService.resolveMonth`
+> defaults to the newest month with *spend* data; `InsightsController.resolveIncomeMonth` defaults
+> to the newest month with *income* data via `StatsService.latestIncomeDate`. These are genuinely
+> different queries and can resolve to different months — a paycheck imported today and a credit
+> card statement from three weeks ago is an entirely normal state for this app, which is built
+> around statements arriving well after the fact. `BudgetVsIncomeCard` fetches `/api/budgets`
+> first, then passes its *returned* `month` into `fetchRecurringIncome`'s explicit `month`
+> parameter (already there, added for `/recurring-income`'s own `actualThisMonth`), rather than
+> letting each endpoint pick its own default and silently comparing two different months' numbers
+> against each other.
+
+> The card renders nothing once `budgets.totalLimit <= 0`, which also covers "every budget is
+> weekly or quarterly" now that a budget's period can be non-monthly — those are excluded from
+> `totalLimit` for the same reason a mixed-currency total is refused (see the budget-period notes
+> above), so a page with only non-monthly budgets set has nothing honest to compare against income
+> and correctly shows nothing here, the same as a page with no budgets at all.
+
 ---
 
 ## Testing

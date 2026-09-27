@@ -17,6 +17,7 @@ import { currency } from "../format";
 import { ExportLink } from "./ExportLink";
 import { AnomaliesCard } from "./AnomaliesCard";
 import { BudgetsCard } from "./BudgetsCard";
+import { BudgetVsIncomeCard } from "./BudgetVsIncomeCard";
 import { ComparisonCard } from "./ComparisonCard";
 
 interface Props {
@@ -335,6 +336,9 @@ export function Dashboard({ accountId, range }: Props) {
       {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
           for anyone not using them. */}
       <BudgetsCard accountId={accountId} range={range} colorByCategory={colorByCategory} />
+
+      {/* Renders nothing until there's a monthly budget total to compare against. */}
+      <BudgetVsIncomeCard accountId={accountId} range={range} />
 
       <MonthlyTrendChart
         data={summary.monthlyTotals}
