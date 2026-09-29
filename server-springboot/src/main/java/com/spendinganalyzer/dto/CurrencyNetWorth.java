@@ -7,5 +7,6 @@ public record CurrencyNetWorth(
         String currency,
         double total,
         List<NetWorthAccount> accounts,
-        List<NetWorthPoint> history
+        List<NetWorthPoint> history,
+        NetWorthForecast forecast
 ) {}
