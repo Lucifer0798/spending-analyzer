@@ -988,6 +988,45 @@ mechanism already covers it for free.
 > 6, same reasoning as every prior bump: a version-5 file has no `transactionReceipts` field and
 > there is still no upgrade path between backup versions.
 
+**The net worth forecast fits its line on epoch-day x-values, not point index, unlike
+`StatsService.linearRegressionNext`.** Spend's monthly category series is already evenly spaced
+(one bucket per calendar month), so treating point order as the x-axis is exact. Net worth history
+has no such guarantee — a balance is logged "whenever you check it," so two points could be three
+days apart or three months apart, and index-based regression would silently treat both gaps as
+"one step," badly distorting the slope. `NetWorthService.forecast` instead uses
+`LocalDate.parse(point.date()).toEpochDay()` as x, so the fitted line reflects actual elapsed time
+regardless of how irregularly balances happen to have been logged.
+
+> This is also why `NetWorthService.forecast` is a separate implementation from
+> `StatsService.linearRegressionNext` rather than a shared call — they solve genuinely different
+> problems (irregularly-spaced calendar dates vs. an evenly-spaced index series), and forcing one
+> through the other's assumption would have produced subtly wrong numbers for whichever case it
+> wasn't designed for.
+
+> `NetWorthService` gained a `Clock` field via the same package-private-constructor-plus-
+> `Clock.systemDefaultZone()`-default pattern `GoalService`, `LoginAttemptLimiter`, and
+> `RecurringDetectionService` already use, and for the same reason: "1/3/6 months from today"
+> needs a fixed "today" for `NetWorthServiceTest` to assert against, not a moving target. Its
+> public constructor needed an explicit `@Autowired` once the second constructor existed — the
+> same trap `GoalService`'s own comment already documents, and the same fix.
+
+> The projection is deliberately never clamped at zero, unlike `linearRegressionNext`'s
+> `Math.max(0, ...)`. A spend total can't be negative, so clamping there just guards against
+> regression noise producing a nonsensical negative forecast; a net worth total legitimately can
+> be negative (more debt than assets), and a trend heading further into debt is exactly the kind
+> of answer this feature exists to surface, not hide.
+
+> `classifyTrend` divides by `Math.max(Math.abs(current), 1.0)`, not `Math.abs(current)` alone, to
+> avoid dividing by (near) zero without a separate branch for that case — a current total under a
+> dollar is already degenerate enough that a $1 reference doesn't change the answer for any
+> realistic net worth figure.
+
+> No AI is involved, deliberately, unlike the dashboard's spend predictions. A spend forecast
+> needs judgment a plain regression doesn't have ("smooth out a one-off spike," per
+> `AnthropicService`'s own prompt) — projecting a straight line through logged balances doesn't,
+> so there was nothing for Claude to add here. The practical payoff: the Net Worth page's forecast
+> works with no `ANTHROPIC_API_KEY` configured at all, unlike `/predictions`.
+
 ---
 
 ## Testing

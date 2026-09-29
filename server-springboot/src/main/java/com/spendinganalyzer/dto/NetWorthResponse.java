@@ -12,5 +12,6 @@ public record NetWorthResponse(
         List<NetWorthAccount> accounts,
         List<NetWorthPoint> history,
         String currency,
-        List<CurrencyNetWorth> perCurrency
+        List<CurrencyNetWorth> perCurrency,
+        NetWorthForecast forecast
 ) {}
