@@ -270,7 +270,7 @@ All endpoints live under `/api`.
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
 | `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances, receipts |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
-| `GET` | `/net-worth` | Net worth across every active account, and its history over time |
+| `GET` | `/net-worth` | Net worth across every active account, its history over time, and a trend-line forecast |
 | `GET` `POST` `DELETE` | `/filter-presets` | Save, list, or delete a named combination of Transactions filters |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
@@ -351,6 +351,19 @@ known. Archived accounts are left out entirely, current total and history alike,
 that an archived account is one you're done tracking. Like everything else that spans accounts,
 "all accounts" refuses to add balances across currencies — accounts that disagree get a
 per-currency breakdown instead, the same split the dashboard uses for spend.
+
+**The net worth forecast is a plain least-squares line, computed in code, not asked of Claude.**
+Every logged point (date, total) feeds a linear regression — using the actual number of days
+between logged dates as the x-axis, not just point order, since balances are logged "whenever you
+check it" rather than on a steady schedule the way monthly spend totals already are. The fitted
+line is evaluated 1, 3, and 6 months from today, alongside the average of the most recently logged
+totals as a steadier, less reactive reference point. Needing no AI judgment (there's no "smooth
+out a one-off spike" call to make the way a spend forecast's rationale has to) means this works
+with no `ANTHROPIC_API_KEY` at all, unlike the dashboard's predictions. It's also never clamped at
+zero the way a spend forecast is — heading toward more debt than assets is a real, meaningful
+answer for net worth, not a nonsensical one. Fewer than two logged dates means no line to fit, so
+the forecast is simply absent rather than guessed at, the same honesty a goal with no contributions
+yet gets from its own pace projection.
 
 **One password, and no user accounts.** There is exactly one secret, read from the environment.
 That isn't a shortcut — this app holds one person's statements in a local SQLite file, so per-user
@@ -765,6 +778,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Net worth forecast~~ — the Net Worth page projects a trend line 1/3/6 months out from your
+  logged balance history, computed in code so it works without an API key
 - ~~Receipt attachments~~ — attach a receipt image or PDF to a transaction, viewable and
   removable from the transaction list; stored in the same database and included in backups
 - ~~Budget vs. income overview~~ — a dashboard card compares total budgeted spend against actual

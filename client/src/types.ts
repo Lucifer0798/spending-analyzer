@@ -219,12 +219,27 @@ export interface NetWorthPoint {
   total: number;
 }
 
+/**
+ * Net worth projected forward from the logged history's linear trend, plus a steadier 3-point
+ * moving average as a less reactive alternative. Never clamped at zero -- a trend toward more
+ * debt than assets is a real answer, not a nonsensical one.
+ */
+export interface NetWorthForecast {
+  in_1_month: number;
+  in_3_months: number;
+  in_6_months: number;
+  moving_average: number;
+  trend: "increasing" | "decreasing" | "stable";
+}
+
 /** One currency's slice of a {@link NetWorthResponse} whose accounts don't all share one. */
 export interface CurrencyNetWorth {
   currency: string;
   total: number;
   accounts: NetWorthAccount[];
   history: NetWorthPoint[];
+  /** Null once there are fewer than two logged dates -- one point has no trend to fit a line through. */
+  forecast: NetWorthForecast | null;
 }
 
 /** Null currency (with perCurrency populated instead) once active accounts span more than one. */
@@ -234,6 +249,7 @@ export interface NetWorthResponse {
   history: NetWorthPoint[];
   currency: string | null;
   perCurrency: CurrencyNetWorth[] | null;
+  forecast: NetWorthForecast | null;
 }
 
 /** A saved combination of the Transactions page's filters. Every field but the name is optional. */
