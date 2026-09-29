@@ -7,12 +7,14 @@ import {
   fetchNetWorth,
   logAccountBalance,
 } from "../api";
-import type { Account, AccountBalance, CurrencyNetWorth, NetWorthAccount, NetWorthResponse } from "../types";
+import type { Account, AccountBalance, CurrencyNetWorth, NetWorthAccount, NetWorthForecast, NetWorthResponse } from "../types";
 import { accountTypeLabel, currency } from "../format";
 
 const BLUE = "#2a78d6";
 const MUTED = "#898781";
 const GRID = "#e1e0d9";
+const GOOD = "#0ca30c";
+const SERIOUS = "#d03b3b";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -60,6 +62,52 @@ function NetWorthChart({ data, currencyCode }: { data: { date: string; total: nu
           <Line type="monotone" dataKey="total" stroke={BLUE} strokeWidth={2} dot={{ r: 3, fill: BLUE }} />
         </LineChart>
       </ResponsiveContainer>
+    </div>
+  );
+}
+
+/**
+ * A straight-line trend fit through the logged history, evaluated 1/3/6 months out, plus a
+ * steadier 3-point moving average alongside it. Unlike a spend forecast, "increasing" is good
+ * news here and "decreasing" isn't, so the color/arrow polarity is the opposite of Dashboard's
+ * own trend styling for that reason -- not reused from there.
+ */
+function NetWorthForecastCard({ forecast, currencyCode }: { forecast: NetWorthForecast; currencyCode: string }) {
+  const color = forecast.trend === "increasing" ? GOOD : forecast.trend === "decreasing" ? SERIOUS : MUTED;
+  const arrow = forecast.trend === "increasing" ? "↑" : forecast.trend === "decreasing" ? "↓" : "→";
+
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Projected, from the trend so far</p>
+        <span className="text-sm font-semibold capitalize" style={{ color }}>
+          {arrow} {forecast.trend}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+        <div>
+          <p className="text-xs text-slate-500">1 month</p>
+          <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {currency(forecast.in_1_month, 0, currencyCode)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">3 months</p>
+          <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {currency(forecast.in_3_months, 0, currencyCode)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">6 months</p>
+          <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {currency(forecast.in_6_months, 0, currencyCode)}
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">
+        A straight line through your logged history — not a promise, just where it's pointed.
+        Recent average: {currency(forecast.moving_average, 0, currencyCode)}.
+      </p>
     </div>
   );
 }
@@ -233,6 +281,7 @@ function CurrencySection({ data }: { data: CurrencyNetWorth }) {
         </p>
       </div>
       <NetWorthChart data={data.history} currencyCode={data.currency} />
+      {data.forecast && <NetWorthForecastCard forecast={data.forecast} currencyCode={data.currency} />}
     </div>
   );
 }
@@ -294,6 +343,7 @@ export function NetWorthPage() {
             </p>
           </div>
           <NetWorthChart data={netWorth.history} currencyCode={netWorth.currency} />
+          {netWorth.forecast && <NetWorthForecastCard forecast={netWorth.forecast} currencyCode={netWorth.currency} />}
         </div>
       )}
 
