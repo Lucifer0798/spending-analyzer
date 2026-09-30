@@ -186,7 +186,7 @@ Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-
 
 ## The database
 
-Fourteen tables, all created automatically:
+Fifteen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -204,6 +204,7 @@ Fourteen tables, all created automatically:
 | `account_balances` | A manually-logged balance per account per date, for net worth; negative is a liability |
 | `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
 | `transaction_receipts` | A receipt image or PDF attached to a transaction, at most one each, stored as a BLOB |
+| `net_worth_target` | A single target net worth to compare the forecast against, optionally by a date |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
 is recorded — so upgrading never wipes your data. To change the schema, add a new `V19__*.sql`
@@ -268,9 +269,10 @@ All endpoints live under `/api`.
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
-| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances, receipts |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances and target, receipts |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` | `/net-worth` | Net worth across every active account, its history over time, and a trend-line forecast |
+| `POST` `DELETE` | `/net-worth/target` | Set or clear a single target net worth, optionally by a date |
 | `GET` `POST` `DELETE` | `/filter-presets` | Save, list, or delete a named combination of Transactions filters |
 | `GET` `POST` `PATCH` `DELETE` | `/accounts` | Manage accounts |
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
@@ -364,6 +366,16 @@ zero the way a spend forecast is — heading toward more debt than assets is a r
 answer for net worth, not a nonsensical one. Fewer than two logged dates means no line to fit, so
 the forecast is simply absent rather than guessed at, the same honesty a goal with no contributions
 yet gets from its own pace projection.
+
+**A net worth target is a single row, not a goal you fund.** Unlike a savings goal, there's
+nothing to log contributions toward — net worth is already derived from logged balances, so a
+target is just a number (and optionally a date) compared against the forecast's own trend line.
+It reuses that exact fitted line rather than deriving a second one, so the two never disagree:
+`projected_date` is when the line is expected to cross the target, left blank once already
+achieved or once the trend isn't heading toward it at all (a flat or declining line will never
+reach a target still ahead of it). Setting a target in a currency your accounts no longer share
+makes it stop showing up — the same refusal a mismatched currency already gets everywhere else in
+this app, rather than comparing two numbers that don't mean the same thing.
 
 **One password, and no user accounts.** There is exactly one secret, read from the environment.
 That isn't a shortcut — this app holds one person's statements in a local SQLite file, so per-user
@@ -778,6 +790,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Net worth target~~ — set a target net worth, optionally by a date, and see whether the
+  current trend gets you there — "on track" / "behind pace", the same framing a savings goal uses
 - ~~Net worth forecast~~ — the Net Worth page projects a trend line 1/3/6 months out from your
   logged balance history, computed in code so it works without an API key
 - ~~Receipt attachments~~ — attach a receipt image or PDF to a transaction, viewable and

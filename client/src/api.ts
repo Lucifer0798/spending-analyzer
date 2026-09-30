@@ -310,9 +310,25 @@ export function deleteAccountBalance(accountId: number, balanceId: number) {
   return request<{ ok: true }>(`/accounts/${accountId}/balances/${balanceId}`, { method: "DELETE" });
 }
 
-/** Net worth across every active account, and its history over time. */
+/** Net worth across every active account, its history over time, and a trend-line forecast. */
 export function fetchNetWorth() {
   return request<NetWorthResponse>("/net-worth");
+}
+
+/**
+ * Sets the single net worth target, replacing any existing one. `targetDate` is optional --
+ * without it, progress against the target is informational only, the same as a savings goal
+ * with no target date of its own.
+ */
+export function setNetWorthTarget(targetAmount: number, currencyCode: string, targetDate?: string) {
+  return request<{ target_amount: number; target_date: string | null; currency: string }>("/net-worth/target", {
+    method: "POST",
+    body: JSON.stringify({ target_amount: targetAmount, target_date: targetDate ?? null, currency: currencyCode }),
+  });
+}
+
+export function clearNetWorthTarget() {
+  return request<{ ok: true }>("/net-worth/target", { method: "DELETE" });
 }
 
 // --- filter presets -----------------------------------------------------------

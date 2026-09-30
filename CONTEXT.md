@@ -1027,6 +1027,48 @@ regardless of how irregularly balances happen to have been logged.
 > so there was nothing for Claude to add here. The practical payoff: the Net Worth page's forecast
 > works with no `ANTHROPIC_API_KEY` configured at all, unlike `/predictions`.
 
+**`net_worth_target` is a singleton table (`CHECK (id = 1)`), not a row per something else --
+there's only ever one target, so the schema says so directly rather than the application layer
+promising to keep it that way.** `NetWorthTargetRepository.upsert` is an ordinary `INSERT ...
+ON CONFLICT(id) DO UPDATE`, the same shape every other single-key upsert in this app already
+uses, just with a literal `1` in place of a natural key -- there's no natural key here since the
+whole point is that nothing distinguishes one target from another. `find()` returns at most one
+row by construction, not because of an `ORDER BY ... LIMIT 1` a future change could quietly break.
+
+> Unlike a savings goal (`goals` + `goal_contributions`, funded by logged amounts), a net worth
+> target has no ledger of its own to maintain -- net worth is already fully derived from
+> `account_balances`, so the target is just a number (and optionally a date) sitting next to the
+> computation, not a second thing to keep in sync with it.
+
+**`NetWorthService.fit` is shared between `forecast` and `targetProgress` specifically so both
+read off the exact same trend line.** Before this was factored out, computing the fit twice (once
+per caller) would have been correct but wasteful, and more importantly would have created a seam
+where the two could theoretically disagree if one calculation ever drifted from the other during a
+future edit. Returning `Optional<LinearFit>` (empty below `MIN_POINTS_FOR_TREND`) lets both callers
+handle "no trend yet" the same way without either needing its own re-derivation of that threshold.
+
+> `targetProgress` solves the fitted line for the epoch day where it crosses `targetAmount`
+> (`(targetAmount - intercept) / slope`) rather than searching or iterating — the same closed-form
+> shortcut a linear fit affords that a moving average or any non-linear model wouldn't.
+> `LocalDate.ofEpochDay(Math.round(targetDay))` turns that back into a calendar date; the rounding
+> means the projected date can land up to half a day off a mathematically exact crossing, which is
+> immaterial at the resolution ("around this date") the feature is honest about giving anyway.
+
+> Achieved and projectable are computed independently, not as an if/else off one boolean.
+> `achieved = currentTotal >= target`; `projectedDate` is only attempted `!achieved && slope > 0`.
+> A flat or declining trend while still short of the target correctly reports `achieved=false` and
+> `projectedDate=null` together -- "not there, and not heading there either" -- rather than forcing
+> the two fields into an artificial either/or that would have no honest value for that case.
+
+**The net worth target is included in the backup (bumping `BackupData.CURRENT_VERSION` 6 → 7),
+unlike `predictions_cache`.** A target is something the user typed in on purpose, not a cache of
+anything -- there's no source it could be regenerated from, so leaving it out of "everything as
+one JSON file" would silently lose a real decision on restore. `NetWorthTargetRepository
+.restoreAll` takes a single nullable `NetWorthTarget` rather than a `List`, honestly matching the
+table's own singleton shape instead of wrapping one optional object in a list of zero or one
+elements the way every other `restoreAll` in this app takes a `List` for a genuinely multi-row
+table.
+
 ---
 
 ## Testing

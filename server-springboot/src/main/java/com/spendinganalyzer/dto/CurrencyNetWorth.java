@@ -8,5 +8,6 @@ public record CurrencyNetWorth(
         double total,
         List<NetWorthAccount> accounts,
         List<NetWorthPoint> history,
-        NetWorthForecast forecast
+        NetWorthForecast forecast,
+        NetWorthTargetProgress target
 ) {}
