@@ -1,13 +1,23 @@
 import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
+  clearNetWorthTarget,
   deleteAccountBalance,
   fetchAccountBalances,
   fetchAccounts,
   fetchNetWorth,
   logAccountBalance,
+  setNetWorthTarget,
 } from "../api";
-import type { Account, AccountBalance, CurrencyNetWorth, NetWorthAccount, NetWorthForecast, NetWorthResponse } from "../types";
+import type {
+  Account,
+  AccountBalance,
+  CurrencyNetWorth,
+  NetWorthAccount,
+  NetWorthForecast,
+  NetWorthResponse,
+  NetWorthTargetProgress,
+} from "../types";
 import { accountTypeLabel, currency } from "../format";
 
 const BLUE = "#2a78d6";
@@ -15,6 +25,12 @@ const MUTED = "#898781";
 const GRID = "#e1e0d9";
 const GOOD = "#0ca30c";
 const SERIOUS = "#d03b3b";
+
+const TONE_CLASS: Record<"positive" | "warning" | "neutral", string> = {
+  positive: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  neutral: "text-slate-500",
+};
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -108,6 +124,147 @@ function NetWorthForecastCard({ forecast, currencyCode }: { forecast: NetWorthFo
         A straight line through your logged history — not a promise, just where it's pointed.
         Recent average: {currency(forecast.moving_average, 0, currencyCode)}.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Nothing to say once a target is achieved (its own badge covers that) -- mirrors the wording
+ * {@code paceMessage} on the Goals page uses for the same three-way split, though there's no
+ * $/month pace figure to quote here the way a goal's logged contributions give it.
+ */
+function targetMessage(target: NetWorthTargetProgress): { text: string; tone: "positive" | "warning" | "neutral" } | null {
+  if (target.achieved) return null;
+
+  if (!target.projected_date) {
+    return { text: "The current trend isn't heading toward this target.", tone: "warning" };
+  }
+
+  const projected = dateLabel(target.projected_date);
+  if (target.target_date) {
+    const onTrack = target.projected_date <= target.target_date;
+    return onTrack
+      ? { text: `On track — projected to reach it around ${projected}`, tone: "positive" }
+      : { text: `Behind pace — not projected until ${projected}`, tone: "warning" };
+  }
+
+  return { text: `At this rate, you'd reach it around ${projected}`, tone: "neutral" };
+}
+
+function NetWorthTargetCard({
+  target,
+  currencyCode,
+  onChanged,
+}: {
+  target: NetWorthTargetProgress | null;
+  currencyCode: string;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [amount, setAmount] = useState(target ? String(target.target_amount) : "");
+  const [date, setDate] = useState(target?.target_date ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startEdit = () => {
+    setAmount(target ? String(target.target_amount) : "");
+    setDate(target?.target_date ?? "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const submit = async () => {
+    const parsed = Number(amount);
+    if (!amount.trim() || !Number.isFinite(parsed) || parsed <= 0) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await setNetWorthTarget(parsed, currencyCode, date || undefined);
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to set target.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    if (!confirm("Clear this target?")) return;
+    await clearNetWorthTarget();
+    onChanged();
+  };
+
+  if (!target && !editing) {
+    return (
+      <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-3 text-center dark:border-slate-700">
+        <button onClick={startEdit} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+          + Set a net worth target
+        </button>
+      </div>
+    );
+  }
+
+  const message = target ? targetMessage(target) : null;
+
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      {error && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            step="100"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Target amount"
+            className="w-32 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
+          <button
+            disabled={busy || !amount.trim()}
+            onClick={submit}
+            className="rounded px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+          >
+            Save
+          </button>
+          <button onClick={() => setEditing(false)} className="text-xs text-slate-500 hover:underline">
+            Cancel
+          </button>
+        </div>
+      ) : (
+        target && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Target: {currency(target.target_amount, 0, currencyCode)}
+                {target.target_date && ` by ${dateLabel(target.target_date)}`}
+              </p>
+              {target.achieved && (
+                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                  Achieved
+                </span>
+              )}
+            </div>
+            {message && <p className={`mt-1 text-sm ${TONE_CLASS[message.tone]}`}>{message.text}</p>}
+            <div className="mt-2 flex gap-3">
+              <button onClick={startEdit} className="text-xs text-indigo-600 hover:underline dark:text-indigo-400">
+                Edit
+              </button>
+              <button onClick={clear} className="text-xs text-slate-400 hover:text-red-600">
+                Clear
+              </button>
+            </div>
+          </>
+        )
+      )}
     </div>
   );
 }
@@ -270,7 +427,7 @@ function AccountBalanceCard({
   );
 }
 
-function CurrencySection({ data }: { data: CurrencyNetWorth }) {
+function CurrencySection({ data, onChanged }: { data: CurrencyNetWorth; onChanged: () => void }) {
   return (
     <div className="mb-8">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{data.currency}</h2>
@@ -282,6 +439,7 @@ function CurrencySection({ data }: { data: CurrencyNetWorth }) {
       </div>
       <NetWorthChart data={data.history} currencyCode={data.currency} />
       {data.forecast && <NetWorthForecastCard forecast={data.forecast} currencyCode={data.currency} />}
+      <NetWorthTargetCard target={data.target} currencyCode={data.currency} onChanged={onChanged} />
     </div>
   );
 }
@@ -331,7 +489,7 @@ export function NetWorthPage() {
             here's each currency's total on its own.
           </p>
           {(netWorth.perCurrency ?? []).map((c) => (
-            <CurrencySection key={c.currency} data={c} />
+            <CurrencySection key={c.currency} data={c} onChanged={load} />
           ))}
         </div>
       ) : (
@@ -344,6 +502,7 @@ export function NetWorthPage() {
           </div>
           <NetWorthChart data={netWorth.history} currencyCode={netWorth.currency} />
           {netWorth.forecast && <NetWorthForecastCard forecast={netWorth.forecast} currencyCode={netWorth.currency} />}
+          <NetWorthTargetCard target={netWorth.target} currencyCode={netWorth.currency} onChanged={load} />
         </div>
       )}
 

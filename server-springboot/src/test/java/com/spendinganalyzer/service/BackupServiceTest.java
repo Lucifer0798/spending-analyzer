@@ -12,6 +12,7 @@ import com.spendinganalyzer.repository.FilterPresetRepository;
 import com.spendinganalyzer.repository.GoalContributionRepository;
 import com.spendinganalyzer.repository.GoalRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
+import com.spendinganalyzer.repository.NetWorthTargetRepository;
 import com.spendinganalyzer.repository.PredictionsCacheRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TagRepository;
@@ -80,6 +81,9 @@ class BackupServiceTest {
     @Autowired
     private TransactionReceiptRepository transactionReceipts;
 
+    @Autowired
+    private NetWorthTargetRepository netWorthTarget;
+
     private long goalId;
     private long taggedTransactionId;
 
@@ -100,6 +104,7 @@ class BackupServiceTest {
         filterPresets.upsert("Coffee trips", "Dining & Coffee", "business trip", null, Account.DEFAULT_ID, null, null);
         predictionsCache.upsert(Account.DEFAULT_ID, "{\"summary\":\"s\"}", "2026-06-01T00:00:00Z");
         transactionReceipts.upsert(taggedTransactionId, "receipt.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        netWorthTarget.upsert(10000.0, "2027-01-01", "USD");
     }
 
     @Test
@@ -120,6 +125,7 @@ class BackupServiceTest {
         assertThat(data.accountBalances()).extracting("balance").contains(1500.0);
         assertThat(data.filterPresets()).extracting("name").contains("Coffee trips");
         assertThat(data.transactionReceipts()).extracting("filename").contains("receipt.jpg");
+        assertThat(data.netWorthTarget()).isNotNull().extracting("targetAmount").isEqualTo(10000.0);
         // Built-in categories are exported too, not just custom ones.
         assertThat(data.categories()).extracting("name").contains("Groceries");
     }
@@ -144,6 +150,7 @@ class BackupServiceTest {
                 .find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 100, 0).stream()
                 .filter(t -> t.description().equals("EXTRA CHARGE")).findFirst().orElseThrow().id();
         transactionReceipts.upsert(extraTransactionId, "extra.pdf", "application/pdf", new byte[]{9});
+        netWorthTarget.upsert(99999.0, null, "USD");
 
         backupService.restore(snapshot);
 
@@ -157,6 +164,7 @@ class BackupServiceTest {
         assertThat(accountBalances.findByAccountId(Account.DEFAULT_ID)).extracting("balance").containsExactly(1500.0);
         assertThat(filterPresets.findAll()).extracting("name").containsExactly("Coffee trips");
         assertThat(transactionReceipts.findAll()).extracting("filename").containsExactly("receipt.jpg");
+        assertThat(netWorthTarget.find()).isPresent().get().extracting("targetAmount").isEqualTo(10000.0);
     }
 
     @Test
@@ -189,6 +197,7 @@ class BackupServiceTest {
         assertThat(summary.accountBalances()).isEqualTo(snapshot.accountBalances().size());
         assertThat(summary.filterPresets()).isEqualTo(snapshot.filterPresets().size());
         assertThat(summary.transactionReceipts()).isEqualTo(snapshot.transactionReceipts().size());
+        assertThat(summary.netWorthTarget()).isTrue();
     }
 
     @Test
@@ -196,7 +205,7 @@ class BackupServiceTest {
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), null);
 
         backupService.restore(empty);
 
@@ -212,5 +221,6 @@ class BackupServiceTest {
         assertThat(accountBalances.findAll()).isEmpty();
         assertThat(filterPresets.findAll()).isEmpty();
         assertThat(transactionReceipts.findAll()).isEmpty();
+        assertThat(netWorthTarget.find()).isEmpty();
     }
 }

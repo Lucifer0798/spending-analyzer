@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.NetWorthResponse;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.NetWorthTargetRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,10 +32,13 @@ class NetWorthServiceTest {
     @Autowired
     private AccountRepository accounts;
 
+    @Autowired
+    private NetWorthTargetRepository targets;
+
     private NetWorthService serviceOn(String isoToday) {
         LocalDate today = LocalDate.parse(isoToday);
         Clock clock = Clock.fixed(today.atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
-        return new NetWorthService(balances, clock);
+        return new NetWorthService(balances, targets, clock);
     }
 
     @Test
@@ -48,6 +52,7 @@ class NetWorthServiceTest {
         assertThat(response.currency()).isNotNull();
         assertThat(response.perCurrency()).isNull();
         assertThat(response.forecast()).isNull();
+        assertThat(response.target()).isNull();
     }
 
     @Test
@@ -224,5 +229,94 @@ class NetWorthServiceTest {
         var eur = response.perCurrency().stream().filter(c -> c.currency().equals("EUR")).findFirst().orElseThrow();
         assertThat(usd.forecast().trend()).isEqualTo("increasing");
         assertThat(eur.forecast().trend()).isEqualTo("decreasing");
+    }
+
+    // --- target ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("no target set means no target progress")
+    void noTargetMeansNoProgress() {
+        balances.upsert(Account.DEFAULT_ID, "2026-06-01", 1000.0);
+
+        NetWorthResponse response = service.compute();
+
+        assertThat(response.target()).isNull();
+    }
+
+    @Test
+    @DisplayName("a target set in a different currency than net worth is ignored")
+    void targetInDifferentCurrencyIsIgnored() {
+        targets.upsert(10000.0, null, "EUR");
+        balances.upsert(Account.DEFAULT_ID, "2026-06-01", 1000.0);
+
+        NetWorthResponse response = service.compute();
+
+        assertThat(response.currency()).isEqualTo("USD");
+        assertThat(response.target()).isNull();
+    }
+
+    @Test
+    @DisplayName("a target already reached is achieved, with no projected date to reach it")
+    void targetAlreadyReachedIsAchieved() {
+        targets.upsert(500.0, null, "USD");
+        balances.upsert(Account.DEFAULT_ID, "2026-06-01", 1000.0);
+
+        NetWorthResponse response = service.compute();
+
+        assertThat(response.target().achieved()).isTrue();
+        assertThat(response.target().projectedDate()).isNull();
+    }
+
+    @Test
+    @DisplayName("a single logged balance reports target progress with no projection yet")
+    void targetWithSinglePointHasNoProjection() {
+        targets.upsert(5000.0, null, "USD");
+        balances.upsert(Account.DEFAULT_ID, "2026-06-01", 1000.0);
+
+        NetWorthResponse response = service.compute();
+
+        assertThat(response.target()).isNotNull();
+        assertThat(response.target().achieved()).isFalse();
+        assertThat(response.target().projectedDate()).isNull();
+        assertThat(response.forecast()).isNull(); // one point, no trend to fit
+    }
+
+    @Test
+    @DisplayName("an upward trend projects a date for reaching a target still ahead")
+    void upwardTrendProjectsTargetDate() {
+        targets.upsert(5000.0, null, "USD");
+        balances.upsert(Account.DEFAULT_ID, "2026-01-01", 1000.0);
+        balances.upsert(Account.DEFAULT_ID, "2026-02-01", 1500.0);
+        balances.upsert(Account.DEFAULT_ID, "2026-03-01", 2000.0);
+
+        NetWorthResponse response = serviceOn("2026-03-15").compute();
+
+        assertThat(response.target().achieved()).isFalse();
+        assertThat(response.target().projectedDate()).isNotNull().isGreaterThan("2026-03-15");
+    }
+
+    @Test
+    @DisplayName("a flat trend never projects reaching a target still ahead of it")
+    void flatTrendNeverProjectsTargetDate() {
+        targets.upsert(5000.0, null, "USD");
+        balances.upsert(Account.DEFAULT_ID, "2026-01-01", 1000.0);
+        balances.upsert(Account.DEFAULT_ID, "2026-02-01", 1000.0);
+
+        NetWorthResponse response = serviceOn("2026-02-15").compute();
+
+        assertThat(response.target().achieved()).isFalse();
+        assertThat(response.target().projectedDate()).isNull();
+    }
+
+    @Test
+    @DisplayName("clearing the target removes it from the response")
+    void clearingTargetRemovesIt() {
+        targets.upsert(5000.0, null, "USD");
+        balances.upsert(Account.DEFAULT_ID, "2026-06-01", 1000.0);
+        assertThat(service.compute().target()).isNotNull();
+
+        targets.delete();
+
+        assertThat(service.compute().target()).isNull();
     }
 }

@@ -232,6 +232,18 @@ export interface NetWorthForecast {
   trend: "increasing" | "decreasing" | "stable";
 }
 
+/**
+ * A net worth target compared against the forecast's trend line. `projected_date` is when the
+ * line is expected to cross `target_amount` -- null once already achieved, or once the trend
+ * isn't heading toward it at all.
+ */
+export interface NetWorthTargetProgress {
+  target_amount: number;
+  target_date: string | null;
+  achieved: boolean;
+  projected_date: string | null;
+}
+
 /** One currency's slice of a {@link NetWorthResponse} whose accounts don't all share one. */
 export interface CurrencyNetWorth {
   currency: string;
@@ -240,6 +252,8 @@ export interface CurrencyNetWorth {
   history: NetWorthPoint[];
   /** Null once there are fewer than two logged dates -- one point has no trend to fit a line through. */
   forecast: NetWorthForecast | null;
+  /** Null once no target is set, or the target was set in a currency this slice doesn't share. */
+  target: NetWorthTargetProgress | null;
 }
 
 /** Null currency (with perCurrency populated instead) once active accounts span more than one. */
@@ -250,6 +264,7 @@ export interface NetWorthResponse {
   currency: string | null;
   perCurrency: CurrencyNetWorth[] | null;
   forecast: NetWorthForecast | null;
+  target: NetWorthTargetProgress | null;
 }
 
 /** A saved combination of the Transactions page's filters. Every field but the name is optional. */

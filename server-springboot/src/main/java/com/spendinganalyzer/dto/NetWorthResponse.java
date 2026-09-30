@@ -13,5 +13,6 @@ public record NetWorthResponse(
         List<NetWorthPoint> history,
         String currency,
         List<CurrencyNetWorth> perCurrency,
-        NetWorthForecast forecast
+        NetWorthForecast forecast,
+        NetWorthTargetProgress target
 ) {}
