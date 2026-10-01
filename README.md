@@ -31,7 +31,9 @@ name — `Date` / `Transaction Date` / `Posted Date` all count as the date colum
 handles the common awkward cases: US and ISO date formats, currency symbols and thousands
 separators, accounting-style negatives like `(99.99)`, and statements that use separate *Debit*
 and *Credit* columns instead of one signed *Amount*. Rows it can't read are skipped rather than
-failing the whole import.
+failing the whole import. If the file's headers are too unusual to guess at all — a statement in
+another language, say — the upload comes back asking you to match each column by hand instead of
+just refusing the file.
 
 **2. Skip anything already imported.** Each row gets a fingerprint of account + date +
 description + amount + direction. The importer compares *counts* rather than rejecting exact
@@ -243,7 +245,7 @@ All endpoints live under `/api`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/upload` | Import a statement (`?accountId=`, `?skipDuplicates=`) |
+| `POST` | `/upload` | Import a statement (`?accountId=`, `?skipDuplicates=`); 422 with the file's headers if columns can't be auto-detected, taking an explicit mapping to retry |
 | `GET` | `/transactions` | List transactions (filter by category, month, account, tag, description search) |
 | `PATCH` | `/transactions/{id}` | Change a category (also teaches merchant memory), or set/clear a split |
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
@@ -286,6 +288,17 @@ All endpoints live under `/api`.
 ---
 
 ## How the trickier bits work
+
+**A column-detection failure asks for a mapping instead of just refusing the file.** Auto-detection
+works by matching each header against a short list of names column headers are usually spelled —
+`Date`, `Transaction Date`, `Posted Date`, and so on. A statement in another language, or from a
+bank with genuinely unusual column names, won't match any of them. Rather than rejecting the file
+outright, the upload fails with a 422 that carries every header the file actually has, plus
+whichever columns it *did* manage to guess — a caller only has to supply the ones that came back
+null. Supplying an explicit column for one field doesn't disturb auto-detection for the others:
+correcting the date column on an otherwise-ordinary file still lets `Description`/`Amount` resolve
+the normal way. This is a one-off clarification for a single ambiguous file, not a remembered rule
+— unlike merchant memory, there's no "statement format" concept to recognize on a later import.
 
 **Duplicate detection compares counts, not just matches.** Rejecting every exact match would
 throw away genuine repeat purchases. Counting means only the surplus over what's already stored
@@ -790,6 +803,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~CSV column mapping override~~ — when an unusual statement's columns can't be auto-detected,
+  the upload asks you to match them by hand instead of just refusing the file
 - ~~Net worth target~~ — set a target net worth, optionally by a date, and see whether the
   current trend gets you there — "on track" / "behind pace", the same framing a savings goal uses
 - ~~Net worth forecast~~ — the Net Worth page projects a trend line 1/3/6 months out from your

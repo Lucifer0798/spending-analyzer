@@ -41,11 +41,23 @@ public class UploadController {
         this.duplicateDetectionService = duplicateDetectionService;
     }
 
+    /**
+     * The six optional overrides let a caller correct whichever columns auto-detection couldn't
+     * confidently map on its own -- see {@link FileParsingService.ColumnMapping}. Each is null by
+     * default, which means "keep guessing," so a caller only needs to supply the ones a prior
+     * 422 response said it couldn't work out.
+     */
     @PostMapping("/upload")
     public ResponseEntity<?> upload(
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) Long accountId,
-            @RequestParam(defaultValue = "true") boolean skipDuplicates
+            @RequestParam(defaultValue = "true") boolean skipDuplicates,
+            @RequestParam(required = false) String dateColumn,
+            @RequestParam(required = false) String descriptionColumn,
+            @RequestParam(required = false) String amountColumn,
+            @RequestParam(required = false) String debitColumn,
+            @RequestParam(required = false) String creditColumn,
+            @RequestParam(required = false) String categoryColumn
     ) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest()
@@ -60,17 +72,24 @@ public class UploadController {
         }
 
         String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        var columnMapping = new FileParsingService.ColumnMapping(
+                dateColumn, descriptionColumn, amountColumn, debitColumn, creditColumn, categoryColumn);
         List<ParsedTransaction> parsed;
 
         try {
             if (name.endsWith(".csv")) {
-                parsed = fileParsingService.parseCsv(file.getInputStream());
+                parsed = fileParsingService.parseCsv(file.getInputStream(), columnMapping);
             } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-                parsed = fileParsingService.parseExcel(file.getInputStream());
+                parsed = fileParsingService.parseExcel(file.getInputStream(), columnMapping);
             } else {
                 return ResponseEntity.badRequest()
                         .body(new ErrorResponse("Unsupported file type. Upload a .csv or .xlsx file."));
             }
+        } catch (FileParsingService.ColumnDetectionException e) {
+            // 422: the request itself was fine, but the file's columns need a human to confirm
+            // or correct them -- distinct from a plain 400 so the frontend can offer a mapping
+            // form instead of just showing an error.
+            return ResponseEntity.unprocessableEntity().body(e.result);
         } catch (FileParsingService.ParseException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (IOException e) {

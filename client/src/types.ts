@@ -119,6 +119,21 @@ export interface UploadResult {
   accountName: string;
 }
 
+/**
+ * Returned (422) when the importer can't confidently map every required column on its own.
+ * `headers` is every column the file actually has; the rest are whichever ones auto-detection
+ * did manage to guess, null for the ones it couldn't.
+ */
+export interface ColumnDetectionResult {
+  headers: string[];
+  dateColumn: string | null;
+  descriptionColumn: string | null;
+  amountColumn: string | null;
+  debitColumn: string | null;
+  creditColumn: string | null;
+  categoryColumn: string | null;
+}
+
 export interface RecurringSeries {
   merchant: string;
   category: string | null;
