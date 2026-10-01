@@ -1069,6 +1069,39 @@ table's own singleton shape instead of wrapping one optional object in a list of
 elements the way every other `restoreAll` in this app takes a `List` for a genuinely multi-row
 table.
 
+**`FileParsingService.ColumnDetectionException` extends the existing `ParseException` rather than
+being a new, separate failure type `UploadController` has to know about alongside it.** Every
+`ParseException` the service has ever thrown was already a column-detection failure in practice --
+there was no second failure mode to preserve -- so the existing test asserting `isInstanceOf
+(ParseException.class)` with the same message text keeps passing unchanged; the subclass only adds
+a `result` field callers who specifically want the structured data can reach for.
+`UploadController.upload` catches `ColumnDetectionException` before the plainer `ParseException`
+catch (more specific first), the ordinary Java rule for a catch hierarchy, so today the specific
+branch always fires but a hypothetical future `ParseException` that *isn't* a detection failure
+would still fall through to the generic 400 correctly.
+
+> The 422 status is deliberately not reused from anywhere else in this app -- every other error
+> response here is a 400, 404, 409, or 502, and none of them mean "the request was fine but I need
+> more information to act on it." A fresh, unambiguous status lets the frontend branch on `status
+> === 422` specifically rather than trying to distinguish "needs a column mapping" from "this
+> request was malformed" by inspecting the error body's shape.
+
+**A column mapping is deliberately a per-request override, not a remembered rule tied to "this
+bank's statement format."** Matching "the same format" reliably on a later import (same header
+set? same filename pattern? something else?) is a real design question with no obvious honest
+answer, and the ask was solving a single ambiguous file, not building a format-recognition
+subsystem. `ColumnMapping` fields are passed straight through on one `/api/upload` call and never
+persisted anywhere -- the next upload of a similarly-shaped file asks again, the same one-off
+clarification, which is a smaller cost than a wrong remembered mapping silently misreading a
+differently-shaped statement from the same bank.
+
+> A mapping field left null falls back to auto-detection for that one column specifically
+> (`mapping.dateColumn() != null ? mapping.dateColumn() : findColumn(...)`), not for the mapping as
+> a whole -- so confirming a mapping form that only needed to correct the date column doesn't
+> require re-specifying `Description`/`Amount` too. The frontend's `ColumnMappingForm` relies on
+> this: it only sends the fields the user actually touched (or that came back non-null from the
+> first attempt), not a full six-field mapping every time.
+
 ---
 
 ## Testing

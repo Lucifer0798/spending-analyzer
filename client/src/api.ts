@@ -58,6 +58,23 @@ interface RequestOptions extends RequestInit {
   ownsAuthFailure?: boolean;
 }
 
+/**
+ * Thrown in place of a plain Error so a caller that needs more than the message -- the status
+ * code, or a structured body that isn't shaped like `{error}` -- can still get at it, while every
+ * existing `catch (e) { e instanceof Error ? ... }` elsewhere in this app keeps working unchanged.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = {};
@@ -88,7 +105,11 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
 
     // Otherwise pass the server's own wording through — "Incorrect password." is far more use
     // to someone signing in than a generic failure would be.
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw new ApiError(
+      (body as { error?: string }).error || `Request failed: ${res.status}`,
+      res.status,
+      body
+    );
   }
   return res.json() as Promise<T>;
 }
@@ -137,9 +158,33 @@ export function logout() {
 
 // --- upload -----------------------------------------------------------------
 
-export function uploadFile(file: File, accountId: number | null, skipDuplicates = true) {
+/**
+ * Each field names the actual header in the file to read that column from -- left out (or
+ * undefined), the server keeps guessing for that one. Only needed when a first attempt comes
+ * back as a 422 {@link ColumnDetectionResult} asking for help with specific columns.
+ */
+export interface ColumnMappingInput {
+  dateColumn?: string;
+  descriptionColumn?: string;
+  amountColumn?: string;
+  debitColumn?: string;
+  creditColumn?: string;
+  categoryColumn?: string;
+}
+
+export function uploadFile(
+  file: File,
+  accountId: number | null,
+  skipDuplicates = true,
+  columnMapping?: ColumnMappingInput
+) {
   const form = new FormData();
   form.append("file", file);
+  if (columnMapping) {
+    for (const [key, value] of Object.entries(columnMapping)) {
+      if (value) form.append(key, value);
+    }
+  }
   return request<UploadResult>(`/upload${qs({ accountId, skipDuplicates })}`, {
     method: "POST",
     body: form,

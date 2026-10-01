@@ -1,5 +1,6 @@
 package com.spendinganalyzer.service;
 
+import com.spendinganalyzer.dto.ColumnDetectionResult;
 import com.spendinganalyzer.model.ParsedTransaction;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -52,7 +53,44 @@ public class FileParsingService {
         }
     }
 
+    /**
+     * Thrown instead of the plain {@link ParseException} specifically when required columns
+     * couldn't be auto-detected, carrying the file's headers and whatever partial detection did
+     * succeed -- {@link com.spendinganalyzer.controller.UploadController} turns this into a 422
+     * with {@link #result} as the body, so the frontend can offer a mapping form instead of just
+     * failing the import outright.
+     */
+    public static class ColumnDetectionException extends ParseException {
+        public final transient ColumnDetectionResult result;
+
+        public ColumnDetectionException(ColumnDetectionResult result) {
+            super("Could not detect required columns (date, description, amount). Found headers: "
+                    + String.join(", ", result.headers()));
+            this.result = result;
+        }
+    }
+
+    /**
+     * An explicit column-to-header mapping, for when auto-detection can't confidently work out
+     * every required column on its own. Any field left null falls back to the usual header-name
+     * guessing, so a caller only needs to specify the columns that actually need correcting.
+     */
+    public record ColumnMapping(
+            String dateColumn,
+            String descriptionColumn,
+            String amountColumn,
+            String debitColumn,
+            String creditColumn,
+            String categoryColumn
+    ) {
+        public static final ColumnMapping AUTO = new ColumnMapping(null, null, null, null, null, null);
+    }
+
     public List<ParsedTransaction> parseCsv(InputStream input) throws IOException {
+        return parseCsv(input, ColumnMapping.AUTO);
+    }
+
+    public List<ParsedTransaction> parseCsv(InputStream input, ColumnMapping mapping) throws IOException {
         List<Map<String, String>> rows = new ArrayList<>();
         CSVFormat format = CSVFormat.DEFAULT.builder()
                 .setHeader()
@@ -73,10 +111,14 @@ public class FileParsingService {
             }
         }
 
-        return rowsToTransactions(rows);
+        return rowsToTransactions(rows, mapping);
     }
 
     public List<ParsedTransaction> parseExcel(InputStream input) throws IOException {
+        return parseExcel(input, ColumnMapping.AUTO);
+    }
+
+    public List<ParsedTransaction> parseExcel(InputStream input, ColumnMapping mapping) throws IOException {
         List<Map<String, String>> rows = new ArrayList<>();
 
         try (Workbook workbook = WorkbookFactory.create(input)) {
@@ -111,7 +153,7 @@ public class FileParsingService {
             }
         }
 
-        return rowsToTransactions(rows);
+        return rowsToTransactions(rows, mapping);
     }
 
     private String cellToString(Cell cell, DataFormatter formatter, FormulaEvaluator evaluator) {
@@ -125,22 +167,24 @@ public class FileParsingService {
         }
     }
 
-    private List<ParsedTransaction> rowsToTransactions(List<Map<String, String>> rows) {
+    private List<ParsedTransaction> rowsToTransactions(List<Map<String, String>> rows, ColumnMapping mapping) {
         if (rows.isEmpty()) return List.of();
 
         List<String> headers = new ArrayList<>(rows.get(0).keySet());
 
-        String dateCol = findColumn(headers, DATE_HEADERS);
-        String descCol = findColumn(headers, DESC_HEADERS);
-        String amountCol = findColumn(headers, AMOUNT_HEADERS);
-        String debitCol = findColumn(headers, DEBIT_HEADERS);
-        String creditCol = findColumn(headers, CREDIT_HEADERS);
-        String categoryCol = findColumn(headers, CATEGORY_HEADERS);
+        // An explicit mapping only overrides the columns it actually names -- anything left null
+        // still falls back to the usual guess, so correcting one wrong column doesn't require
+        // re-specifying the ones auto-detection already got right.
+        String dateCol = mapping.dateColumn() != null ? mapping.dateColumn() : findColumn(headers, DATE_HEADERS);
+        String descCol = mapping.descriptionColumn() != null ? mapping.descriptionColumn() : findColumn(headers, DESC_HEADERS);
+        String amountCol = mapping.amountColumn() != null ? mapping.amountColumn() : findColumn(headers, AMOUNT_HEADERS);
+        String debitCol = mapping.debitColumn() != null ? mapping.debitColumn() : findColumn(headers, DEBIT_HEADERS);
+        String creditCol = mapping.creditColumn() != null ? mapping.creditColumn() : findColumn(headers, CREDIT_HEADERS);
+        String categoryCol = mapping.categoryColumn() != null ? mapping.categoryColumn() : findColumn(headers, CATEGORY_HEADERS);
 
         if (dateCol == null || descCol == null || (amountCol == null && debitCol == null && creditCol == null)) {
-            throw new ParseException(
-                    "Could not detect required columns (date, description, amount). Found headers: "
-                            + String.join(", ", headers));
+            throw new ColumnDetectionException(
+                    new ColumnDetectionResult(headers, dateCol, descCol, amountCol, debitCol, creditCol, categoryCol));
         }
 
         List<ParsedTransaction> results = new ArrayList<>();

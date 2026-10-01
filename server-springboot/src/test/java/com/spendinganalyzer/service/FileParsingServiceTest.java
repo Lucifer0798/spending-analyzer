@@ -154,4 +154,77 @@ class FileParsingServiceTest {
     void handlesEmptyFile() throws IOException {
         assertThat(parse("Date,Description,Amount\n")).isEmpty();
     }
+
+    // --- column mapping override --------------------------------------------------
+
+    @Test
+    @DisplayName("a column-detection failure carries the headers and whatever it did manage to guess")
+    void columnDetectionFailureCarriesPartialResult() {
+        String csv = """
+                Fecha,Descripcion,Importe
+                2026-05-01,TIENDA,-12.34
+                """;
+
+        assertThatThrownBy(() -> parse(csv))
+                .isInstanceOf(FileParsingService.ColumnDetectionException.class)
+                .satisfies(e -> {
+                    var result = ((FileParsingService.ColumnDetectionException) e).result;
+                    assertThat(result.headers()).containsExactly("Fecha", "Descripcion", "Importe");
+                    assertThat(result.dateColumn()).isNull();
+                    assertThat(result.descriptionColumn()).isNull();
+                    assertThat(result.amountColumn()).isNull();
+                });
+    }
+
+    @Test
+    @DisplayName("an explicit full mapping parses a file auto-detection can't")
+    void explicitMappingParsesUnrecognisedHeaders() throws IOException {
+        var mapping = new FileParsingService.ColumnMapping("Fecha", "Descripcion", "Importe", null, null, null);
+        var result = service.parseCsv(
+                new ByteArrayInputStream("""
+                        Fecha,Descripcion,Importe
+                        2026-05-01,TIENDA,-12.34
+                        """.getBytes(StandardCharsets.UTF_8)),
+                mapping);
+
+        assertThat(result).singleElement().satisfies(t -> {
+            assertThat(t.date()).isEqualTo("2026-05-01");
+            assertThat(t.description()).isEqualTo("TIENDA");
+            assertThat(t.amount()).isEqualTo(12.34);
+            assertThat(t.type()).isEqualTo("debit");
+        });
+    }
+
+    @Test
+    @DisplayName("a partial mapping only overrides the column it names, auto-detecting the rest")
+    void partialMappingMergesWithAutoDetection() throws IOException {
+        // Description and Amount are ordinary headers auto-detection already understands;
+        // only the date column has a name it doesn't recognise.
+        var mapping = new FileParsingService.ColumnMapping("Fecha", null, null, null, null, null);
+        var result = service.parseCsv(
+                new ByteArrayInputStream("""
+                        Fecha,Description,Amount
+                        2026-05-01,CORNER SHOP,-12.34
+                        """.getBytes(StandardCharsets.UTF_8)),
+                mapping);
+
+        assertThat(result).singleElement().extracting(ParsedTransaction::date).isEqualTo("2026-05-01");
+    }
+
+    @Test
+    @DisplayName("an explicit mapping to separate debit/credit columns works the same as auto-detected ones")
+    void explicitMappingHandlesDebitCreditColumns() throws IOException {
+        var mapping = new FileParsingService.ColumnMapping("Fecha", "Descripcion", null, "Cargo", "Abono", null);
+        var result = service.parseCsv(
+                new ByteArrayInputStream("""
+                        Fecha,Descripcion,Cargo,Abono
+                        2026-05-01,RENT,1200.00,
+                        2026-05-02,REFUND,,45.00
+                        """.getBytes(StandardCharsets.UTF_8)),
+                mapping);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).type()).isEqualTo("debit");
+        assertThat(result.get(1).type()).isEqualTo("credit");
+    }
 }
