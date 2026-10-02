@@ -150,7 +150,7 @@ startup log. Set `APP_PASSWORD` if you want to exercise the login screen.
 
 ```
 client/                     React + Vite frontend
-  src/components/           Upload, Dashboard, Transactions, Recurring, Manage
+  src/components/           Upload, Dashboard, Transactions, Recurring, Goals, Net Worth, Manage
   src/api.ts                Every backend call lives here
   src/types.ts              Shared TypeScript types
 
@@ -161,8 +161,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V18)
-  src/test/                 416 tests
+    db/migration/           Versioned schema migrations (V1–V22)
+  src/test/                 478 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -209,7 +209,7 @@ Fifteen tables, all created automatically:
 | `net_worth_target` | A single target net worth to compare the forecast against, optionally by a date |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V19__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V23__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -743,7 +743,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (416).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (478).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed

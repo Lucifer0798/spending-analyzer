@@ -20,7 +20,19 @@ how to work on it.
 
 | Docker | Desktop 4.87 / engine 29.7.2, WSL2 backend. Must be **running** — start `Docker Desktop.exe` first, the daemon does not start on demand |
 
-### Four traps that cost time
+### Six traps that cost time
+
+**`JAVA_HOME` is not set on this machine.** `mvnw` fails before doing anything with *"JAVA_HOME
+not found in your environment"* even though a JDK is installed. Point it at the JDK for the one
+command rather than changing the system setting:
+
+```bash
+JAVA_HOME="/c/Program Files/Java/jdk-23" ./mvnw.cmd -o verify
+```
+
+**`-o` (offline) fails straight after a Dependabot bump.** The new dependency version isn't in the
+local Maven repository yet, so an offline build reports it as missing. Run one build online
+(drop `-o`) to fetch it; offline works again after that.
 
 **A running app locks the jar.** If `./mvnw clean` fails with *"The process cannot access the
 file because it is being used by another process"*, a Spring Boot process is still holding
@@ -120,7 +132,7 @@ every total that sums the column, which is why the edit endpoint rejects one.
 the fact, so "last 3 months" from today shows nothing for data ending a few months back.
 
 **Forecasts ignore the date filter.** A projection from a narrow window would be worse, and the
-prediction cache is a single row not keyed by range.
+prediction cache is one row per account, not keyed by range.
 
 **Period comparison needs both bounds of the range set, not just one.** A half-open filter (only
 `from` or only `to`) has no defined length, so `StatsService.computeComparison` returns
@@ -233,7 +245,7 @@ The port has to be a wildcard (`http://localhost:[*]`) rather than a pinned 5173
 403 on every write while reads appear to work — a genuinely confusing failure, and one that
 already happened here. `CorsConfigTest` covers both the fallback port and the rejection cases.
 `CORS_ALLOWED_ORIGINS` widens it, and the container sets it blank. This is *not* access control —
-there is still no authentication, which is the top item on the README roadmap.
+that is the shared-password gate described above.
 
 **Merchant memory is one row per amount band, not one per merchant.** `merchant_key` is no
 longer unique; `MerchantCategory.bestMatch` picks the narrowest band containing the amount, with
