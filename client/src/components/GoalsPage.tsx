@@ -7,10 +7,11 @@ import {
   deleteGoalContribution,
   fetchAccounts,
   fetchGoalContributions,
+  fetchGoalFunding,
   fetchGoals,
   updateGoal,
 } from "../api";
-import type { GoalContribution, GoalProgress } from "../types";
+import type { GoalContribution, GoalFundingPlan, GoalProgress } from "../types";
 import { currency, currencyPrecise } from "../format";
 
 function todayIsoDate() {
@@ -467,8 +468,71 @@ function SplitContributionForm({ goals, onChanged }: { goals: GoalProgress[]; on
   );
 }
 
+function fundingHeadline(plan: GoalFundingPlan): { text: string; tone: "positive" | "warning" | "neutral" } {
+  const money = (n: number) => currency(n, 0, plan.currency);
+  if (plan.monthlySurplus === null || plan.leftover === null) {
+    return {
+      text:
+        plan.totalRequired > 0
+          ? `Your dated goals need ${money(plan.totalRequired)}/month. No ${plan.currency} transactions yet to check that against.`
+          : `No ${plan.currency} transactions yet, so there's no surplus to suggest contributions from.`,
+      tone: "neutral",
+    };
+  }
+
+  const surplus = `${money(plan.monthlySurplus)}/month`;
+  const period = `over the last ${plan.monthsMeasured} month${plan.monthsMeasured === 1 ? "" : "s"} with data`;
+  if (plan.monthlySurplus <= 0) {
+    return { text: `You've spent more than you earned ${period} (${surplus}) — there's no surplus to fund goals from.`, tone: "warning" };
+  }
+  if (plan.covered) {
+    return plan.totalRequired > 0
+      ? { text: `Your average surplus of ${surplus} ${period} covers every deadline, with ${money(plan.leftover)}/month to spare.`, tone: "positive" }
+      : { text: `Your average surplus is ${surplus} ${period}.`, tone: "positive" };
+  }
+  return {
+    text: `Your dated goals need ${money(plan.totalRequired)}/month, but your average surplus ${period} is ${surplus} — short by ${money(-plan.leftover)}/month.`,
+    tone: "warning",
+  };
+}
+
+function FundingPlanCard({ plan }: { plan: GoalFundingPlan }) {
+  const headline = fundingHeadline(plan);
+  const money = (n: number) => currency(n, 0, plan.currency);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="text-sm font-medium text-slate-800 dark:text-slate-200">
+        Funding plan <span className="font-normal text-slate-500">· {plan.currency}</span>
+      </h2>
+      <p className={`mt-1 text-sm ${PACE_TONE_CLASS[headline.tone]}`}>{headline.text}</p>
+
+      <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+        {plan.goals.map((g) => (
+          <li key={g.goalId} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2 text-sm">
+            <span className="text-slate-800 dark:text-slate-200">{g.name}</span>
+            <span className="sm:text-right">
+              {g.suggestedMonthly === null ? (
+                <span className="text-slate-500">Nothing left over to put toward this</span>
+              ) : (
+                <span className="font-medium text-slate-900 dark:text-slate-100">{money(g.suggestedMonthly)}/month</span>
+              )}
+              <span className="ml-2 text-xs text-slate-500">
+                {g.basis === "deadline" && g.targetDate && `to finish by ${dateLabel(g.targetDate)}`}
+                {g.basis === "surplus" && g.projectedCompletionDate && `even share of leftover — done around ${dateLabel(g.projectedCompletionDate)}`}
+                {g.monthlyPace > 0 && ` · currently ${money(g.monthlyPace)}/month`}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function GoalsPage() {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
+  const [funding, setFunding] = useState<GoalFundingPlan[]>([]);
   const [currencies, setCurrencies] = useState<string[]>(["USD"]);
   const [error, setError] = useState<string | null>(null);
 
@@ -482,6 +546,8 @@ export function GoalsPage() {
     fetchGoals()
       .then(setGoals)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load goals."));
+    // A suggestion, not the page's main content -- if it fails, the goals still show without it.
+    fetchGoalFunding().then(setFunding).catch(() => setFunding([]));
   };
 
   useEffect(() => {
@@ -573,6 +639,14 @@ export function GoalsPage() {
       </div>
 
       {goals !== null && <SplitContributionForm goals={goals} onChanged={load} />}
+
+      {funding.length > 0 && (
+        <div className="mt-6 space-y-4">
+          {funding.map((plan) => (
+            <FundingPlanCard key={plan.currency} plan={plan} />
+          ))}
+        </div>
+      )}
 
       {goals === null ? (
         <p className="mt-8 text-center text-sm text-slate-500">Loading…</p>

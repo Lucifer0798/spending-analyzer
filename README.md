@@ -265,6 +265,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `PATCH` `DELETE` | `/goals` | Savings goals, measured against logged contributions |
 | `GET` `POST` `DELETE` | `/goals/{id}/contributions` | A goal's contribution history; log or remove one |
 | `POST` | `/goals/contributions/split` | Log one contribution split across several goals at once |
+| `GET` | `/goals/funding` | A suggested monthly contribution per open goal, checked against average monthly surplus |
 | `GET` `DELETE` | `/tags` `/tags/{name}` | Every tag with its usage count, or delete one everywhere it's applied |
 | `GET` | `/export/transactions.csv` | Download transactions, filters and all — including each one's split share and note |
 | `GET` | `/export/categories.csv` | Download spend per category |
@@ -636,6 +637,18 @@ or negative: a goal being drained faster than it's funded will never arrive at t
 date exists, the projected date is compared against it to say "on track" or "behind pace"; where
 none was set, the projection is just informational.
 
+**Funding suggestions pay for deadlines first and never shrink them to fit.** The Goals page's
+funding plan works out what each goal with a target date needs per month — what's left divided by
+the months until the deadline, or all of it at once if the deadline is this month or already past
+— and sets the total against your average monthly surplus: income minus spend over the newest
+three months that have any transactions. If the surplus covers it, what's left over is split
+evenly across the goals with no date, each with an estimated finish. If it doesn't, the plan says
+how much short you are each month rather than quietly scaling every deadline down, and the
+undated goals get nothing until there's room. Months with no transactions at all are skipped, not
+counted as zero — a gap in what was imported isn't a month where nothing was earned. Each goal
+currency gets its own plan against only its own accounts' surplus, the same "never mix
+currencies" rule as everywhere else.
+
 **A tag name is case-insensitive, so retyping it never creates a near-duplicate.** "Business Trip"
 and "business trip" resolve to the same tag — the `tags.name` column is declared `COLLATE NOCASE`,
 so the uniqueness check, the create-if-missing insert, and every lookup all inherit that comparison
@@ -803,6 +816,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Goal funding suggestions~~ — the Goals page suggests a monthly contribution for each open goal:
+  enough to hit each deadline, with any surplus left over shared among goals without one, and a
+  clear shortfall figure when your average surplus can't cover it all
 - ~~CSV column mapping override~~ — when an unusual statement's columns can't be auto-detected,
   the upload asks you to match them by hand instead of just refusing the file
 - ~~Net worth target~~ — set a target net worth, optionally by a date, and see whether the

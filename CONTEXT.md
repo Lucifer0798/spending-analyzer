@@ -437,8 +437,8 @@ is the only constraint, so the sum can legitimately go down.
 > (`saved >= targetAmount`) is the flag the UI actually branches on for the "reached" state.
 
 **Pace projection took an injectable `Clock`, following `LoginAttemptLimiter`'s precedent, not a
-bare `LocalDate.now()`.** `GoalService` gained a package-private three-arg constructor
-(`goals, contributions, Clock`) alongside the public two-arg one, which defaults to
+bare `LocalDate.now()`.** `GoalService` gained a package-private constructor taking a trailing
+`Clock` (now `goals, contributions, stats, Clock`) alongside the public one without it, which defaults to
 `Clock.systemDefaultZone()` — the public constructor needs an explicit `@Autowired` once a second
 constructor exists, or Spring can't pick one and the context fails to start (this broke on first
 pass; the fix was adding the annotation, not removing the second constructor). Tests build a
@@ -518,6 +518,26 @@ without an exchange rate this app doesn't model anywhere else either. The UI loc
 mode's implied currency to whichever goal is checked first and flags any other checked goal whose
 currency disagrees, disabling submission until it's resolved -- fixed-amount mode has no such
 lock, since each entry is already an independent absolute amount with nothing to convert.
+
+**The funding plan is computed on read in `GoalService.fundingPlan`, grouped by goal currency,
+with surplus taken from `StatsService`.** Nothing is stored. Per currency: every open goal with a
+`target_date` needs `remaining / max(1, daysUntil / 30.44)` a month — the floor of one month means
+a deadline this month or already past asks for the whole remainder, rather than dividing by a
+fraction and producing an absurd figure. Surplus comes from `computeMonthlyIncomeTotals` (new,
+the `INCOME_FILTER` mirror of `computeMonthlyTotals`) minus `computeMonthlyTotals`, both with
+the currency filter and no account filter, merged into one map by month; the newest
+`SURPLUS_MONTHS` (3) *months present in that map* are averaged, so an un-imported month is
+skipped instead of averaged in as zero. `leftover = surplus − totalRequired`; when it's positive
+it's split evenly over the undated goals (`basis: "surplus"`, with a projected date at that
+rate), otherwise those are `"unfunded"` with a null suggestion. Dated goals always get their full
+requirement (`basis: "deadline"`) even when `covered` is false.
+
+> Two anchors on purpose: deadlines use today's real date via the injected `Clock` (a target
+> date is a calendar promise), while surplus uses the newest months *with data* (statements land
+> after the fact — the same reason budgets anchor to the latest transaction). A currency with no
+> transactions gets `monthlySurplus`, `covered` and `leftover` all null, not zero: "no data" and
+> "you saved nothing" are different statements. `GoalProgress`'s camelCase JSON is kept for the
+> two new DTOs since they sit beside it, unlike the snake_case net worth DTOs.
 
 **Adding goals to the backup bumped `BackupData.CURRENT_VERSION` from 1 to 2, which is a breaking
 change on purpose.** `BackupController.restore` rejects anything whose `version` doesn't match

@@ -286,6 +286,16 @@ public class StatsService {
         return total != null ? total : 0.0;
     }
 
+    /** The credit-side mirror of {@link #computeMonthlyTotals}: income received per calendar month. */
+    public List<MonthlyTotal> computeMonthlyIncomeTotals(Long accountId, DateRange range, String currency) {
+        String sql = "SELECT strftime('%Y-%m', t.date) AS month, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total "
+                + INCOME_FILTER + filters(accountId, range, currency)
+                + " GROUP BY month ORDER BY month";
+
+        return jdbc.query(sql, params(accountId, range, currency), (rs, rowNum) ->
+                new MonthlyTotal(rs.getString("month"), rs.getDouble("total")));
+    }
+
     /**
      * The newest date any income has landed on, for defaulting "which month" the same way
      * {@code BudgetService.resolveMonth} does for budgets — statements land well after the

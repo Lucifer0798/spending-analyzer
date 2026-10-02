@@ -514,3 +514,33 @@ export interface GoalProgress {
    *  pace isn't positive. Otherwise the date this goal would be reached at the current pace. */
   projectedCompletionDate: string | null;
 }
+
+/** One open goal's suggested monthly contribution within a {@link GoalFundingPlan}. */
+export interface GoalFundingSuggestion {
+  goalId: number;
+  name: string;
+  remaining: number;
+  targetDate: string | null;
+  /** Null only when basis is "unfunded". */
+  suggestedMonthly: number | null;
+  /** "deadline": what finishing by the target date takes. "surplus": an even share of what's
+   *  left after every deadline. "unfunded": no date, and nothing left over to give it. */
+  basis: "deadline" | "surplus" | "unfunded";
+  monthlyPace: number;
+  /** Only for "surplus": when the goal is reached at the suggested rate. */
+  projectedCompletionDate: string | null;
+}
+
+/** Suggested contributions for the open goals sharing one currency, against that currency's surplus. */
+export interface GoalFundingPlan {
+  currency: string;
+  /** Average monthly income minus spend over the newest monthsMeasured months with data; null
+   *  when this currency has no transactions, as are covered and leftover. */
+  monthlySurplus: number | null;
+  monthsMeasured: number;
+  totalRequired: number;
+  covered: boolean | null;
+  /** Negative is a monthly shortfall. */
+  leftover: number | null;
+  goals: GoalFundingSuggestion[];
+}
