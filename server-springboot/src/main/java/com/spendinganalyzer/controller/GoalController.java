@@ -1,6 +1,7 @@
 package com.spendinganalyzer.controller;
 
 import com.spendinganalyzer.dto.ErrorResponse;
+import com.spendinganalyzer.dto.GoalFundingPlan;
 import com.spendinganalyzer.dto.GoalProgress;
 import com.spendinganalyzer.repository.GoalContributionRepository;
 import com.spendinganalyzer.repository.GoalRepository;
@@ -38,6 +39,12 @@ public class GoalController {
     @GetMapping
     public List<GoalProgress> list() {
         return goalService.progress();
+    }
+
+    /** A suggested monthly contribution per open goal, checked against average monthly surplus. */
+    @GetMapping("/funding")
+    public List<GoalFundingPlan> funding() {
+        return goalService.fundingPlan();
     }
 
     @PostMapping

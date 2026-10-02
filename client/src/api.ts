@@ -17,6 +17,7 @@ import type {
   FilterPreset,
   Goal,
   GoalContribution,
+  GoalFundingPlan,
   GoalProgress,
   MerchantMemory,
   MerchantsResponse,
@@ -508,7 +509,12 @@ export function fetchGoals() {
   return request<GoalProgress[]>("/goals");
 }
 
-export function createGoal(goal: { name: string; target_amount: number; target_date?: string; currency?: string }) {
+/** A suggested monthly contribution per open goal, one plan per goal currency. */
+export function fetchGoalFunding() {
+  return request<GoalFundingPlan[]>("/goals/funding");
+}
+
+export function createGoal(goal:{ name: string; target_amount: number; target_date?: string; currency?: string }) {
   return request<Goal>("/goals", { method: "POST", body: JSON.stringify(goal) });
 }
 
