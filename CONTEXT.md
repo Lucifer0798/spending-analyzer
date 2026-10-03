@@ -573,6 +573,17 @@ requirement (`basis: "deadline"`) even when `covered` is false.
 > "you saved nothing" are different statements. `GoalProgress`'s camelCase JSON is kept for the
 > two new DTOs since they sit beside it, unlike the snake_case net worth DTOs.
 
+**"Apply plan" prefills `SplitContributionForm` by remounting it, not by syncing props into
+state.** `GoalsPage` holds `prefill: { data, key }`; the form takes `key={prefill?.key ?? 0}` and
+reads `prefill` only in its `useState` initialisers (open, fixed mode, per-goal amounts, the note
+"Funding plan"). Bumping `key` on every click means applying the same plan twice still resets the
+form, and a successful submit clears `prefill` so the form goes back to its closed default. Doing
+this with a `useEffect` that copies props into state would trip `react/set-state-in-effect` and
+fight the user's own edits. The scroll-into-view on mount depends on a `useState`-captured flag
+for the same reason: `exhaustive-deps` *is* active (via the `react` plugin, though
+`.oxlintrc.json` doesn't list it), and a disable directive for it didn't take. The form also
+renders for a single goal when prefilled, since a one-goal plan is still worth applying.
+
 **Adding goals to the backup bumped `BackupData.CURRENT_VERSION` from 1 to 2, which is a breaking
 change on purpose.** `BackupController.restore` rejects anything whose `version` doesn't match
 exactly — there's no upgrade path between backup versions, only "supported" or "400." A version-1

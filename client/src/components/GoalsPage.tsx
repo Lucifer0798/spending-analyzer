@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addGoalContribution,
   addSplitGoalContribution,
@@ -288,6 +288,12 @@ function GoalCard({ goal, onChanged }: { goal: GoalProgress; onChanged: () => vo
 
 type SplitMode = "fixed" | "percent";
 
+/** Initial fixed amounts per goal id, as the form's own string inputs hold them. */
+interface SplitPrefill {
+  values: Record<number, string>;
+  note: string;
+}
+
 /**
  * Logs one real-world contribution split across several goals at once, instead of visiting each
  * goal's own "Log contribution" form in turn. Percentage mode needs one shared total and one
@@ -297,15 +303,32 @@ type SplitMode = "fixed" | "percent";
  * restriction: each entry is already an independent absolute amount, the same as logging each
  * goal's contribution separately would produce, just sent as one request.
  */
-function SplitContributionForm({ goals, onChanged }: { goals: GoalProgress[]; onChanged: () => void }) {
-  const [open, setOpen] = useState(false);
+function SplitContributionForm({
+  goals,
+  onChanged,
+  prefill,
+}: {
+  goals: GoalProgress[];
+  onChanged: () => void;
+  /** Opens the form already filled in -- read once, at mount; the parent remounts the form (via
+   *  `key`) to apply a new one rather than this syncing state from props in an effect. */
+  prefill?: SplitPrefill;
+}) {
+  const [open, setOpen] = useState(prefill !== undefined);
   const [mode, setMode] = useState<SplitMode>("fixed");
   const [date, setDate] = useState(todayIsoDate());
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(prefill?.note ?? "");
   const [total, setTotal] = useState("");
-  const [values, setValues] = useState<Record<number, string>>({});
+  const [values, setValues] = useState<Record<number, string>>(prefill?.values ?? {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Captured at mount like the rest of the prefill, so this runs once per (re)mount.
+  const [scrollOnMount] = useState(prefill !== undefined);
+  useEffect(() => {
+    if (scrollOnMount) containerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [scrollOnMount]);
 
   const checkedGoals = goals.filter((g) => (values[g.id] ?? "").trim() !== "");
   const splitCurrency = checkedGoals[0]?.currency;
@@ -357,10 +380,12 @@ function SplitContributionForm({ goals, onChanged }: { goals: GoalProgress[]; on
     }
   };
 
-  if (goals.length < 2) return null; // nothing to split across with fewer than two goals
+  // Nothing to split across with fewer than two goals -- unless a funding plan is being applied,
+  // which is just as valid for a single goal.
+  if (goals.length < 2 && !prefill) return null;
 
   return (
-    <div className="mt-6 rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
+    <div ref={containerRef} className="mt-6 rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
       <button
         onClick={() => setOpen((o) => !o)}
         className="text-sm font-medium text-slate-800 hover:text-indigo-600 dark:text-slate-200 dark:hover:text-indigo-400"
@@ -496,15 +521,39 @@ function fundingHeadline(plan: GoalFundingPlan): { text: string; tone: "positive
   };
 }
 
-function FundingPlanCard({ plan }: { plan: GoalFundingPlan }) {
+/** The plan's suggested amounts, in the split form's shape; goals with nothing suggested are left out. */
+function planPrefill(plan: GoalFundingPlan): SplitPrefill {
+  const values: Record<number, string> = {};
+  for (const g of plan.goals) {
+    if (g.suggestedMonthly !== null && g.suggestedMonthly > 0) {
+      values[g.goalId] = g.suggestedMonthly.toFixed(2);
+    }
+  }
+  return { values, note: "Funding plan" };
+}
+
+function FundingPlanCard({ plan, onApply }: { plan: GoalFundingPlan; onApply: (prefill: SplitPrefill) => void }) {
   const headline = fundingHeadline(plan);
   const money = (n: number) => currency(n, 0, plan.currency);
+  const prefill = planPrefill(plan);
+  const fundable = Object.keys(prefill.values).length;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-sm font-medium text-slate-800 dark:text-slate-200">
-        Funding plan <span className="font-normal text-slate-500">· {plan.currency}</span>
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-medium text-slate-800 dark:text-slate-200">
+          Funding plan <span className="font-normal text-slate-500">· {plan.currency}</span>
+        </h2>
+        {fundable > 0 && (
+          <button
+            onClick={() => onApply(prefill)}
+            title="Fill in the split-contribution form with these amounts, to review before logging"
+            className="rounded-md px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+          >
+            Apply plan
+          </button>
+        )}
+      </div>
       <p className={`mt-1 text-sm ${PACE_TONE_CLASS[headline.tone]}`}>{headline.text}</p>
 
       <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
@@ -533,6 +582,8 @@ function FundingPlanCard({ plan }: { plan: GoalFundingPlan }) {
 export function GoalsPage() {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
   const [funding, setFunding] = useState<GoalFundingPlan[]>([]);
+  // A counter alongside the prefill so applying the same plan twice still remounts the form.
+  const [prefill, setPrefill] = useState<{ data: SplitPrefill; key: number } | null>(null);
   const [currencies, setCurrencies] = useState<string[]>(["USD"]);
   const [error, setError] = useState<string | null>(null);
 
@@ -638,12 +689,26 @@ export function GoalsPage() {
         </div>
       </div>
 
-      {goals !== null && <SplitContributionForm goals={goals} onChanged={load} />}
+      {goals !== null && (
+        <SplitContributionForm
+          key={prefill?.key ?? 0}
+          goals={goals}
+          prefill={prefill?.data}
+          onChanged={() => {
+            setPrefill(null);
+            load();
+          }}
+        />
+      )}
 
       {funding.length > 0 && (
         <div className="mt-6 space-y-4">
           {funding.map((plan) => (
-            <FundingPlanCard key={plan.currency} plan={plan} />
+            <FundingPlanCard
+              key={plan.currency}
+              plan={plan}
+              onApply={(data) => setPrefill((p) => ({ data, key: (p?.key ?? 0) + 1 }))}
+            />
           ))}
         </div>
       )}
