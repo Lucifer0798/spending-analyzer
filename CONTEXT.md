@@ -270,14 +270,15 @@ Created vs updated is counted by checking bands present before writing; `replace
 `removed` from `deleteAll()` instead.
 
 > The export writes a UTF-8 BOM (every `CsvExportService` file does, for Excel), and Commons CSV
-> leaves it glued to the first header — `"﻿merchant_key"` — so the import strips it before
+> leaves it glued to the first header (U+FEFF, then `merchant_key`), so the import strips it before
 > matching headers, or a round trip fails on its own file (`exportRoundTrips` proves this: remove
 > the strip and it fails). The constant is built as `String.valueOf((char) 0xFEFF)` deliberately:
 > writing the escape through tooling put a raw invisible BOM byte into the source once, and GNU
-> `sed` reads `\u` in a replacement as "uppercase next char", turning `﻿` into `FEFF`.
-> `FileParsingService` (statement upload) has no BOM handling, and its anchored header patterns
-> (`^(date|…)$` after `trim()`, which doesn't remove U+FEFF) mean a re-uploaded transactions
-> export likely misses its `date` column and lands on the column-mapping form.
+> `sed` reads `\u` in a replacement as "uppercase next char", turning the escape `\uFEFF` into
+> `FEFF`. Even this note had two raw BOM bytes in it until they were spelled out as U+FEFF; check
+> with `LC_ALL=C grep -c $'\xef\xbb\xbf'` after touching any of this. Statement upload
+> (`FileParsingService`) strips the BOM the same way now, and also had a sign bug on re-importing
+> an export; see "Statement upload strips a UTF-8 byte-order mark" under the column-mapping notes.
 
 **`RecurringSeries` carries override fields it never sets itself.** `RecurringDetectionService`
 always constructs one with `flaggedForCancellation=false, overrideId=null` — it has no dependency
@@ -1189,6 +1190,29 @@ differently-shaped statement from the same bank.
 > require re-specifying `Description`/`Amount` too. The frontend's `ColumnMappingForm` relies on
 > this: it only sends the fields the user actually touched (or that came back non-null from the
 > first attempt), not a full six-field mapping every time.
+
+**Statement upload strips a UTF-8 byte-order mark from CSV header names, so this app's own
+transactions export re-imports.** Every `CsvExportService` file starts with a BOM for Excel, and
+Commons CSV leaves it glued to the first header -- U+FEFF then `date` -- which `String.trim()`
+doesn't remove, so the anchored `^(date|…)$` match missed and a re-upload landed on the 422
+mapping form. `parseCsv` now keys each row by the header with the BOM removed, which covers the
+headers echoed on a 422 too, and `ColumnMapping`'s compact constructor strips mapped names the
+same way, so a BOM can't reach a name the user sees or maps. Without this an explicit mapping was
+worse than a 422: `"date"` never matched the BOM-prefixed row key, every row read a blank date
+and was skipped, and the upload failed as "no valid transactions." `BYTE_ORDER_MARK` is built
+from its code point for the reason given in the merchant import note. Excel files aren't
+touched; a BOM is a text-encoding artifact and never appears in an `.xlsx` cell.
+
+> The same export has an unsigned `amount` (direction lives in `type`) beside `signed_amount`.
+> Auto-detection used to pick `amount`, and since a non-negative amount reads as a credit, a round
+> trip turned every debit into a credit. `findAmountColumn` now prefers a `signed amount` /
+> `signed_amount` header whenever a file has one, before the usual `amount` patterns; files
+> without one behave as before. Choosing `amount` by hand on the mapping form still mis-signs an
+> export, since that's what the user asked for. A round trip keeps date, description, amount,
+> direction and category (which comes back with `category_source = 'import'`, like any category
+> read from a file). It drops splits, the account column (rows go to whichever account the upload
+> targets) and the original category source. Re-uploading an export into the account it came
+> from imports nothing new, because duplicate detection skips every row.
 
 ---
 
