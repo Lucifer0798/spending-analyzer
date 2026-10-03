@@ -1,11 +1,13 @@
 package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.model.ParsedTransaction;
+import com.spendinganalyzer.model.Transaction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -226,5 +228,94 @@ class FileParsingServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(0).type()).isEqualTo("debit");
         assertThat(result.get(1).type()).isEqualTo("credit");
+    }
+
+    // --- re-importing this app's own exports ------------------------------------
+
+    private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+
+    private static byte[] withBom(String csv) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.writeBytes(UTF8_BOM);
+        out.writeBytes(csv.getBytes(StandardCharsets.UTF_8));
+        return out.toByteArray();
+    }
+
+    private static byte[] exportedTransactions() {
+        return new CsvExportService().transactions(List.of(
+                new Transaction(1L, "2026-05-01", "COFFEE SHOP", 4.50, "debit", "Dining", "ai", "batch",
+                        "2026-05-02", 1L, "Checking", "USD", null, null),
+                new Transaction(2L, "2026-05-02", "SALARY", 2400.00, "credit", "Income", "ai", "batch",
+                        "2026-05-02", 1L, "Checking", "USD", null, null)));
+    }
+
+    @Test
+    @DisplayName("a transactions export from this app re-imports despite its byte-order mark")
+    void reimportsOwnExportDespiteByteOrderMark() throws IOException {
+        byte[] exported = exportedTransactions();
+        assertThat(exported).startsWith(UTF8_BOM);
+
+        var result = service.parseCsv(new ByteArrayInputStream(exported));
+
+        assertThat(result).extracting(ParsedTransaction::date).containsExactly("2026-05-01", "2026-05-02");
+        assertThat(result).extracting(ParsedTransaction::description).containsExactly("COFFEE SHOP", "SALARY");
+        assertThat(result).extracting(ParsedTransaction::category).containsExactly("Dining", "Income");
+    }
+
+    @Test
+    @DisplayName("a re-imported export keeps each transaction's direction, not just its size")
+    void reimportedExportKeepsDirection() throws IOException {
+        // The export's "amount" column is unsigned (direction lives in "type"); reading it as a
+        // signed amount would turn every debit into a credit.
+        var result = service.parseCsv(new ByteArrayInputStream(exportedTransactions()));
+
+        assertThat(result).extracting(ParsedTransaction::type).containsExactly("debit", "credit");
+        assertThat(result).extracting(ParsedTransaction::amount).containsExactly(4.50, 2400.00);
+    }
+
+    @Test
+    @DisplayName("a byte-order mark never reaches the header names offered on the mapping form")
+    void columnDetectionHeadersOmitByteOrderMark() {
+        byte[] csv = withBom("""
+                Fecha,Descripcion,Importe
+                2026-05-01,TIENDA,-12.34
+                """);
+
+        assertThatThrownBy(() -> service.parseCsv(new ByteArrayInputStream(csv)))
+                .isInstanceOf(FileParsingService.ColumnDetectionException.class)
+                .satisfies(e -> assertThat(((FileParsingService.ColumnDetectionException) e).result.headers())
+                        .containsExactly("Fecha", "Descripcion", "Importe"));
+    }
+
+    @Test
+    @DisplayName("a mapped column name from the form matches the first header of a file with a byte-order mark")
+    void explicitMappingMatchesFirstHeaderBehindByteOrderMark() throws IOException {
+        var mapping = new FileParsingService.ColumnMapping("Fecha", "Descripcion", "Importe", null, null, null);
+        var result = service.parseCsv(
+                new ByteArrayInputStream(withBom("""
+                        Fecha,Descripcion,Importe
+                        2026-05-01,TIENDA,-12.34
+                        """)),
+                mapping);
+
+        assertThat(result).singleElement().satisfies(t -> {
+            assertThat(t.date()).isEqualTo("2026-05-01");
+            assertThat(t.type()).isEqualTo("debit");
+        });
+    }
+
+    @Test
+    @DisplayName("a mapped column name that still carries a byte-order mark matches the stripped header")
+    void explicitMappingNameIsStrippedOfByteOrderMark() throws IOException {
+        String bom = String.valueOf((char) 0xFEFF);
+        var mapping = new FileParsingService.ColumnMapping(bom + "Fecha", "Descripcion", "Importe", null, null, null);
+        var result = service.parseCsv(
+                new ByteArrayInputStream(withBom("""
+                        Fecha,Descripcion,Importe
+                        2026-05-01,TIENDA,-12.34
+                        """)),
+                mapping);
+
+        assertThat(result).singleElement().extracting(ParsedTransaction::date).isEqualTo("2026-05-01");
     }
 }

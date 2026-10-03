@@ -31,12 +31,22 @@ public class FileParsingService {
             Pattern.compile("^(description|memo|payee|name|merchant|details)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern AMOUNT_HEADERS =
             Pattern.compile("^(amount|transaction amount)$", Pattern.CASE_INSENSITIVE);
+    /**
+     * This app's own transactions export carries both an unsigned {@code amount} (direction is in
+     * {@code type}) and a {@code signed_amount}. Reading the unsigned one as a signed amount would
+     * re-import every debit as a credit, so a signed column wins whenever a file has one.
+     */
+    private static final Pattern SIGNED_AMOUNT_HEADERS =
+            Pattern.compile("^signed[ _]amount$", Pattern.CASE_INSENSITIVE);
     private static final Pattern DEBIT_HEADERS =
             Pattern.compile("^(debit|withdrawal|amount debit)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern CREDIT_HEADERS =
             Pattern.compile("^(credit|deposit|amount credit)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern CATEGORY_HEADERS =
             Pattern.compile("^(category|type of transaction)$", Pattern.CASE_INSENSITIVE);
+
+    /** U+FEFF, built from its code point so the source holds no invisible character. */
+    private static final String BYTE_ORDER_MARK = String.valueOf((char) 0xFEFF);
 
     private static final List<DateTimeFormatter> FALLBACK_DATE_FORMATS = List.of(
             DateTimeFormatter.ofPattern("M/d/yyyy"),
@@ -74,6 +84,10 @@ public class FileParsingService {
      * An explicit column-to-header mapping, for when auto-detection can't confidently work out
      * every required column on its own. Any field left null falls back to the usual header-name
      * guessing, so a caller only needs to specify the columns that actually need correcting.
+     *
+     * <p>Names are compared against headers with any byte-order mark removed, so a name is
+     * stripped the same way here -- otherwise a name copied from a BOM-carrying header could
+     * never match.
      */
     public record ColumnMapping(
             String dateColumn,
@@ -84,6 +98,15 @@ public class FileParsingService {
             String categoryColumn
     ) {
         public static final ColumnMapping AUTO = new ColumnMapping(null, null, null, null, null, null);
+
+        public ColumnMapping {
+            dateColumn = withoutByteOrderMark(dateColumn);
+            descriptionColumn = withoutByteOrderMark(descriptionColumn);
+            amountColumn = withoutByteOrderMark(amountColumn);
+            debitColumn = withoutByteOrderMark(debitColumn);
+            creditColumn = withoutByteOrderMark(creditColumn);
+            categoryColumn = withoutByteOrderMark(categoryColumn);
+        }
     }
 
     public List<ParsedTransaction> parseCsv(InputStream input) throws IOException {
@@ -101,11 +124,15 @@ public class FileParsingService {
 
         try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8);
              CSVParser parser = format.parse(reader)) {
+            // A file saved with a UTF-8 byte-order mark -- every CSV this app exports, and plenty
+            // that Excel writes -- arrives with U+FEFF glued to the first header name, which
+            // trim() leaves alone. Key rows by the stripped name so detection, the headers echoed
+            // on a 422, and names mapped back from that form all see plain "date".
             List<String> headers = new ArrayList<>(parser.getHeaderNames());
             for (CSVRecord record : parser) {
                 Map<String, String> row = new LinkedHashMap<>();
                 for (String header : headers) {
-                    row.put(header, record.isSet(header) ? record.get(header) : "");
+                    row.put(withoutByteOrderMark(header), record.isSet(header) ? record.get(header) : "");
                 }
                 rows.add(row);
             }
@@ -177,7 +204,7 @@ public class FileParsingService {
         // re-specifying the ones auto-detection already got right.
         String dateCol = mapping.dateColumn() != null ? mapping.dateColumn() : findColumn(headers, DATE_HEADERS);
         String descCol = mapping.descriptionColumn() != null ? mapping.descriptionColumn() : findColumn(headers, DESC_HEADERS);
-        String amountCol = mapping.amountColumn() != null ? mapping.amountColumn() : findColumn(headers, AMOUNT_HEADERS);
+        String amountCol = mapping.amountColumn() != null ? mapping.amountColumn() : findAmountColumn(headers);
         String debitCol = mapping.debitColumn() != null ? mapping.debitColumn() : findColumn(headers, DEBIT_HEADERS);
         String creditCol = mapping.creditColumn() != null ? mapping.creditColumn() : findColumn(headers, CREDIT_HEADERS);
         String categoryCol = mapping.categoryColumn() != null ? mapping.categoryColumn() : findColumn(headers, CATEGORY_HEADERS);
@@ -228,6 +255,15 @@ public class FileParsingService {
         }
 
         return results;
+    }
+
+    private static String withoutByteOrderMark(String name) {
+        return name == null ? null : name.replace(BYTE_ORDER_MARK, "");
+    }
+
+    private static String findAmountColumn(List<String> headers) {
+        String signed = findColumn(headers, SIGNED_AMOUNT_HEADERS);
+        return signed != null ? signed : findColumn(headers, AMOUNT_HEADERS);
     }
 
     private static String findColumn(List<String> headers, Pattern pattern) {

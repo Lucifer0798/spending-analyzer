@@ -162,7 +162,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V22)
-  src/test/                 496 tests
+  src/test/                 501 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -576,7 +576,9 @@ view gives you the filtered rows — but *all* of them, not the page on screen, 
 truncated export is worse than none. Amounts are stored unsigned with direction in a separate
 `type` column, which would make a naive spreadsheet `SUM` wrong, so a `signed_amount` column sits
 alongside: negative for debits. The files start with a byte-order mark, without which Excel reads
-them in the OS codepage and mangles any accented merchant name.
+them in the OS codepage and mangles any accented merchant name. A transactions export uploads back
+in as a statement: the upload sees past the byte-order mark and reads `signed_amount`, so debits
+stay debits.
 
 **A split transaction has one stored amount and a separate "your share."** Splitting a $90 dinner
 three ways doesn't change what was actually charged — `amount` stays $90, exactly what the bank
@@ -760,7 +762,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (496).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (501).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
