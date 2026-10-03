@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import {
+  ApiError,
   backupUrl,
   clearRecurringOverride,
   createAccount,
@@ -8,6 +9,7 @@ import {
   deleteBudget,
   deleteCategory,
   deleteTag,
+  exportUrl,
   fetchAccounts,
   fetchBudgets,
   fetchCategories,
@@ -17,6 +19,7 @@ import {
   forgetAllMerchants,
   forgetMerchant,
   importBackup,
+  importMerchants,
   saveMerchantRule,
   setBudget,
   updateAccount,
@@ -30,6 +33,7 @@ import type {
   BudgetSummary,
   CategoryDetail,
   EscalationType,
+  MerchantImportMode,
   MerchantsResponse,
   RecurringOverride,
   Tag,
@@ -163,6 +167,50 @@ export function ManagePage({ onAccountsChanged }: Props) {
       setError(err instanceof Error ? err.message : "Import failed.");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const [merchantImportMode, setMerchantImportMode] = useState<MerchantImportMode>("merge");
+  const [importingMerchants, setImportingMerchants] = useState(false);
+  // Line-numbered problems from a rejected file, listed under the heading rather than squeezed
+  // into the page's single-line error banner.
+  const [merchantImportErrors, setMerchantImportErrors] = useState<string[]>([]);
+
+  const handleMerchantImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // lets the same file be chosen again after fixing it
+    if (!file) return;
+
+    if (
+      merchantImportMode === "replace" &&
+      !confirm(
+        `Replace all ${memory?.count ?? 0} remembered merchant rules with the contents of ${file.name}? Rules not in the file will be forgotten.`
+      )
+    ) {
+      return;
+    }
+
+    setImportingMerchants(true);
+    setMerchantImportErrors([]);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await importMerchants(file, merchantImportMode);
+      await reload();
+      setNotice(
+        result.replaced
+          ? `Replaced merchant memory: ${result.removed} rules removed, ${result.imported} imported.`
+          : `Imported ${result.imported} merchant rules: ${result.created} new, ${result.updated} updated.`
+      );
+    } catch (err) {
+      const errors = err instanceof ApiError ? (err.body as { errors?: unknown }).errors : undefined;
+      if (Array.isArray(errors) && errors.length > 0) {
+        setMerchantImportErrors(errors.map(String));
+      } else {
+        setError(err instanceof Error ? err.message : "Import failed.");
+      }
+    } finally {
+      setImportingMerchants(false);
     }
   };
 
@@ -720,21 +768,65 @@ export function ManagePage({ onAccountsChanged }: Props) {
 
       {/* ---------------- Merchant memory ---------------- */}
       <section className="mt-10 mb-10">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Merchant memory</h2>
-          {memory && memory.count > 0 && (
-            <button
-              onClick={() => {
-                if (confirm(`Forget all ${memory.count} remembered merchants? They'll be sent to the AI again on the next import.`)) {
-                  run(() => forgetAllMerchants(), "Merchant memory cleared.");
-                }
-              }}
-              className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+          <div className="flex flex-wrap items-center gap-3">
+            <ExportLink
+              compact
+              href={exportUrl("merchants")}
+              label="Export CSV"
+              disabled={!memory || memory.count === 0}
+              title="Nothing remembered yet to export"
+            />
+            <select
+              value={merchantImportMode}
+              onChange={(e) => setMerchantImportMode(e.target.value as MerchantImportMode)}
+              aria-label="How an imported file combines with what's already remembered"
+              className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-900"
             >
-              Forget all
-            </button>
-          )}
+              <option value="merge">Merge</option>
+              <option value="replace">Replace all</option>
+            </select>
+            <label
+              className={`text-xs font-medium ${
+                importingMerchants
+                  ? "cursor-wait text-slate-400"
+                  : "cursor-pointer text-indigo-600 hover:text-indigo-500 hover:underline dark:text-indigo-400"
+              }`}
+            >
+              {importingMerchants ? "Importing…" : "Import CSV"}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                disabled={importingMerchants}
+                onChange={handleMerchantImport}
+              />
+            </label>
+            {memory && memory.count > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm(`Forget all ${memory.count} remembered merchants? They'll be sent to the AI again on the next import.`)) {
+                    run(() => forgetAllMerchants(), "Merchant memory cleared.");
+                  }
+                }}
+                className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+              >
+                Forget all
+              </button>
+            )}
+          </div>
         </div>
+        {merchantImportErrors.length > 0 && (
+          <div className="mt-2 rounded-lg bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+            <p className="font-medium">Nothing was imported — fix these rows and try again:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {merchantImportErrors.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           How each merchant was categorized last time. Known merchants are categorized without
           asking the AI, so repeat imports are quicker and cheaper. Correcting a transaction's

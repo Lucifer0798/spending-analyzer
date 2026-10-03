@@ -109,6 +109,19 @@ export interface MerchantsResponse {
   totalMemoryHits: number;
 }
 
+export type MerchantImportMode = "merge" | "replace";
+
+export interface MerchantImportResult {
+  imported: number;
+  /** Rules for a merchant and amount band that weren't in memory before. */
+  created: number;
+  /** Rules that overwrote an existing one for the same merchant and band; always 0 when replacing. */
+  updated: number;
+  /** Rules dropped because replace cleared memory first; always 0 when merging. */
+  removed: number;
+  replaced: boolean;
+}
+
 export interface UploadResult {
   batchId: string;
   inserted: number;

@@ -19,6 +19,8 @@ import type {
   GoalContribution,
   GoalFundingPlan,
   GoalProgress,
+  MerchantImportMode,
+  MerchantImportResult,
   MerchantMemory,
   MerchantsResponse,
   NetWorthResponse,
@@ -599,6 +601,17 @@ export function forgetAllMerchants() {
   return request<{ ok: true; forgotten: number }>("/merchants", { method: "DELETE" });
 }
 
+/**
+ * Reads rules from a CSV in the merchant export's shape. "merge" keeps rules the file doesn't
+ * mention; "replace" leaves memory holding exactly the file. Rejected whole if any row is bad --
+ * the ApiError's body then carries `errors`, one line-numbered message per problem.
+ */
+export function importMerchants(file: File, mode: MerchantImportMode) {
+  const form = new FormData();
+  form.append("file", file);
+  return request<MerchantImportResult>(`/merchants/import${qs({ mode })}`, { method: "POST", body: form });
+}
+
 export function fetchSummary(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<SummaryResponse>(`/summary${qs({ accountId, from: range.from, to: range.to })}`);
 }
@@ -690,7 +703,7 @@ export function resetAllData() {
 
 // --- export -----------------------------------------------------------------
 
-export type ExportKind = "transactions" | "categories" | "monthly" | "predictions" | "recommendations";
+export type ExportKind = "transactions" | "categories" | "monthly" | "predictions" | "recommendations" | "merchants";
 
 /**
  * Builds a download URL rather than fetching. The browser handles the response, which keeps

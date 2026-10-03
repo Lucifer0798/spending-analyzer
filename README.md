@@ -162,7 +162,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V22)
-  src/test/                 485 tests
+  src/test/                 494 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -272,6 +272,7 @@ All endpoints live under `/api`.
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
+| `GET` | `/export/merchants.csv` | Download merchant memory, in the format `/merchants/import` reads back |
 | `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances and target, receipts |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` | `/net-worth` | Net worth across every active account, its history over time, and a trend-line forecast |
@@ -281,6 +282,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group and display color |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
+| `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
 | `POST` | `/auth/login` `/auth/logout` | Sign in and out |
@@ -704,6 +706,16 @@ per visit (`WHOLE FOODS MARKET #123`, `AMAZON.COM*AB123`), so they're stripped b
 That means one entry covers every branch of a chain. The same cleanup is shared with recurring
 detection, so both agree on what counts as one merchant.
 
+**Merchant memory exports to a CSV you can edit and import back.** The file has one row per
+rule — merchant, category, and amount range, with a blank upper limit meaning "no limit" — so it
+can carry what this instance has learned to another one, or be cleaned up in a spreadsheet.
+Importing **merges** by default: rules the file doesn't mention are kept, and a rule for the same
+merchant and amount range is overwritten by the file's. **Replace** instead leaves memory holding
+exactly what the file does. Either way it's all or nothing — one bad row (an unknown category, a
+backwards range, a duplicate) rejects the whole file with every problem listed by line number, so
+memory is never left half-updated. Category names match regardless of case, and a category that
+doesn't exist here has to be created first rather than being made up on the fly.
+
 **One merchant can map to two categories, split by amount.** Descriptions that differ already
 sort themselves out — `AMAZON PRIME` and `AMAZON.COM` normalise to separate keys and always
 could. The case that needed solving is a merchant whose description never varies whatever you
@@ -743,7 +755,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (485).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (494).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -816,6 +828,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Merchant memory export/import~~ — download learned merchant rules as CSV and load them back,
+  merging with or replacing what's remembered, to move them between instances or bulk-edit them
 - ~~Goal funding suggestions~~ — the Goals page suggests a monthly contribution for each open goal:
   enough to hit each deadline, with any surplus left over shared among goals without one, and a
   clear shortfall figure when your average surplus can't cover it all

@@ -257,6 +257,28 @@ every band for a hit only one of them answered.
 > NULLs as distinct in a UNIQUE index, so NULL bounds would let duplicate catch-all rows through
 > the upsert instead of updating.
 
+**Merchant import is validate-everything-then-write, in `MerchantImportService`, with its own
+upsert.** `parse` reads every row and collects line-numbered errors (capped at
+`MAX_REPORTED_ERRORS` plus an "…and N more"); any error throws `ImportException` before `apply`
+runs, so nothing is half-written. `apply` is `@Transactional` and calls
+`MerchantCategoryRepository.importRule` — not `saveRule`, because `saveRule`'s `'ai'` branch is
+`DO NOTHING` on conflict, which would silently drop an imported `ai` rule whenever a band already
+exists. `importRule` overwrites category *and* source and resets `hit_count` to 0 (hits counted
+this instance's matches under the old rule). The controller returns `{error, errors}` on a 400 so
+the client's `ApiError.body.errors` can list every line under the Merchant memory heading.
+Created vs updated is counted by checking bands present before writing; `replace` reports
+`removed` from `deleteAll()` instead.
+
+> The export writes a UTF-8 BOM (every `CsvExportService` file does, for Excel), and Commons CSV
+> leaves it glued to the first header — `"﻿merchant_key"` — so the import strips it before
+> matching headers, or a round trip fails on its own file (`exportRoundTrips` proves this: remove
+> the strip and it fails). The constant is built as `String.valueOf((char) 0xFEFF)` deliberately:
+> writing the escape through tooling put a raw invisible BOM byte into the source once, and GNU
+> `sed` reads `\u` in a replacement as "uppercase next char", turning `﻿` into `FEFF`.
+> `FileParsingService` (statement upload) has no BOM handling, and its anchored header patterns
+> (`^(date|…)$` after `trim()`, which doesn't remove U+FEFF) mean a re-uploaded transactions
+> export likely misses its `date` column and lands on the column-mapping form.
+
 **`RecurringSeries` carries override fields it never sets itself.** `RecurringDetectionService`
 always constructs one with `flaggedForCancellation=false, overrideId=null` — it has no dependency
 on `RecurringOverrideRepository` and never will, the same separation `MerchantCategory`'s bands
