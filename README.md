@@ -647,7 +647,9 @@ how much short you are each month rather than quietly scaling every deadline dow
 undated goals get nothing until there's room. Months with no transactions at all are skipped, not
 counted as zero — a gap in what was imported isn't a month where nothing was earned. Each goal
 currency gets its own plan against only its own accounts' surplus, the same "never mix
-currencies" rule as everywhere else.
+currencies" rule as everywhere else. **Apply plan** copies the suggested amounts into the
+split-contribution form rather than logging them straight away — what you actually put aside
+rarely matches a suggestion to the cent, so you review and adjust before anything is recorded.
 
 **A tag name is case-insensitive, so retyping it never creates a near-duplicate.** "Business Trip"
 and "business trip" resolve to the same tag — the `tags.name` column is declared `COLLATE NOCASE`,
@@ -816,6 +818,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Apply funding plan~~ — one click fills the split-contribution form with the funding plan's
+  suggested amounts, to adjust and log as this month's contributions
 - ~~Goal funding suggestions~~ — the Goals page suggests a monthly contribution for each open goal:
   enough to hit each deadline, with any surplus left over shared among goals without one, and a
   clear shortfall figure when your average surplus can't cover it all
