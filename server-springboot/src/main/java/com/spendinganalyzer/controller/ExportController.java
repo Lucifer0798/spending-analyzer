@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.model.Category;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.CsvExportService;
 import com.spendinganalyzer.service.InsightsService;
@@ -51,6 +52,7 @@ public class ExportController {
     private final StatsService statsService;
     private final InsightsService insightsService;
     private final CategoryRepository categoryRepository;
+    private final MerchantCategoryRepository merchantRepository;
     private final CsvExportService csv;
 
     public ExportController(
@@ -58,12 +60,14 @@ public class ExportController {
             StatsService statsService,
             InsightsService insightsService,
             CategoryRepository categoryRepository,
+            MerchantCategoryRepository merchantRepository,
             CsvExportService csv
     ) {
         this.transactionRepository = transactionRepository;
         this.statsService = statsService;
         this.insightsService = insightsService;
         this.categoryRepository = categoryRepository;
+        this.merchantRepository = merchantRepository;
         this.csv = csv;
     }
 
@@ -150,6 +154,15 @@ public class ExportController {
         return attachment("recommendations", csv.recommendations(
                 payload == null ? List.of() : payload.recommendations(), cached.generatedAt(),
                 currency != null ? currency : "USD"));
+    }
+
+    /**
+     * Every merchant memory rule, in the format {@code POST /api/merchants/import} reads back.
+     * Not account- or date-scoped: memory is global, the same as it is on the Manage page.
+     */
+    @GetMapping("/merchants.csv")
+    public ResponseEntity<byte[]> merchants() {
+        return attachment("merchant-memory", csv.merchantRules(merchantRepository.findAll()));
     }
 
     private static ResponseEntity<ErrorResponse> mixedCurrenciesError() {
