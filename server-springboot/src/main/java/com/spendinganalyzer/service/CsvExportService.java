@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.CategoryTotal;
 import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.Prediction;
 import com.spendinganalyzer.dto.Recommendation;
+import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -171,6 +172,27 @@ public class CsvExportService {
         return toCsv(new String[]{"month", "total", "currency"}, printer -> {
             for (MonthlyTotal m : totals) {
                 printer.printRecord(m.month(), m.total(), currency);
+            }
+        });
+    }
+
+    /**
+     * Merchant memory, in the shape {@link MerchantImportService} reads back. A catch-all's
+     * upper bound is written blank rather than as the stored sentinel, so the file reads as "no
+     * limit" to a person editing it -- and blank is what the import treats as unbounded.
+     * {@code hit_count} is informational only; importing ignores it.
+     */
+    public byte[] merchantRules(List<MerchantCategory> rules) {
+        String[] header = {"merchant_key", "category", "min_amount", "max_amount", "source", "hit_count"};
+        return toCsv(header, printer -> {
+            for (MerchantCategory m : rules) {
+                printer.printRecord(
+                        m.merchantKey(),
+                        m.category(),
+                        m.minAmount(),
+                        m.maxAmount() >= MerchantCategory.UNBOUNDED ? "" : m.maxAmount(),
+                        m.source(),
+                        m.hitCount());
             }
         });
     }

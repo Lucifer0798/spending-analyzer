@@ -115,6 +115,30 @@ public class MerchantCategoryRepository {
     }
 
     /**
+     * Writes one rule from an imported file. Unlike {@link #saveRule}, the file's own source is
+     * kept and wins on conflict either way -- an import is a deliberate statement of what memory
+     * should hold, not a model guess that has to defer to a correction. The hit count resets,
+     * since it counted matches against this instance's transactions under the old rule.
+     */
+    public void importRule(String merchantKey, String category, double minAmount, double maxAmount, String source) {
+        jdbc.update("""
+                INSERT INTO merchant_categories
+                  (merchant_key, category, min_amount, max_amount, source, hit_count, updated_at)
+                VALUES (:key, :category, :min, :max, :source, 0, datetime('now'))
+                ON CONFLICT(merchant_key, min_amount, max_amount) DO UPDATE SET
+                  category = excluded.category,
+                  source = excluded.source,
+                  hit_count = 0,
+                  updated_at = datetime('now')
+                """, new MapSqlParameterSource()
+                .addValue("key", merchantKey)
+                .addValue("category", category)
+                .addValue("min", minAmount)
+                .addValue("max", maxAmount)
+                .addValue("source", source));
+    }
+
+    /**
      * Counts how often memory answered instead of the model, for the management view.
      *
      * <p>Keyed by row id rather than merchant: a merchant with several bands would otherwise
