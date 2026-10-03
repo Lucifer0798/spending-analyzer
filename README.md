@@ -162,7 +162,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V22)
-  src/test/                 494 tests
+  src/test/                 496 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -632,7 +632,10 @@ spend forecast has months of transactions to average over, so a three-month movi
 sense there; a goal might have one or two logged contributions total, and averaging those over
 only the most recent few weeks would swing wildly on each new entry. Instead the pace is simply
 everything saved so far divided by the days since the very first contribution, scaled to a
-30.44-day month. A goal met, or one with nothing logged yet, has no pace worth projecting from —
+30.44-day month — with anything under a month counted as a whole month, so $800 logged today
+reads as $800/month rather than one day's saving multiplied thirty-fold. That's also why
+applying a funding plan to a goal with nothing logged yet makes its pace match the suggestion
+straight away. A goal met, or one with nothing logged yet, has no pace worth projecting from —
 the projected date is left `null` rather than showing a meaningless one. So is a pace that's zero
 or negative: a goal being drained faster than it's funded will never arrive at this rate, and
 `today + a negative or infinite number of days` isn't a date worth showing either. Where a target
@@ -757,7 +760,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (494).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (496).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed

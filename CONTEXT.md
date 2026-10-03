@@ -490,15 +490,38 @@ computing an expected value relative to whatever day the suite happens to run on
 Unlike `StatsService.computeMonthlyCategorySeries`'s three-month moving average, which has months
 of transaction history to smooth over, a goal typically has a handful of contributions total —
 averaging only a recent slice would swing hard on every new entry rather than settling toward a
-representative rate. `GoalService.progress` instead divides the total saved by
-`ChronoUnit.DAYS.between(firstContributionDate, today)` (floored at 1 day, so a contribution
-logged today doesn't divide by zero) and scales by 30.44 (the average days per month) to get a
-`$/month` figure comparable to how budgets already frame targets.
+representative rate. `GoalService.monthlyPace` instead divides the total saved by
+`ChronoUnit.DAYS.between(firstContributionDate, today)` (floored at one 30.44-day month — see
+below) and scales by 30.44 (the average days per month) to get a `$/month` figure comparable to
+how budgets already frame targets.
 
-> The 30.44 conversion cancels out algebraically in the "days to go" calculation
-> (`(remaining / monthlyPace) * 30.44`, where `monthlyPace` already carries a `* 30.44` factor),
-> so `GoalServiceTest.projectsCompletionDateFromPace` can assert an exact day count by hand rather
-> than tolerating a rounding fudge factor.
+> Once more than a month has passed, the 30.44 conversion cancels out algebraically in the "days
+> to go" calculation (`(remaining / monthlyPace) * 30.44`, where `monthlyPace` already carries a
+> `* 30.44` factor), so `GoalServiceTest.projectsCompletionDateFromPace` can assert an exact day
+> count by hand rather than tolerating a rounding fudge factor. It measures over 60 days, not 30,
+> to stay clear of the floor.
+
+**The pace's elapsed time is floored at one whole month, not one day — and a young goal still
+gets a pace rather than having it suppressed.** Originally the floor was 1 day, only to avoid
+dividing by zero, so $797 logged today read as $797 × 30.44 ≈ "$24,000/month — projected
+tomorrow" on the goal card and in the funding plan's "currently $X/month". "Apply plan" made
+this the normal case rather than an edge case, since applying a plan logs a first contribution
+today. With `Math.max(30.44, daysElapsed)`, everything logged in the first month reads as that
+much per month, which is what the user actually did: put $X aside *this month*. It also lines up
+with the funding plan exactly — apply a plan to a goal with nothing logged yet and its pace
+equals the suggestion, and a deadline goal projects to one month before its target date (this month's share is already in),
+i.e. "on track". The cost is understating a goal funded several times within its first month
+(two $500 contributions a week apart read as $1,000/month, not ~$4,300); under-promising for a
+few weeks is the right side to err on, and past day 30 the floor no longer applies and the
+figure is the honest average it always was.
+
+> Suppressing pace and projection until N days of history exist was the alternative, and was
+> turned down: N is just as arbitrary as the floor, the UI would need a third "not enough history
+> yet" state (and `monthlyPace` a nullable type on both DTOs) for exactly the moment after "Apply
+> plan" when feedback is most wanted, and the existing contract — a projection exists whenever
+> the goal has contributions, isn't achieved, and has a positive pace — would gain an exception.
+> `GoalFundingSuggestion.monthlyPace` comes from the same private method, so both surfaces get
+> the floor together; don't add a second pace calculation for one of them.
 
 **No projected date at all beats a nonsensical one.** `projectedCompletionDate` stays `null` in
 three cases: the goal has no contributions yet (no pace to measure), it's already `achieved`

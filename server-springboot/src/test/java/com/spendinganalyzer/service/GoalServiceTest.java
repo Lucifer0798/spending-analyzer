@@ -69,13 +69,14 @@ class GoalServiceTest {
         long id = goals.create("Vacation", 1000.0, null, "USD").id();
         contributions.add(id, 300.0, "2026-06-01", null);
 
-        // $300 over 30 days is $10/day, i.e. $304.40/month; $700 left to go at that rate takes
-        // exactly 70 days (the 30.44-day-per-month conversion cancels out algebraically).
-        LocalDate today = LocalDate.of(2026, 7, 1);
+        // $300 over 60 days (past the one-month floor, so it doesn't apply) is $5/day, i.e.
+        // $152.20/month; $700 left to go at that rate takes exactly 140 days (the
+        // 30.44-day-per-month conversion cancels out algebraically).
+        LocalDate today = LocalDate.of(2026, 7, 31);
         GoalProgress progress = serviceAsOf(today).progress().get(0);
 
-        assertThat(progress.monthlyPace()).isEqualTo(304.4);
-        assertThat(progress.projectedCompletionDate()).isEqualTo(today.plusDays(70).toString());
+        assertThat(progress.monthlyPace()).isEqualTo(152.2);
+        assertThat(progress.projectedCompletionDate()).isEqualTo(today.plusDays(140).toString());
     }
 
     @Test
@@ -106,16 +107,41 @@ class GoalServiceTest {
     }
 
     @Test
-    @DisplayName("a contribution made today doesn't divide by zero days elapsed")
-    void contributionMadeTodayDoesNotDivideByZero() {
-        long id = goals.create("Vacation", 1000.0, null, "USD").id();
+    @DisplayName("a first contribution made today reads as that much per month, not one day's worth scaled up")
+    void contributionMadeTodayCountsAsOneMonth() {
+        long id = goals.create("Vacation", 2400.0, null, "USD").id();
         LocalDate today = LocalDate.of(2026, 7, 1);
-        contributions.add(id, 100.0, today.toString(), null);
+        contributions.add(id, 800.0, today.toString(), null);
 
         GoalProgress progress = serviceAsOf(today).progress().get(0);
 
-        assertThat(progress.monthlyPace()).isGreaterThan(0);
-        assertThat(progress.projectedCompletionDate()).isNotNull();
+        // Not $800 / 1 day * 30.44 = $24,352/month: under a month of history is measured as a
+        // whole month. $1,600 left at $800/month is two months, 60.88 days, rounded to 61.
+        assertThat(progress.monthlyPace()).isEqualTo(800.0);
+        assertThat(progress.projectedCompletionDate()).isEqualTo(today.plusDays(61).toString());
+    }
+
+    @Test
+    @DisplayName("contributions within the first month still measure over a whole month")
+    void contributionsWithinFirstMonthMeasuredOverAMonth() {
+        long id = goals.create("Vacation", 2400.0, null, "USD").id();
+        contributions.add(id, 500.0, "2026-06-26", null);
+        contributions.add(id, 300.0, "2026-06-29", null);
+
+        GoalProgress progress = serviceAsOf(LocalDate.of(2026, 7, 1)).progress().get(0);
+
+        assertThat(progress.monthlyPace()).isEqualTo(800.0);
+    }
+
+    @Test
+    @DisplayName("the funding plan's current pace uses the same one-month floor")
+    void fundingPlanPaceUsesSameFloor() {
+        long id = goals.create("Vacation", 2400.0, null, "USD").id();
+        contributions.add(id, 800.0, FUNDING_TODAY.toString(), "Funding plan");
+
+        GoalFundingSuggestion vacation = serviceAsOf(FUNDING_TODAY).fundingPlan().get(0).goals().get(0);
+
+        assertThat(vacation.monthlyPace()).isEqualTo(800.0);
     }
 
     @Test

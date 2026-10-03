@@ -231,10 +231,15 @@ public class GoalService {
      * with nothing logged. Measured from the very first contribution, not a recent window: a
      * handful of logged amounts is too little history to average over a trailing period the way
      * spend forecasting does with months of transactions.
+     *
+     * <p>The elapsed time is floored at one whole month, so everything logged within the first
+     * month reads as that much per month -- a contribution logged today is "$X this month", not
+     * $X divided by a single day and scaled up thirty-fold.
      */
     private static double monthlyPace(GoalTotals t, LocalDate today) {
         if (t.firstContributionDate() == null) return 0;
-        long daysElapsed = Math.max(1, ChronoUnit.DAYS.between(LocalDate.parse(t.firstContributionDate()), today));
+        double daysElapsed = Math.max(AVG_DAYS_PER_MONTH,
+                ChronoUnit.DAYS.between(LocalDate.parse(t.firstContributionDate()), today));
         return round2((t.sum() / daysElapsed) * AVG_DAYS_PER_MONTH);
     }
 
