@@ -270,14 +270,15 @@ Created vs updated is counted by checking bands present before writing; `replace
 `removed` from `deleteAll()` instead.
 
 > The export writes a UTF-8 BOM (every `CsvExportService` file does, for Excel), and Commons CSV
-> leaves it glued to the first header — `"﻿merchant_key"` — so the import strips it before
+> leaves it glued to the first header (U+FEFF, then `merchant_key`), so the import strips it before
 > matching headers, or a round trip fails on its own file (`exportRoundTrips` proves this: remove
 > the strip and it fails). The constant is built as `String.valueOf((char) 0xFEFF)` deliberately:
 > writing the escape through tooling put a raw invisible BOM byte into the source once, and GNU
-> `sed` reads `\u` in a replacement as "uppercase next char", turning `﻿` into `FEFF`.
-> `FileParsingService` (statement upload) has no BOM handling, and its anchored header patterns
-> (`^(date|…)$` after `trim()`, which doesn't remove U+FEFF) mean a re-uploaded transactions
-> export likely misses its `date` column and lands on the column-mapping form.
+> `sed` reads `\u` in a replacement as "uppercase next char", turning the escape `\uFEFF` into
+> `FEFF`. Even this note had two raw BOM bytes in it until they were spelled out as U+FEFF; check
+> with `LC_ALL=C grep -c $'\xef\xbb\xbf'` after touching any of this. Statement upload
+> (`FileParsingService`) strips the BOM the same way now, and also had a sign bug on re-importing
+> an export; see "Statement upload strips a UTF-8 byte-order mark" under the column-mapping notes.
 
 **`RecurringSeries` carries override fields it never sets itself.** `RecurringDetectionService`
 always constructs one with `flaggedForCancellation=false, overrideId=null` — it has no dependency
@@ -490,15 +491,38 @@ computing an expected value relative to whatever day the suite happens to run on
 Unlike `StatsService.computeMonthlyCategorySeries`'s three-month moving average, which has months
 of transaction history to smooth over, a goal typically has a handful of contributions total —
 averaging only a recent slice would swing hard on every new entry rather than settling toward a
-representative rate. `GoalService.progress` instead divides the total saved by
-`ChronoUnit.DAYS.between(firstContributionDate, today)` (floored at 1 day, so a contribution
-logged today doesn't divide by zero) and scales by 30.44 (the average days per month) to get a
-`$/month` figure comparable to how budgets already frame targets.
+representative rate. `GoalService.monthlyPace` instead divides the total saved by
+`ChronoUnit.DAYS.between(firstContributionDate, today)` (floored at one 30.44-day month — see
+below) and scales by 30.44 (the average days per month) to get a `$/month` figure comparable to
+how budgets already frame targets.
 
-> The 30.44 conversion cancels out algebraically in the "days to go" calculation
-> (`(remaining / monthlyPace) * 30.44`, where `monthlyPace` already carries a `* 30.44` factor),
-> so `GoalServiceTest.projectsCompletionDateFromPace` can assert an exact day count by hand rather
-> than tolerating a rounding fudge factor.
+> Once more than a month has passed, the 30.44 conversion cancels out algebraically in the "days
+> to go" calculation (`(remaining / monthlyPace) * 30.44`, where `monthlyPace` already carries a
+> `* 30.44` factor), so `GoalServiceTest.projectsCompletionDateFromPace` can assert an exact day
+> count by hand rather than tolerating a rounding fudge factor. It measures over 60 days, not 30,
+> to stay clear of the floor.
+
+**The pace's elapsed time is floored at one whole month, not one day — and a young goal still
+gets a pace rather than having it suppressed.** Originally the floor was 1 day, only to avoid
+dividing by zero, so $797 logged today read as $797 × 30.44 ≈ "$24,000/month — projected
+tomorrow" on the goal card and in the funding plan's "currently $X/month". "Apply plan" made
+this the normal case rather than an edge case, since applying a plan logs a first contribution
+today. With `Math.max(30.44, daysElapsed)`, everything logged in the first month reads as that
+much per month, which is what the user actually did: put $X aside *this month*. It also lines up
+with the funding plan exactly — apply a plan to a goal with nothing logged yet and its pace
+equals the suggestion, and a deadline goal projects to one month before its target date (this month's share is already in),
+i.e. "on track". The cost is understating a goal funded several times within its first month
+(two $500 contributions a week apart read as $1,000/month, not ~$4,300); under-promising for a
+few weeks is the right side to err on, and past day 30 the floor no longer applies and the
+figure is the honest average it always was.
+
+> Suppressing pace and projection until N days of history exist was the alternative, and was
+> turned down: N is just as arbitrary as the floor, the UI would need a third "not enough history
+> yet" state (and `monthlyPace` a nullable type on both DTOs) for exactly the moment after "Apply
+> plan" when feedback is most wanted, and the existing contract — a projection exists whenever
+> the goal has contributions, isn't achieved, and has a positive pace — would gain an exception.
+> `GoalFundingSuggestion.monthlyPace` comes from the same private method, so both surfaces get
+> the floor together; don't add a second pace calculation for one of them.
 
 **No projected date at all beats a nonsensical one.** `projectedCompletionDate` stays `null` in
 three cases: the goal has no contributions yet (no pace to measure), it's already `achieved`
@@ -1201,6 +1225,29 @@ after-the-fact reason budgets anchor to data. `previousYear` is only set when ye
 > dataviz palette validator against their own surface. Recharts accepts `fill="var(--…)"`. In a
 > hidden browser pane, Recharts' entry animation stalls (no animation frames), so bars read as
 > zero-height in a screenshot — inspect the `<path>` heights instead before assuming a bug.
+
+**Statement upload strips a UTF-8 byte-order mark from CSV header names, so this app's own
+transactions export re-imports.** Every `CsvExportService` file starts with a BOM for Excel, and
+Commons CSV leaves it glued to the first header -- U+FEFF then `date` -- which `String.trim()`
+doesn't remove, so the anchored `^(date|…)$` match missed and a re-upload landed on the 422
+mapping form. `parseCsv` now keys each row by the header with the BOM removed, which covers the
+headers echoed on a 422 too, and `ColumnMapping`'s compact constructor strips mapped names the
+same way, so a BOM can't reach a name the user sees or maps. Without this an explicit mapping was
+worse than a 422: `"date"` never matched the BOM-prefixed row key, every row read a blank date
+and was skipped, and the upload failed as "no valid transactions." `BYTE_ORDER_MARK` is built
+from its code point for the reason given in the merchant import note. Excel files aren't
+touched; a BOM is a text-encoding artifact and never appears in an `.xlsx` cell.
+
+> The same export has an unsigned `amount` (direction lives in `type`) beside `signed_amount`.
+> Auto-detection used to pick `amount`, and since a non-negative amount reads as a credit, a round
+> trip turned every debit into a credit. `findAmountColumn` now prefers a `signed amount` /
+> `signed_amount` header whenever a file has one, before the usual `amount` patterns; files
+> without one behave as before. Choosing `amount` by hand on the mapping form still mis-signs an
+> export, since that's what the user asked for. A round trip keeps date, description, amount,
+> direction and category (which comes back with `category_source = 'import'`, like any category
+> read from a file). It drops splits, the account column (rows go to whichever account the upload
+> targets) and the original category source. Re-uploading an export into the account it came
+> from imports nothing new, because duplicate detection skips every row.
 
 ---
 
