@@ -5,6 +5,7 @@ import { TransactionsTable } from "./components/TransactionsTable";
 import { RecurringPage } from "./components/RecurringPage";
 import { GoalsPage } from "./components/GoalsPage";
 import { NetWorthPage } from "./components/NetWorthPage";
+import { YearReviewPage } from "./components/YearReviewPage";
 import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
@@ -21,13 +22,14 @@ import {
 import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
-type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "goals" | "net-worth" | "manage";
+type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "year" | "goals" | "net-worth" | "manage";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "upload", label: "Upload" },
   { id: "dashboard", label: "Dashboard" },
   { id: "transactions", label: "Transactions" },
   { id: "recurring", label: "Recurring" },
+  { id: "year", label: "Year" },
   { id: "goals", label: "Goals" },
   { id: "net-worth", label: "Net Worth" },
   { id: "manage", label: "Manage" },
@@ -39,6 +41,10 @@ function App() {
   // null means "all accounts" — the filter is omitted from requests entirely.
   const [accountId, setAccountId] = useState<number | null>(null);
   const [range, setRange] = useState<DateRangeValue>(ALL_TIME);
+  // A search handed to the Transactions page by a merchant link elsewhere. TransactionsTable reads
+  // it only when it mounts, and switching tabs remounts it, so this needs no clearing in step --
+  // the nav buttons just reset it so opening Transactions directly starts unfiltered.
+  const [transactionSearch, setTransactionSearch] = useState("");
   const [bounds, setBounds] = useState<DateBounds | null>(null);
   const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -85,6 +91,11 @@ function App() {
 
   const overBudget = budgets?.budgets.filter((b) => b.status === "over") ?? [];
 
+  const openMerchant = (merchant: string) => {
+    setTransactionSearch(merchant);
+    setTab("transactions");
+  };
+
   const handleReset = async () => {
     if (!confirm("This will delete all imported transactions. Accounts and categories are kept. Continue?")) {
       return;
@@ -130,7 +141,8 @@ function App() {
           <nav className="flex flex-wrap items-center gap-1">
             {showFilters && (
               <>
-                <DateRangePicker value={range} bounds={bounds} onChange={setRange} />
+                {/* The year is the range on the Year tab, so the date filter would only mislead there. */}
+                {tab !== "year" && <DateRangePicker value={range} bounds={bounds} onChange={setRange} />}
                 {accounts.length > 0 && (
                   <select
                     value={accountId ?? ""}
@@ -162,7 +174,10 @@ function App() {
             {TABS.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => {
+                  setTransactionSearch("");
+                  setTab(t.id);
+                }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.id
                     ? "bg-indigo-600 text-white"
@@ -209,16 +224,18 @@ function App() {
             }}
           />
         )}
-        {tab === "dashboard" && <Dashboard accountId={accountId} range={range} />}
+        {tab === "dashboard" && <Dashboard accountId={accountId} range={range} onOpenMerchant={openMerchant} />}
         {tab === "transactions" && (
           <TransactionsTable
             accountId={accountId}
             range={range}
             onAccountIdChange={setAccountId}
             onRangeChange={setRange}
+            initialSearch={transactionSearch}
           />
         )}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}
+        {tab === "year" && <YearReviewPage accountId={accountId} onOpenMerchant={openMerchant} />}
         {tab === "goals" && <GoalsPage />}
         {tab === "net-worth" && <NetWorthPage />}
         {tab === "manage" && <ManagePage onAccountsChanged={loadAccounts} />}

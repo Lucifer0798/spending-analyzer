@@ -5,9 +5,11 @@ import com.spendinganalyzer.dto.ComparisonResponse;
 import com.spendinganalyzer.dto.CurrencyBreakdown;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
+import com.spendinganalyzer.dto.MerchantTotal;
 import com.spendinganalyzer.dto.RecurringSeries;
 import com.spendinganalyzer.dto.SpendingAnomaly;
 import com.spendinganalyzer.dto.SummaryResponse;
+import com.spendinganalyzer.dto.TopMerchantsResponse;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
@@ -15,6 +17,7 @@ import com.spendinganalyzer.service.AnomalyDetectionService;
 import com.spendinganalyzer.service.InsightsService;
 import com.spendinganalyzer.service.RecurringDetectionService;
 import com.spendinganalyzer.service.StatsService;
+import com.spendinganalyzer.service.YearReviewService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,6 +41,7 @@ public class InsightsController {
     private final AnomalyDetectionService anomalyDetectionService;
     private final TransactionRepository transactionRepository;
     private final RecurringOverrideRepository recurringOverrideRepository;
+    private final YearReviewService yearReviewService;
 
     public InsightsController(
             StatsService statsService,
@@ -45,7 +49,8 @@ public class InsightsController {
             RecurringDetectionService recurringDetectionService,
             AnomalyDetectionService anomalyDetectionService,
             TransactionRepository transactionRepository,
-            RecurringOverrideRepository recurringOverrideRepository
+            RecurringOverrideRepository recurringOverrideRepository,
+            YearReviewService yearReviewService
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
@@ -53,6 +58,7 @@ public class InsightsController {
         this.anomalyDetectionService = anomalyDetectionService;
         this.transactionRepository = transactionRepository;
         this.recurringOverrideRepository = recurringOverrideRepository;
+        this.yearReviewService = yearReviewService;
     }
 
     @GetMapping("/summary")
@@ -123,6 +129,45 @@ public class InsightsController {
         return statsService.computeComparison(accountId, range, explicitPreviousRange)
                 .map(comparison -> ComparisonResponse.of(comparison, currency))
                 .orElse(ComparisonResponse.NOT_APPLICABLE);
+    }
+
+    /**
+     * Merchants ranked by spend in range. {@code limit} caps the list (default 10, at most 100);
+     * {@code merchantCount} still reports how many there were in all.
+     */
+    @GetMapping("/top-merchants")
+    public ResponseEntity<?> topMerchants(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        if (limit < 1 || limit > 100) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("limit must be between 1 and 100."));
+        }
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return ResponseEntity.ok(TopMerchantsResponse.NOT_APPLICABLE);
+        }
+        List<MerchantTotal> all = statsService.computeMerchantTotals(accountId, DateRange.of(from, to), null);
+        return ResponseEntity.ok(new TopMerchantsResponse(
+                true, currency, all.size(), List.copyOf(all.subList(0, Math.min(limit, all.size())))));
+    }
+
+    /**
+     * One calendar year summarised. Deliberately ignores the date filter the rest of the dashboard
+     * uses -- the year <em>is</em> the range -- but honours the account filter. Omitting {@code year}
+     * picks the newest year with data.
+     */
+    @GetMapping("/year-review")
+    public ResponseEntity<?> yearReview(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) Integer year
+    ) {
+        if (year != null && (year < 1900 || year > 9999)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("year must be a four-digit year."));
+        }
+        return ResponseEntity.ok(yearReviewService.review(accountId, year));
     }
 
     /** Earliest and latest dates on record, so the UI can bound its date pickers. */

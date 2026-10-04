@@ -1191,6 +1191,41 @@ differently-shaped statement from the same bank.
 > this: it only sends the fields the user actually touched (or that came back non-null from the
 > first attempt), not a full six-field mapping every time.
 
+**Merchant totals are grouped in Java, not SQL.** `StatsService.computeMerchantTotals` selects
+raw spend rows (`SPEND_FILTER`, `EFFECTIVE_AMOUNT`, so split shares and the income/transfer
+exclusions match every other total) and groups by `MerchantNormalizer.normalize(description)` —
+SQLite can't run that, and `GROUP BY description` would split a chain into one row per branch.
+`topCategory` is the category with the most *amount*, not the most rows; ties break by name, and
+the list sorts by total then merchant so it's stable. `/top-merchants` returns the full
+`merchantCount` alongside the capped list; the Dashboard card always fetches 25 so "show more" is
+a client-side toggle, not a second request.
+
+**`YearReviewService` only cuts existing totals by calendar year — it defines nothing new.** Income
+is `computeMonthlyIncomeTotals`, spend is `computeMonthlyTotals`, categories are
+`computeCategoryTotals`, the year-over-year list is `computeComparison` with an explicit previous
+range — so a year's figures always agree with the dashboard filtered to that year. `months` is
+always twelve entries (zero-filled) for a stable chart, while `monthsWithData` counts only months
+with income or spend so the UI can say "covers 9 months". The default year is the newest in
+`availableYears` (any transaction type, account-filtered), not the calendar year, for the same
+after-the-fact reason budgets anchor to data. `previousYear` is only set when year − 1 appears in
+`availableYears`; `previousYearMonthsWithData` lets the UI warn that a 3-month year against a
+9-month one is mostly a coverage difference. Mixed currencies on "all accounts" return
+`applicable: false` (with `availableYears` still filled, so the selector works) — never a sum.
+
+> Merchant click-through is App state, not routing: `openMerchant` sets `transactionSearch` and
+> switches to the Transactions tab, and `TransactionsTable` reads `initialSearch` only in its
+> `useState` initialisers — the tab switch remounts it, so no effect syncs props to state. Every
+> nav button clears `transactionSearch`, so opening Transactions directly starts unfiltered. The
+> search is the normalized merchant name as plain text, so a description whose normalization
+> dropped a *middle* digit run (`LONG_DIGIT_RUN`) won't match it — accepted rather than adding a
+> merchant-key filter to the paged SQL transactions query.
+
+> The Year chart's two series use `--series-1`/`--series-2` CSS variables from `index.css`, with
+> separate `.dark` values (`#3987e5`/`#d95926` vs `#2a78d6`/`#eb6834`), both checked with the
+> dataviz palette validator against their own surface. Recharts accepts `fill="var(--…)"`. In a
+> hidden browser pane, Recharts' entry animation stalls (no animation frames), so bars read as
+> zero-height in a screenshot — inspect the `<path>` heights instead before assuming a bug.
+
 **Statement upload strips a UTF-8 byte-order mark from CSV header names, so this app's own
 transactions export re-imports.** Every `CsvExportService` file starts with a BOM for Excel, and
 Commons CSV leaves it glued to the first header -- U+FEFF then `date` -- which `String.trim()`

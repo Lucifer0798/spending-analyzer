@@ -150,7 +150,7 @@ startup log. Set `APP_PASSWORD` if you want to exercise the login screen.
 
 ```
 client/                     React + Vite frontend
-  src/components/           Upload, Dashboard, Transactions, Recurring, Goals, Net Worth, Manage
+  src/components/           Upload, Dashboard, Transactions, Recurring, Year, Goals, Net Worth, Manage
   src/api.ts                Every backend call lives here
   src/types.ts              Shared TypeScript types
 
@@ -162,7 +162,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V22)
-  src/test/                 502 tests
+  src/test/                 514 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -254,6 +254,8 @@ All endpoints live under `/api`.
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
+| `GET` | `/top-merchants` | Merchants ranked by spend in the active range, branches of a chain counted as one (`limit`, default 10) |
+| `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
 | `GET` | `/recurring` | Detected recurring charges |
 | `GET` | `/recurring-income` | Detected recurring income, plus actual income received in a given month |
@@ -708,6 +710,16 @@ or (on a rejected version) untouched. The cost is that import is destructive by 
 why it asks first and why AI forecasts are left out of the file entirely: they're a cache, not
 data, the same reasoning that let the old prediction cache row be dropped rather than migrated.
 
+**Top merchants and the year in review count a chain as one place.** Both group spend by the
+same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
+one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
+a description whose cleanup removed digits from the *middle* of the name can slip past it. The
+**Year** tab ignores the date filter (the year is the range) but follows the account filter, and
+like every other total it declines to add up accounts in different currencies. It says how many
+months of the year actually have transactions, because a year imported from March reads very
+differently from a full one — and when comparing against the year before, it warns if the two
+years have different amounts of data, since part of any difference is then just coverage.
+
 **Merchant memory keys on a cleaned-up merchant name.** Store numbers and order references vary
 per visit (`WHOLE FOODS MARKET #123`, `AMAZON.COM*AB123`), so they're stripped before matching.
 That means one entry covers every branch of a chain. The same cleanup is shared with recurring
@@ -762,7 +774,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (502).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (514).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no API key, which is how CI runs it, and catches broken wiring or a failed
@@ -835,6 +847,11 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Year in review~~ — a Year tab summarises any calendar year: income, spend, savings rate, a
+  month-by-month chart, top categories and merchants, the biggest month, and what changed per
+  category against the year before
+- ~~Top merchants~~ — a Dashboard card ranks where the money went by merchant, with visit count,
+  average spend and last visit, and opens a merchant's transactions in one click
 - ~~Merchant memory export/import~~ — download learned merchant rules as CSV and load them back,
   merging with or replacing what's remembered, to move them between instances or bulk-edit them
 - ~~Apply funding plan~~ — one click fills the split-contribution form with the funding plan's
