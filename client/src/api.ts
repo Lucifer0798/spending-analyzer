@@ -31,9 +31,11 @@ import type {
   RecurringResponse,
   SummaryResponse,
   Tag,
+  TopMerchantsResponse,
   Transaction,
   TransactionWithTags,
   UploadResult,
+  YearReview,
 } from "./types";
 import { ALL_TIME } from "./types";
 
@@ -621,6 +623,16 @@ export function fetchSummary(accountId: number | null, range: DateRangeValue = A
  * `compareAgainst` compares against that exact range instead of the auto-derived previous period;
  * omit it (or pass null) to keep the default behavior.
  */
+/** Merchants ranked by spend in range -- see TopMerchantsResponse. */
+export function fetchTopMerchants(accountId: number | null, range: DateRangeValue = ALL_TIME, limit = 10) {
+  return request<TopMerchantsResponse>(`/top-merchants${qs({ accountId, from: range.from, to: range.to, limit })}`);
+}
+
+/** One calendar year summarised; omit `year` for the newest year with data. Ignores the date filter. */
+export function fetchYearReview(accountId: number | null, year?: number | null) {
+  return request<YearReview>(`/year-review${qs({ accountId, year })}`);
+}
+
 export function fetchComparison(
   accountId: number | null,
   range: DateRangeValue = ALL_TIME,

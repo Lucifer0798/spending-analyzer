@@ -30,6 +30,9 @@ interface Props {
   range: DateRangeValue;
   onAccountIdChange: (id: number | null) => void;
   onRangeChange: (range: DateRangeValue) => void;
+  /** Pre-fills the description search -- read once at mount, the way another page hands off
+   *  "show me these" (App remounts this page whenever its tab is opened). */
+  initialSearch?: string;
 }
 
 interface EditDraft {
@@ -41,14 +44,14 @@ interface EditDraft {
 
 const PAGE_SIZE = 50;
 
-export function TransactionsTable({ accountId, range, onAccountIdChange, onRangeChange }: Props) {
+export function TransactionsTable({ accountId, range, onAccountIdChange, onRangeChange, initialSearch = "" }: Props) {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const [searchFilter, setSearchFilter] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchFilter, setSearchFilter] = useState(initialSearch);
   const [categories, setCategories] = useState<string[]>([]);
   // A category with no entry here just renders without a swatch.
   const [colorByCategory, setColorByCategory] = useState<Record<string, string>>({});

@@ -4,6 +4,7 @@ import com.spendinganalyzer.dto.CategoryComparison;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.CategoryTotal;
 import com.spendinganalyzer.dto.DateRange;
+import com.spendinganalyzer.dto.MerchantTotal;
 import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.PeriodComparison;
 import com.spendinganalyzer.model.Account;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -284,6 +287,64 @@ public class StatsService {
         String sql = "SELECT ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) " + INCOME_FILTER + filters(accountId, range, null);
         Double total = jdbc.queryForObject(sql, params(accountId, range, null), Double.class);
         return total != null ? total : 0.0;
+    }
+
+    /**
+     * Spend grouped by merchant, biggest total first. Grouped in Java rather than SQL because the
+     * key is {@link MerchantNormalizer#normalize} of the description -- store numbers and order
+     * references stripped -- which SQLite can't compute; a {@code GROUP BY description} would
+     * split one supermarket into a row per branch.
+     *
+     * @return every merchant with spend in range, ties broken by name so the order is stable
+     */
+    public List<MerchantTotal> computeMerchantTotals(Long accountId, DateRange range, String currency) {
+        record Row(String description, String date, String category, double amount) {}
+
+        String sql = "SELECT t.description, t.date, COALESCE(t.category, 'Uncategorized') AS category, "
+                + EFFECTIVE_AMOUNT + " AS amount "
+                + SPEND_FILTER + filters(accountId, range, currency);
+        List<Row> rows = jdbc.query(sql, params(accountId, range, currency), (rs, rowNum) ->
+                new Row(rs.getString("description"), rs.getString("date"),
+                        rs.getString("category"), rs.getDouble("amount")));
+
+        class Acc {
+            double total;
+            int count;
+            String first;
+            String last;
+            final Map<String, Double> byCategory = new HashMap<>();
+        }
+        Map<String, Acc> byMerchant = new HashMap<>();
+        for (Row row : rows) {
+            Acc acc = byMerchant.computeIfAbsent(MerchantNormalizer.normalize(row.description()), k -> new Acc());
+            acc.total += row.amount();
+            acc.count++;
+            if (acc.first == null || row.date().compareTo(acc.first) < 0) acc.first = row.date();
+            if (acc.last == null || row.date().compareTo(acc.last) > 0) acc.last = row.date();
+            acc.byCategory.merge(row.category(), row.amount(), Double::sum);
+        }
+
+        List<MerchantTotal> totals = new ArrayList<>();
+        for (var entry : byMerchant.entrySet()) {
+            Acc acc = entry.getValue();
+            String topCategory = acc.byCategory.entrySet().stream()
+                    .max(Map.Entry.<String, Double>comparingByValue().thenComparing(Map.Entry.comparingByKey()))
+                    .map(Map.Entry::getKey)
+                    .orElse("Uncategorized");
+            totals.add(new MerchantTotal(entry.getKey(), round2(acc.total), acc.count,
+                    round2(acc.total / acc.count), acc.first, acc.last, topCategory));
+        }
+        totals.sort(Comparator.comparingDouble(MerchantTotal::total).reversed()
+                .thenComparing(MerchantTotal::merchant));
+        return totals;
+    }
+
+    /** Every calendar year with at least one transaction of any kind, oldest first. */
+    public List<Integer> availableYears(Long accountId) {
+        String sql = "SELECT DISTINCT CAST(strftime('%Y', t.date) AS INTEGER) AS year FROM transactions t"
+                + (accountId != null ? " WHERE t.account_id = :accountId" : "")
+                + " ORDER BY year";
+        return jdbc.queryForList(sql, new MapSqlParameterSource("accountId", accountId), Integer.class);
     }
 
     /** The credit-side mirror of {@link #computeMonthlyTotals}: income received per calendar month. */

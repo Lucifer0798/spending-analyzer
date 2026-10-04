@@ -344,6 +344,58 @@ export interface SummaryResponse {
   perCurrency: CurrencyBreakdown[] | null;
 }
 
+/** Spend at one merchant -- branches and order references counted as one place. */
+export interface MerchantTotal {
+  merchant: string;
+  total: number;
+  count: number;
+  averageAmount: number;
+  firstDate: string;
+  lastDate: string;
+  /** Where most of this merchant's spend was categorized, by amount. */
+  topCategory: string;
+}
+
+export interface TopMerchantsResponse {
+  /** False when "all accounts" spans more than one currency -- nothing is ranked then. */
+  applicable: boolean;
+  currency: string | null;
+  /** Distinct merchants in range, before the list was capped. */
+  merchantCount: number;
+  merchants: MerchantTotal[];
+}
+
+export interface YearReviewMonth {
+  month: string;
+  income: number;
+  spend: number;
+}
+
+export interface YearReview {
+  /** False when "all accounts" spans more than one currency. */
+  applicable: boolean;
+  /** Null only when there are no transactions at all. */
+  year: number | null;
+  availableYears: number[];
+  currency: string | null;
+  income: number;
+  spend: number;
+  saved: number;
+  /** Saved as a percentage of income; null when there was no income. */
+  savingsRate: number | null;
+  monthsWithData: number;
+  /** Always January to December. */
+  months: YearReviewMonth[];
+  biggestMonth: MonthlyTotal | null;
+  topCategories: { category: string; total: number; count: number; sharePercent: number }[];
+  topMerchants: MerchantTotal[];
+  /** year - 1 when it has data; otherwise null and categoryChanges is empty. */
+  previousYear: number | null;
+  previousYearMonthsWithData: number;
+  /** Biggest increase first. */
+  categoryChanges: CategoryComparison[];
+}
+
 export interface CategoryComparison {
   category: string;
   currentTotal: number;
