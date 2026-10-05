@@ -79,12 +79,18 @@ jobs:
   # that actually ships: one image, with the frontend packaged inside the jar. Building it is
   # only half the check — the image is started and probed, because a container that builds and
   # then fails to boot is exactly the failure the smoke test exists to catch.
+  #
+  # Built natively per architecture rather than cross-built under emulation: amd64 here, arm64
+  # in the job below on GitHub's Arm runner (free for public repositories). Each one runs the
+  # same smoke test before it is pushed, and `publish` only joins them into one multi-arch tag
+  # once both have passed. This job keeps the name "Docker image" because branch protection
+  # requires a check by that name.
   image:
     name: Docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # For the publish steps at the end, which run on main only.
+      # For the push at the end, which runs on main only.
       packages: write
     steps:
       - uses: actions/checkout@v7
@@ -92,78 +98,96 @@ jobs:
       - name: Build image
         run: docker build -t spending-analyzer:ci .
 
-      # The image sets APP_AUTH_REQUIRED=true, so this also proves that a password is enough
-      # to start it — the refusal path is covered by the step below.
-      - name: Start container
-        run: docker run -d --name app -p 4000:4000 -e APP_PASSWORD=ci-smoke-test spending-analyzer:ci
-
-      - name: Wait for it to come up
-        run: |
-          # /api/auth/status is the one endpoint outside the gate, so it is what a health
-          # check or a load balancer should poll. Everything else answers 401 until sign-in.
-          for _ in $(seq 1 60); do
-            if curl -sf -o /dev/null http://localhost:4000/api/auth/status; then
-              echo "up"; exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::container did not become healthy within 120s"
-          docker logs app
-          exit 1
-
-      - name: Check the packaged frontend is served and the API is locked
-        run: |
-          curl -sf http://localhost:4000/ | grep -qi '<div id="root">'
-          curl -sf http://localhost:4000/api/auth/status | grep -q '"authRequired":true'
-
-          # The whole point of shipping with a password: data endpoints must refuse a caller
-          # who has not signed in. A 200 here would mean the image ships wide open.
-          status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/summary)
-          if [ "$status" != "401" ]; then
-            echo "::error::/api/summary answered $status to an unauthenticated caller, expected 401"
-            exit 1
-          fi
-
-      - name: Check it refuses to start with no password
-        run: |
-          # Silently falling back to an open instance is the failure this guards against, so
-          # the container must exit rather than come up.
-          if docker run --rm --name no-password spending-analyzer:ci; then
-            echo "::error::container started without APP_PASSWORD, expected it to refuse"
-            exit 1
-          fi
-          echo "refused to start without a password, as intended"
+      - name: Smoke test
+        uses: ./.github/actions/image-smoke-test
+        with:
+          image: spending-analyzer:ci
 
       # Publishing comes after the checks above and runs only on main, so what reaches the
       # registry is exactly the image that was just proved to boot, serve the frontend, refuse
       # an unauthenticated caller, and refuse to start without a password. A pull request builds
-      # and tests the image but never pushes one.
-      - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-
-      - name: Push image
+      # and tests the image but never pushes one. This pushes only an architecture-specific tag;
+      # `publish` turns the pair into the tags people actually pull.
+      - name: Push amd64 image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
           # GHCR rejects uppercase in a repository path, and this owner has some.
+          image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          docker tag spending-analyzer:ci "$image:${GITHUB_SHA::7}-amd64"
+          docker push "$image:${GITHUB_SHA::7}-amd64"
+
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f app || true
+
+  # The same build and smoke test on arm64 -- the architecture of the free Ampere VMs on Oracle
+  # Cloud and of Apple-silicon and Raspberry Pi machines. Not a required check (that would mean
+  # changing branch protection), but `publish` won't run without it, so nothing reaches `latest`
+  # unless this architecture booted and passed too.
+  image-arm64:
+    name: Docker image (arm64)
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build -t spending-analyzer:ci .
+
+      - name: Smoke test
+        uses: ./.github/actions/image-smoke-test
+        with:
+          image: spending-analyzer:ci
+
+      - name: Push arm64 image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+          image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          docker tag spending-analyzer:ci "$image:${GITHUB_SHA::7}-arm64"
+          docker push "$image:${GITHUB_SHA::7}-arm64"
+
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f app || true
+
+  # Joins the two tested architecture images into one multi-arch tag, so `docker pull` picks the
+  # right one for whatever machine runs it. No rebuild happens here -- the manifest list points at
+  # exactly the images the two jobs above tested and pushed.
+  publish:
+    name: Publish image
+    needs: [image, image-arm64]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Create multi-arch tags
+        run: |
           image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           sha="${GITHUB_SHA::7}"
 
           # Two tags on purpose: latest for "just run it", the commit for pinning and for
           # working out afterwards which code a running container actually came from.
-          docker tag spending-analyzer:ci "$image:latest"
-          docker tag spending-analyzer:ci "$image:$sha"
-          docker push "$image:latest"
-          docker push "$image:$sha"
+          docker buildx imagetools create \
+            -t "$image:latest" -t "$image:$sha" \
+            "$image:$sha-amd64" "$image:$sha-arm64"
+          docker buildx imagetools inspect "$image:$sha"
 
-          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Published (linux/amd64 + linux/arm64)" >> "$GITHUB_STEP_SUMMARY"
           echo "\`docker pull $image:latest\`" >> "$GITHUB_STEP_SUMMARY"
           echo "\`docker pull $image:$sha\`" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Container logs
-        if: always()
-        run: docker logs app
-
-      - name: Stop container
-        if: always()
-        run: docker rm -f app

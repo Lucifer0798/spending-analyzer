@@ -1,0 +1,7 @@
+# One site: the address from SITE_ADDRESS in .env. Caddy obtains and renews its HTTPS certificate
+# automatically and redirects plain http to https. Security headers (HSTS included) come from the
+# app's own Spring Security config, which sees the request as https via X-Forwarded-Proto.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy app:4000
+}
