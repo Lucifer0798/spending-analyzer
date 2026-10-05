@@ -38,7 +38,7 @@ public class MerchantController {
         return Map.of(
                 "merchants", merchants,
                 "count", merchants.size(),
-                // Transactions categorised from memory rather than by the model.
+                // Transactions categorised from memory rather than by the built-in rules.
                 "totalMemoryHits", totalHits
         );
     }

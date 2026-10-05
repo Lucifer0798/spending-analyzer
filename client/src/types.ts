@@ -6,7 +6,8 @@ export interface Transaction {
   type: "debit" | "credit";
   category: string | null;
   /** "cache" means it came from merchant memory rather than a fresh model call. */
-  category_source: "ai" | "user" | "import" | "cache" | null;
+  /** "rule" is the built-in keyword rules; "ai" only appears on rows categorized before those replaced the model. */
+  category_source: "ai" | "rule" | "user" | "import" | "cache" | null;
   upload_batch_id: string;
   created_at: string;
   account_id: number;
@@ -80,11 +81,12 @@ export interface CategorizeResult {
   categorized: number;
   total?: number;
   message?: string;
-  /** Answered from merchant memory, costing no model call. */
+  /** Answered from merchant memory -- what the user has taught. */
   fromMemory: number;
-  fromModel: number;
-  /** Distinct merchants actually sent to the model — what drives cost. */
-  merchantsQueried: number;
+  /** Answered by the built-in keyword rules. */
+  fromRules: number;
+  /** Left uncategorized: neither memory nor a rule recognised them. */
+  unmatched: number;
 }
 
 export interface MerchantMemory {

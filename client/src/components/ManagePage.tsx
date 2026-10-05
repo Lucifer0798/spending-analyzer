@@ -382,7 +382,8 @@ export function ManagePage({ onAccountsChanged }: Props) {
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Categories</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Custom categories are offered to the AI when it categorizes transactions. Anything marked
+          Custom categories are picked up by merchant memory once you categorize a transaction
+          into one; the built-in rules only ever choose built-in categories. Anything marked
           as income or transfer is left out of spending totals. A group rolls several categories
           up under one label on the dashboard and in exports — built-in categories can be grouped too.
         </p>
@@ -806,7 +807,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
             {memory && memory.count > 0 && (
               <button
                 onClick={() => {
-                  if (confirm(`Forget all ${memory.count} remembered merchants? They'll be sent to the AI again on the next import.`)) {
+                  if (confirm(`Forget all ${memory.count} remembered merchants? Their transactions will be left to the built-in rules on the next import.`)) {
                     run(() => forgetAllMerchants(), "Merchant memory cleared.");
                   }
                 }}
@@ -828,9 +829,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
           </div>
         )}
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          How each merchant was categorized last time. Known merchants are categorized without
-          asking the AI, so repeat imports are quicker and cheaper. Correcting a transaction's
-          category updates the entry here, which is what makes the correction stick.
+          What you've taught the app about each merchant. Merchants here are categorized this way
+          on every import, ahead of the built-in rules. Correcting a transaction's category updates
+          the entry here, which is what makes the correction stick.
         </p>
 
         {!memory || memory.count === 0 ? (
@@ -842,8 +843,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
           <>
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
               <strong>{memory.count}</strong> merchants remembered ·{" "}
-              <strong>{memory.totalMemoryHits}</strong> transactions categorized from memory instead
-              of the AI
+              <strong>{memory.totalMemoryHits}</strong> transactions categorized from memory
             </p>
             <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
               <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
@@ -874,7 +874,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
                         <button
                           onClick={() => run(() => forgetMerchant(m.id))}
                           className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                          title="Ask the AI about this merchant again next time"
+                          title="Let the built-in rules categorize this merchant again next time"
                         >
                           Forget
                         </button>
@@ -1053,8 +1053,8 @@ export function ManagePage({ onAccountsChanged }: Props) {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Everything below, as one JSON file — accounts, transactions, categories, budgets,
           merchant memory, recurring flags, savings goals, tags, net worth balances, saved
-          filter presets, and receipts — for keeping a backup or moving to a new instance. AI
-          forecasts aren't included; regenerating one is one click.
+          filter presets, and receipts — for keeping a backup or moving to a new instance.
+          Forecasts aren't included; regenerating one is one click.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">

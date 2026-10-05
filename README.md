@@ -15,10 +15,11 @@ there's no hosted database and no account to sign up for.
 |---|---|
 | **Import** | Reads CSV and Excel statements, working out the date, description, amount, and direction columns for you |
 | **Skip duplicates** | Re-importing an overlapping statement adds only what's new |
-| **Categorize** | Sorts transactions into categories using Claude, and remembers each merchant so it doesn't ask twice |
+| **Categorize** | Sorts transactions into categories with built-in rules, and remembers every merchant you correct |
 | **Multiple accounts** | Keep a current account and a credit card separate, or view everything together |
 | **Recurring charges** | Finds subscriptions and regular bills, with an annual cost and next expected date |
 | **Predictions** | Forecasts next month per category and suggests where to reduce spending |
+| **Private** | Everything runs on your machine — no external service, no API key, nothing sent anywhere |
 
 ---
 
@@ -40,25 +41,32 @@ description + amount + direction. The importer compares *counts* rather than rej
 matches — so re-uploading last month's statement adds nothing, but two identical coffees bought
 on the same day are both kept, because the file genuinely contains two and the database has none.
 
-**3. Categorize, cheaply.** Every new transaction needs a category. Rather than asking Claude
-about all of them:
+**3. Categorize, on this machine.** Every new transaction needs a category, and none of them
+leave the app to get one:
 
-- Merchants already in **merchant memory** are answered from the database, with no AI call.
-- Whatever is left is grouped by merchant, and Claude is asked **once per merchant** — not once
-  per transaction. Fifty coffees at the same shop is one question.
-- Each answer is written back to memory, so the next import is cheaper still.
+- Merchants already in **merchant memory** — ones you've categorized before — are answered from
+  the database first.
+- Everything else goes through the **built-in rules**: a few hundred keywords for common merchants
+  and bill types (`STARBUCKS`, `WHOLE FOODS`, `NETFLIX`, `SHELL`, `OVERDRAFT FEE`, `ZELLE`…), matched
+  as whole words. Money coming in is income unless it's a transfer.
+- Anything neither recognises is **left uncategorized** rather than guessed at — a blank you can
+  see beats a confident wrong answer you don't notice.
 
 **4. Learn from your corrections.** If you change a transaction's category by hand, that merchant
-is saved to memory as *your* correction. Your corrections outrank Claude's guesses and are never
-silently overwritten, so a fix you make once stays fixed.
+is saved to memory as *your* correction. Memory is checked before the rules on every import and is
+never silently overwritten, so a fix you make once stays fixed — and every merchant you set teaches
+the app something the rules didn't know.
 
 **5. Crunch the numbers.** Monthly totals per category are computed in SQL, plus two statistical
 baselines: a straight-line trend and a three-month moving average. Anything marked as income or
 a transfer is excluded, so moving money between your own accounts doesn't look like spending.
 
-**6. Predict and advise.** Those computed numbers are handed to Claude, which turns them into a
-next-month forecast per category and specific suggestions for cutting back. The maths is done in
-code and the model does the judgement — it isn't asked to do arithmetic.
+**6. Predict and advise.** From those numbers the app forecasts next month per category — the
+recent three-month average blended with the trend line, with the trend capped so one big month
+can't swing it — and marks each as rising, falling or steady, with a confidence based on how
+regular the history is. It then suggests where to cut back: avoidable fees, categories that have
+been climbing, and trims to discretionary spending like eating out and shopping. Every sentence
+quotes the figures it came from, and the same history always gives the same answer.
 
 **7. Spot what's recurring.** Separately, charges are grouped by merchant and checked for a steady
 rhythm *and* a steady amount. Both are required, which is what keeps your weekly grocery run out
@@ -71,17 +79,8 @@ of a list that's meant to show subscriptions.
 There are two ways: **one container**, or **two dev servers**. Use the container to just run the
 app; use the dev servers when changing it.
 
-### Your API key (optional, either way)
-
-```bash
-cd server-springboot
-cp .env.example .env
-```
-
-Open `.env` and set `ANTHROPIC_API_KEY=` to your [key](https://console.anthropic.com/).
-
-Without a key everything still runs — import, browsing, recurring charges, and any merchant
-already in memory all work offline. Only fresh AI categorization and predictions need it.
+Nothing needs configuring for either: there's no API key and no external service. Everything —
+categorization and forecasts included — runs on your machine.
 
 ### Option A: Docker — one thing to run
 
@@ -109,8 +108,8 @@ one port.
 
 The password isn't optional here. The image refuses to start without one, because an image
 exists to be run somewhere reachable and coming up open on a network is the mistake nobody
-notices. With compose you can put `APP_PASSWORD` in `server-springboot/.env` rather than typing
-it each time; that file also supplies your API key if it has one.
+notices. With compose you can put `APP_PASSWORD` in `server-springboot/.env` (copy
+`.env.example`) rather than typing it each time.
 
 Your database lives in a named volume either way, so it survives `docker compose down`, a
 `docker rm`, and any rebuild or image upgrade.
@@ -157,12 +156,12 @@ client/                     React + Vite frontend
 server-springboot/          Spring Boot backend
   src/main/java/.../
     controller/             HTTP endpoints
-    service/                Parsing, categorization, stats, recurring, Claude calls
+    service/                Parsing, categorization rules, stats, forecasts, recurring
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V22)
-  src/test/                 514 tests
+    db/migration/           Versioned schema migrations (V1–V23)
+  src/test/                 548 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -179,8 +178,8 @@ compose.yaml                Runs that image with a volume for the database
 
 **Backend** — Java 21 (built and shipped on 25), Spring Boot 4.1, Spring Security for the
 password gate, SQLite (`sqlite-jdbc`), Flyway for schema migrations,
-Apache Commons CSV and Apache POI for file parsing, and the official `anthropic-java` SDK
-(`claude-opus-5`, using structured JSON output so responses match a fixed schema).
+and Apache Commons CSV and Apache POI for file parsing. No external APIs: categorization and
+forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
 
 **Frontend** — React, TypeScript, Vite, Tailwind CSS, and Recharts for the charts.
 
@@ -197,7 +196,7 @@ Fifteen tables, all created automatically:
 | `categories` | The 16 built-in categories plus any you add |
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
 | `budgets` | A spending target per category, weekly, monthly, or quarterly |
-| `predictions_cache` | The most recent AI forecast, one row per account |
+| `predictions_cache` | The most recent forecast, one row per account |
 | `recurring_overrides` | A "cancel" reminder or "exclude" flag per merchant, set from the Recurring page |
 | `goals` | A savings target — name, amount, optional date, its own currency |
 | `goal_contributions` | Amounts logged by hand toward a goal; negative is a withdrawal |
@@ -209,7 +208,7 @@ Fifteen tables, all created automatically:
 | `net_worth_target` | A single target net worth to compare the forecast against, optionally by a date |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V23__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V24__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -229,13 +228,9 @@ none of them set.
 | `APP_AUTH_REQUIRED` | `false` | When true, the app refuses to start without a password. The Docker image sets this, so a container can never come up open |
 | `APP_AUTH_MAX_ATTEMPTS` | `5` | Consecutive wrong passwords from the same caller before it's locked out |
 | `APP_AUTH_LOCKOUT_MINUTES` | `15` | How long that lockout lasts |
-| `ANTHROPIC_API_KEY` | *(empty)* | Enables AI categorization and predictions |
-| `ANTHROPIC_MODEL` | `claude-opus-5` | Which model to ask |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
 | `PORT` | `4000` | Port the server listens on |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:[*]`, `http://127.0.0.1:[*]` | Comma-separated origin patterns allowed to call `/api`. Loopback on any port by default, because Vite moves off 5173 when it's taken. Blank turns CORS off, which is what the container does — packaged as one artifact the frontend is same-origin and needs no exception |
-
-`ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` can also come from `server-springboot/.env`.
 
 ---
 
@@ -288,7 +283,7 @@ All endpoints live under `/api`.
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
 | `POST` | `/auth/login` `/auth/logout` | Sign in and out |
-| `GET` | `/health` | Liveness, and whether an API key is configured |
+| `GET` | `/health` | Liveness |
 
 ---
 
@@ -372,14 +367,13 @@ that an archived account is one you're done tracking. Like everything else that 
 "all accounts" refuses to add balances across currencies — accounts that disagree get a
 per-currency breakdown instead, the same split the dashboard uses for spend.
 
-**The net worth forecast is a plain least-squares line, computed in code, not asked of Claude.**
+**The net worth forecast is a plain least-squares line.**
 Every logged point (date, total) feeds a linear regression — using the actual number of days
 between logged dates as the x-axis, not just point order, since balances are logged "whenever you
 check it" rather than on a steady schedule the way monthly spend totals already are. The fitted
 line is evaluated 1, 3, and 6 months from today, alongside the average of the most recently logged
-totals as a steadier, less reactive reference point. Needing no AI judgment (there's no "smooth
-out a one-off spike" call to make the way a spend forecast's rationale has to) means this works
-with no `ANTHROPIC_API_KEY` at all, unlike the dashboard's predictions. It's also never clamped at
+totals as a steadier, less reactive reference point. Unlike the spend forecast it isn't bounded
+against one-off spikes — a balance doesn't spike the way a month of spending does. It's also never clamped at
 zero the way a spend forecast is — heading toward more debt than assets is a real, meaningful
 answer for net worth, not a nonsensical one. Fewer than two logged dates means no line to fit, so
 the forecast is simply absent rather than guessed at, the same honesty a goal with no contributions
@@ -557,7 +551,7 @@ history to redo the math with, so past amounts keep whatever number they already
 The harder question is what "all accounts" means once two of them disagree. Summing €40 and $100
 into "$140" would be a wrong number wearing a confident font, so the dashboard doesn't: once the
 accounts in view use more than one currency, the combined total, chart and forecast are replaced
-by one section per currency instead, each totaled and charted on its own. Budgets and the AI
+by one section per currency instead, each totaled and charted on its own. Budgets and the
 forecast go further and simply ask you to pick one account — a budget target is one number that
 can't be compared against two currencies of spend at once, and a forecast has to be generated in
 a single currency in the first place. The transactions list and its CSV export are the exception:
@@ -604,7 +598,7 @@ transaction id, rather than a column on `transactions` — the transactions list
 never has to pull receipt bytes along with every row just to answer "does this one have a
 receipt," which is a lightweight check instead, the same shape the tag filter already uses.
 Uploading a second receipt for the same transaction replaces the first; there's only ever one.
-Unlike an AI forecast, a receipt is irreplaceable — a photo can't be regenerated — so it does
+Unlike a forecast, a receipt is irreplaceable — a photo can't be regenerated — so it does
 round-trip through the full backup and restore, unlike `predictions_cache`.
 
 **Savings goals track logged contributions, not a real balance.** Budgets, recurring detection,
@@ -707,7 +701,7 @@ sidesteps the entire problem a merge would have to solve: which account in the f
 as one already here, what happens when two merchant rules disagree, whether a transaction is a
 duplicate or a coincidence. A restore has none of those questions — it's either exactly the file,
 or (on a rejected version) untouched. The cost is that import is destructive by design, which is
-why it asks first and why AI forecasts are left out of the file entirely: they're a cache, not
+why it asks first and why forecasts are left out of the file entirely: they're a cache, not
 data, the same reasoning that let the old prediction cache row be dropped rather than migrated.
 
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
@@ -734,6 +728,17 @@ exactly what the file does. Either way it's all or nothing — one bad row (an u
 backwards range, a duplicate) rejects the whole file with every problem listed by line number, so
 memory is never left half-updated. Category names match regardless of case, and a category that
 doesn't exist here has to be created first rather than being made up on the fly.
+
+**Categorization and forecasts are rules and arithmetic, not a model.** Earlier versions sent
+unknown merchants and the monthly figures to Claude. That needed an API key, sent transaction
+descriptions to an outside service, cost money per import, and could answer differently twice. Now
+the built-in keyword rules (`RuleBasedCategorizer`) and the forecast (`ForecastService`) run in the
+app, give the same answer for the same input, and work offline. The trade-off is that the rules
+only know common merchants: an unfamiliar one is left uncategorized rather than guessed at, and the
+fix is the one that always mattered most — categorize it once and merchant memory handles it from
+then on. Categories set by the rules are labelled `rule`, ones from memory `cache`; transactions
+the model categorized before the switch keep their `ai` label. Rule matches are not copied into
+memory, so improving a rule improves every later import instead of being frozen by an old copy.
 
 **One merchant can map to two categories, split by amount.** Descriptions that differ already
 sort themselves out — `AMAZON PRIME` and `AMAZON.COM` normalise to separate keys and always
@@ -774,10 +779,10 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (514).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (548).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
-application with no API key, which is how CI runs it, and catches broken wiring or a failed
+application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
 migration that a compile-only check would miss.
 
 **CI.** Every push and pull request runs three jobs in parallel on GitHub Actions: the client, the
@@ -818,6 +823,8 @@ Roughly in order:
 8. **Branch protection on `main`**, so the CI in step 3 actually enforces something.
 9. **One deployable artifact** — the frontend packaged into the jar and a Docker image, with CI
    starting the container and probing it rather than trusting a successful build.
+10. **Off the API** — categorization and forecasts moved from Claude to built-in rules and
+    statistics, so the app needs no key and sends nothing anywhere.
 
 ---
 
@@ -847,6 +854,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~In-app categorization and forecasts~~ — categorization and the spending forecast run on built-in
+  rules and statistics instead of the Claude API: no API key, no external calls, same answer every
+  time; unfamiliar merchants are left for you to categorize once
 - ~~Year in review~~ — a Year tab summarises any calendar year: income, spend, savings rate, a
   month-by-month chart, top categories and merchants, the biggest month, and what changed per
   category against the year before

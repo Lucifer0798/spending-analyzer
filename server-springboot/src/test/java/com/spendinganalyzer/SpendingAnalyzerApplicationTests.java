@@ -14,7 +14,7 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Smoke test: boots the full application context with no ANTHROPIC_API_KEY present,
+ * Smoke test: boots the full application context with no secrets configured,
  * which is how CI runs. Catches broken bean wiring, failed migrations, and datasource
  * misconfiguration — none of which a compile-only build would surface.
  */

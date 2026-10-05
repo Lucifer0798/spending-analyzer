@@ -76,8 +76,9 @@ public class MerchantCategoryRepository {
      * {@link #saveRule}.
      *
      * <p>A 'user' correction always wins: it overwrites anything already stored for that band.
-     * An 'ai' answer only fills a gap, so a category the user fixed by hand is never quietly
-     * reverted by a later model run.
+     * An 'ai' entry only fills a gap, so a category the user fixed by hand is never overwritten
+     * by one. (Nothing writes 'ai' any more -- categorization is the built-in rules, which don't
+     * touch memory -- but older memory and imported files still carry it.)
      */
     public void remember(String merchantKey, String category, String source) {
         saveRule(merchantKey, category, 0, MerchantCategory.UNBOUNDED, source);
@@ -139,7 +140,7 @@ public class MerchantCategoryRepository {
     }
 
     /**
-     * Counts how often memory answered instead of the model, for the management view.
+     * Counts how often memory answered, for the management view.
      *
      * <p>Keyed by row id rather than merchant: a merchant with several bands would otherwise
      * have every one of its rules credited for a hit only one of them answered.

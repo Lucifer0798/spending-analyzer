@@ -14,7 +14,7 @@ public record MerchantCategory(
         @JsonProperty("min_amount") double minAmount,
         /** Exclusive upper bound, so adjacent bands meet without overlapping. */
         @JsonProperty("max_amount") double maxAmount,
-        /** 'user' entries are corrections and outrank 'ai' guesses. */
+        /** 'user' entries are corrections and outrank 'ai' ones -- written by the language model this app used before its built-in rules, and still found in older memory and imports. */
         String source,
         @JsonProperty("hit_count") int hitCount,
         @JsonProperty("created_at") String createdAt,
@@ -45,7 +45,7 @@ public record MerchantCategory(
      * <p>Narrowest band first: a rule written for £0–15 is a more specific statement about this
      * transaction than the merchant's catch-all, so it should win. Source breaks ties, keeping
      * the existing promise that a correction outranks a guess. In practice only the user creates
-     * banded rules — the model only ever writes catch-alls — so the two rarely compete.
+     * banded rules — 'ai' entries were only ever catch-alls — so the two rarely compete.
      */
     public static Optional<MerchantCategory> bestMatch(List<MerchantCategory> rules, double amount) {
         return rules.stream()

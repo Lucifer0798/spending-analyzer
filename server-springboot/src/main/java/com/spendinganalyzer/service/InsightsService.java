@@ -17,18 +17,18 @@ import java.util.List;
 public class InsightsService {
 
     private final StatsService statsService;
-    private final AnthropicService anthropicService;
+    private final ForecastService forecastService;
     private final PredictionsCacheRepository cacheRepository;
     private final ObjectMapper objectMapper;
 
     public InsightsService(
             StatsService statsService,
-            AnthropicService anthropicService,
+            ForecastService forecastService,
             PredictionsCacheRepository cacheRepository,
             ObjectMapper objectMapper
     ) {
         this.statsService = statsService;
-        this.anthropicService = anthropicService;
+        this.forecastService = forecastService;
         this.cacheRepository = cacheRepository;
         this.objectMapper = objectMapper;
     }
@@ -58,7 +58,7 @@ public class InsightsService {
             payload = new PredictionsPayload("Not enough categorized spending data yet.", List.of(), List.of());
         } else {
             String currency = statsService.resolveCurrency(accountId);
-            payload = anthropicService.generatePredictions(series, monthlyTotals, currency);
+            payload = forecastService.generate(series, monthlyTotals, currency);
         }
 
         String generatedAt = Instant.now().toString();

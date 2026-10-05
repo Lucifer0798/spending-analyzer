@@ -8,45 +8,40 @@ import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
- * Assigns categories to uncategorized transactions, consulting merchant memory before
- * the model.
+ * Assigns categories to uncategorized transactions, entirely in-process: merchant memory first,
+ * then {@link RuleBasedCategorizer}'s keyword rules. Nothing leaves the machine.
  *
- * <p>Two things keep the model's workload down. Merchants already seen are answered from
- * memory without a request at all. Of what remains, the model is asked once per distinct
- * merchant rather than once per transaction — fifty coffees at the same shop are one
- * question, not fifty. Both rest on the same assumption the cache itself makes: a
- * merchant maps to a category.
+ * <p>Memory comes first because it's what the user has taught -- a correction always outranks a
+ * built-in rule. Rule matches are <em>not</em> written back into memory: rules are re-evaluated on
+ * every run, so improving a rule improves every later import, whereas a remembered copy would
+ * freeze today's answer. Memory stays exactly what its name says: what the user taught.
+ *
+ * <p>Whatever neither recognises stays uncategorized for the user to set by hand, which is what
+ * teaches memory -- see {@link RuleBasedCategorizer} for why a blank beats a guess.
  */
 @Service
 public class CategorizationService {
 
-    /** Distinct merchants per request to the model. */
-    private static final int BATCH_SIZE = 60;
-
     private final TransactionRepository transactionRepository;
     private final CategoryRepository categoryRepository;
     private final MerchantCategoryRepository merchantCategoryRepository;
-    private final AnthropicService anthropicService;
 
     public CategorizationService(
             TransactionRepository transactionRepository,
             CategoryRepository categoryRepository,
-            MerchantCategoryRepository merchantCategoryRepository,
-            AnthropicService anthropicService
+            MerchantCategoryRepository merchantCategoryRepository
     ) {
         this.transactionRepository = transactionRepository;
         this.categoryRepository = categoryRepository;
         this.merchantCategoryRepository = merchantCategoryRepository;
-        this.anthropicService = anthropicService;
     }
 
     public CategorizeResponse categorizeAll() {
@@ -59,16 +54,15 @@ public class CategorizationService {
         Map<String, List<MerchantCategory>> memory = merchantCategoryRepository.loadAll();
 
         int fromMemory = 0;
+        int fromRules = 0;
         // Keyed by rule id, not merchant: a merchant with several bands should only credit the
         // band that actually answered.
         Map<Long, Integer> memoryHits = new HashMap<>();
-        // Preserves encounter order so the first transaction of each merchant represents it.
-        Map<String, List<Transaction>> unknownByMerchant = new LinkedHashMap<>();
 
         for (Transaction t : uncategorized) {
             String merchantKey = MerchantNormalizer.normalize(t.description());
 
-            // Which rule applies depends on the amount, so this is resolved per transaction
+            // Which memory rule applies depends on the amount, so this is resolved per transaction
             // rather than per merchant.
             MerchantCategory remembered = MerchantCategory
                     .bestMatch(memory.getOrDefault(merchantKey, List.of()), t.amount())
@@ -80,46 +74,17 @@ public class CategorizationService {
                 transactionRepository.updateCategory(t.id(), remembered.category(), "cache");
                 memoryHits.merge(remembered.id(), 1, Integer::sum);
                 fromMemory++;
-            } else {
-                unknownByMerchant.computeIfAbsent(merchantKey, k -> new ArrayList<>()).add(t);
+                continue;
+            }
+
+            Optional<String> ruled = RuleBasedCategorizer.categorize(t.description(), t.type(), validCategories);
+            if (ruled.isPresent()) {
+                transactionRepository.updateCategory(t.id(), ruled.get(), "rule");
+                fromRules++;
             }
         }
         merchantCategoryRepository.recordHits(memoryHits);
 
-        int fromModel = 0;
-        List<String> merchantKeys = new ArrayList<>(unknownByMerchant.keySet());
-
-        for (int i = 0; i < merchantKeys.size(); i += BATCH_SIZE) {
-            List<String> keyBatch = merchantKeys.subList(i, Math.min(i + BATCH_SIZE, merchantKeys.size()));
-
-            // One representative transaction per merchant carries the description the model
-            // categorises on; the answer is then applied to every transaction sharing it.
-            List<Transaction> representatives = keyBatch.stream()
-                    .map(key -> unknownByMerchant.get(key).get(0))
-                    .toList();
-
-            AnthropicService.CategorizationResult result = anthropicService.categorizeBatch(representatives);
-
-            Map<Long, String> answerByTransactionId = new HashMap<>();
-            for (AnthropicService.CategorizationEntry entry : result.categorizations()) {
-                if (validCategories.contains(entry.category())) {
-                    answerByTransactionId.put(entry.id(), entry.category());
-                }
-            }
-
-            for (String merchantKey : keyBatch) {
-                List<Transaction> group = unknownByMerchant.get(merchantKey);
-                String category = answerByTransactionId.get(group.get(0).id());
-                if (category == null) continue;
-
-                for (Transaction t : group) {
-                    transactionRepository.updateCategory(t.id(), category, "ai");
-                    fromModel++;
-                }
-                merchantCategoryRepository.remember(merchantKey, category, MerchantCategory.SOURCE_AI);
-            }
-        }
-
-        return CategorizeResponse.of(fromMemory, fromModel, merchantKeys.size(), uncategorized.size());
+        return CategorizeResponse.of(fromMemory, fromRules, uncategorized.size());
     }
 }

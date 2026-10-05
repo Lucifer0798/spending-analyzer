@@ -220,7 +220,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
         try {
           setCategorization(await runCategorization());
         } catch (categorizeError) {
-          // The import succeeded; surface the AI failure without discarding it.
+          // The import succeeded; surface the categorization failure without discarding it.
           setError(
             categorizeError instanceof Error
               ? `Imported, but categorization failed: ${categorizeError.message}`
@@ -264,7 +264,8 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Upload your spending</h1>
       <p className="mt-2 text-slate-600 dark:text-slate-400">
         Upload a bank or credit card statement (CSV or Excel). We'll parse it, categorize each
-        transaction with AI, and build spending predictions and savings recommendations.
+        transaction, and build spending forecasts and savings suggestions — all on this machine,
+        nothing is sent anywhere.
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -344,7 +345,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
       {busy && (
         <div className="mt-6 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          {stage === "uploading" ? "Parsing and storing transactions…" : "Categorizing transactions with Claude…"}
+          {stage === "uploading" ? "Parsing and storing transactions…" : "Categorizing transactions…"}
         </div>
       )}
 
@@ -374,29 +375,27 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
               <>
                 {categorization.fromMemory > 0 && (
                   <li>
-                    Categorized from merchant memory: <strong>{categorization.fromMemory}</strong>{" "}
-                    <span className="opacity-75">(no AI call needed)</span>
+                    Categorized from merchant memory: <strong>{categorization.fromMemory}</strong>
                   </li>
                 )}
-                {categorization.fromModel > 0 && (
+                {categorization.fromRules > 0 && (
                   <li>
-                    Categorized by AI: <strong>{categorization.fromModel}</strong>
-                    {categorization.merchantsQueried > 0 && (
-                      <span className="opacity-75">
-                        {" "}
-                        — {categorization.merchantsQueried}{" "}
-                        {categorization.merchantsQueried === 1 ? "merchant" : "merchants"} asked about
-                      </span>
-                    )}
+                    Categorized by the built-in rules: <strong>{categorization.fromRules}</strong>
+                  </li>
+                )}
+                {categorization.unmatched > 0 && (
+                  <li>
+                    Left for you to categorize: <strong>{categorization.unmatched}</strong>
                   </li>
                 )}
               </>
             )}
           </ul>
 
-          {categorization && categorization.fromMemory > 0 && categorization.fromModel === 0 && (
+          {categorization && categorization.unmatched > 0 && (
             <p className="mt-2">
-              Every merchant in this file was already known, so this import cost nothing in AI usage.
+              Set these on the Transactions page — the app remembers each merchant you categorize,
+              so the next statement from the same places is categorized automatically.
             </p>
           )}
 
