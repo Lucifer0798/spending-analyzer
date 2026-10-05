@@ -16,7 +16,6 @@ how to work on it.
 | Node | 22 |
 | Shell | Git Bash and PowerShell both available |
 | `gh` CLI | Installed at `C:\Program Files\GitHub CLI`, **not on PATH**. Prefix commands with `export PATH="$PATH:/c/Program Files/GitHub CLI"` |
-| API key | **Not configured.** AI categorization and predictions return 401; everything else works, including merchant memory |
 
 | Docker | Desktop 4.87 / engine 29.7.2, WSL2 backend. Must be **running** — start `Docker Desktop.exe` first, the daemon does not start on demand |
 
@@ -115,8 +114,49 @@ zero-day gap that drags the median interval to zero and hides the subscription e
 spans Shopping and Subscriptions — the first answer sticks until corrected. Accepted trade; the
 correction path and per-entry *forget* are the escape hatches.
 
-**`user` memory entries outrank `ai` ones.** A model run fills gaps but never overwrites a
-category fixed by hand, otherwise the same correction is needed on every import.
+**`user` memory entries outrank `ai` ones.** `ai` entries were written by the model this app
+used before its built-in rules; nothing writes them now, but older memory and imported files still
+carry them, and they still never overwrite a category fixed by hand.
+
+**Categorization and forecasting are in-process — no model, no API key, no network.** The
+Anthropic SDK, `AnthropicService`, `AnthropicConfig`, `JsonSchemaBuilder` and `DotenvLoader` (which
+only ever existed to read the key from `.env`) are gone; `/health` no longer reports `hasApiKey`.
+`CategorizationService` is memory first, then `RuleBasedCategorizer` — static keyword lists, whole-
+word regexes (`(?<![A-Z0-9])` + quoted keyword + `(?![A-Z0-9])`, so `BP` can't fire in `BPAY`),
+first match wins. Order is the conflict policy: on a debit, **fees** before transfers (`TRANSFER
+FEE` is spent), then **transfers**, then subscriptions → dining (`UBER EATS`) → transport (`UBER`)
+→ groceries → travel → utilities → rent → healthcare → entertainment → personal care → education
+→ shopping last (`AMAZON PRIME` is a subscription, plain `AMAZON` shopping). A credit that isn't
+a transfer is `Income`. An unmatched debit stays **null**, never "Other" — the user categorizing
+it is what teaches memory. A rule naming a built-in that's been renamed or deleted is skipped.
+Rule hits are written with `category_source = 'rule'` (V23 widened the CHECK; see below) and are
+**not** written to merchant memory, so memory stays "what the user taught" and a rule fix reaches
+every later import. `CategorizeResponse` is now `fromMemory / fromRules / unmatched` (was
+`fromModel / merchantsQueried`).
+
+> `ForecastService` keeps the old `PredictionsPayload` shape so the cache, CSV exports and
+> Dashboard needed no change. Per category, over the newest `WINDOW` (6) months *with any spend*
+> (a whole-month gap is an import gap, skipped; a month the category alone missed is a real 0):
+> forecast = mean(last 3) when there are < 4 months, else the average of mean(last 3) and the
+> least-squares point for next month **clamped to [0.5×, 1.5×] mean(last 3)** — the old prompt's
+> "smooth out one-off spikes", made explicit. Trend = slope / window mean beyond ±5%; confidence =
+> coefficient of variation (≤0.25 with 6 months → high, ≤0.5 → medium, else low; < 3 months is
+> always low). Categories with no spend in the window are dropped. Suggestions (max 4, one per
+> category, biggest saving first): fees in full; a category whose last-3 average beats its earlier
+> average by >15% and ≥ $10 → back to the earlier level; 15% trims of discretionary categories
+> (Dining, Shopping, Entertainment, Subscriptions, Personal Care, Travel). Rent and fees are never
+> "trimmed". Known weakness: a category alternating high/low months can read as mildly rising if
+> the last three happen to hold more of the highs. All money in text uses `NumberFormat` for the
+> account currency with no decimals.
+
+> **V23 rebuilt `transactions`** (SQLite can't alter a CHECK) to allow `'rule'`, copying every
+> column explicitly — including `split_share`/`split_note`, added by ALTER since V5's rebuild — and
+> recreating all five indexes. It also carries the `sqlite_sequence` high-water mark across: copying
+> explicit ids only advances the new table's sequence to the highest id *still present*, so after
+> deleting the newest transactions their ids would be reissued — and anything still keyed to an old
+> id would attach to the wrong row. The INSERT-then-UPDATE on `sqlite_sequence` covers both a
+> populated copy and an empty one. Verified against in-memory copies (rows / newest deleted / all
+> deleted) before shipping.
 
 **Categories carry `is_income` / `is_transfer` flags** rather than the code matching the literal
 names. That is what lets a user-created category be excluded from spend totals.
@@ -1110,11 +1150,8 @@ regardless of how irregularly balances happen to have been logged.
 > dollar is already degenerate enough that a $1 reference doesn't change the answer for any
 > realistic net worth figure.
 
-> No AI is involved, deliberately, unlike the dashboard's spend predictions. A spend forecast
-> needs judgment a plain regression doesn't have ("smooth out a one-off spike," per
-> `AnthropicService`'s own prompt) — projecting a straight line through logged balances doesn't,
-> so there was nothing for Claude to add here. The practical payoff: the Net Worth page's forecast
-> works with no `ANTHROPIC_API_KEY` configured at all, unlike `/predictions`.
+> Unlike the spend forecast, this line isn't bounded against spikes: a logged balance doesn't
+> spike the way one month of spending does, so the raw regression is the honest projection.
 
 **`net_worth_target` is a singleton table (`CHECK (id = 1)`), not a row per something else --
 there's only ever one target, so the schema says so directly rather than the application layer
@@ -1256,7 +1293,7 @@ touched; a BOM is a text-encoding artifact and never appears in an `.xlsx` cell.
 - **Pure logic** → plain unit tests, no Spring. Fast, and most of the suite.
 - **Database behaviour** → `@SpringBootTest` + `@ActiveProfiles("test")` + `@Transactional`, so
   inserts roll back and the shared test database is left as found.
-- The **smoke test boots the app with no API key**, matching CI. This is what catches broken
+- The **smoke test boots the app with no configuration at all**, matching CI. This is what catches broken
   wiring and failed migrations. It has earned its place twice — see below.
 
 > ⚠️ Test config must be `application-test.properties` (**profile-specific**). A plain

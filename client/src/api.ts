@@ -742,7 +742,7 @@ export function exportUrl(
 /**
  * A download URL rather than a fetch, for the same reason exportUrl is — the browser keeps the
  * filename the server sets. Covers accounts, categories, transactions, merchant memory, budgets,
- * recurring overrides, savings goals, and tags; AI forecasts aren't included, since regenerating
+ * recurring overrides, savings goals, and tags; forecasts aren't included, since regenerating
  * one is one click.
  */
 export function backupUrl() {

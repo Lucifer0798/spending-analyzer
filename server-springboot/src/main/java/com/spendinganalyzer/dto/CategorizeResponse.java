@@ -7,16 +7,16 @@ public record CategorizeResponse(
         int categorized,
         Integer total,
         String message,
-        /** Categorised from merchant memory without asking the model. */
+        /** Categorised from merchant memory -- what the user has taught. */
         int fromMemory,
-        /** Categorised by the model. */
-        int fromModel,
-        /** Distinct merchants actually sent to the model, which is what drives cost. */
-        int merchantsQueried
+        /** Categorised by the built-in keyword rules. */
+        int fromRules,
+        /** Left uncategorized: neither memory nor any rule recognised them. Set these by hand. */
+        int unmatched
 ) {
-
-    public static CategorizeResponse of(int fromMemory, int fromModel, int merchantsQueried, int total) {
-        return new CategorizeResponse(fromMemory + fromModel, total, null, fromMemory, fromModel, merchantsQueried);
+    public static CategorizeResponse of(int fromMemory, int fromRules, int total) {
+        return new CategorizeResponse(fromMemory + fromRules, total, null, fromMemory, fromRules,
+                total - fromMemory - fromRules);
     }
 
     public static CategorizeResponse noneFound() {

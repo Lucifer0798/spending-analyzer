@@ -257,7 +257,7 @@ export function Dashboard({ accountId, range, onOpenMerchant }: Props) {
         <h1 className="mb-2 text-xl font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
         <p className="mb-6 rounded-lg bg-indigo-50 p-4 text-sm text-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200">
           These accounts use different currencies, so there's no single combined total — here's
-          each currency's spending on its own. Budgets and AI forecasts need a single account
+          each currency's spending on its own. Budgets and forecasts need a single account
           selected above.
         </p>
 
@@ -430,7 +430,7 @@ export function Dashboard({ accountId, range, onOpenMerchant }: Props) {
 
       {!predictions && (
         <p className="mt-8 text-center text-sm text-slate-500">
-          Click "Generate predictions" to get AI-powered spending forecasts and savings recommendations.
+          Click "Generate predictions" for a spending forecast and savings suggestions, worked out from your history.
         </p>
       )}
     </div>

@@ -29,16 +29,16 @@ import static org.mockito.Mockito.*;
 class InsightsServiceTest {
 
     private StatsService stats;
-    private AnthropicService anthropic;
+    private ForecastService forecast;
     private PredictionsCacheRepository cache;
     private InsightsService service;
 
     @BeforeEach
     void setUp() {
         stats = mock(StatsService.class);
-        anthropic = mock(AnthropicService.class);
+        forecast = mock(ForecastService.class);
         cache = mock(PredictionsCacheRepository.class);
-        service = new InsightsService(stats, anthropic, cache, new ObjectMapper());
+        service = new InsightsService(stats, forecast, cache, new ObjectMapper());
     }
 
     private static CategoryMonthlySeries series(String category) {
@@ -92,7 +92,7 @@ class InsightsServiceTest {
     void refreshStoresUnderTheAccountItWasGeneratedFor() {
         when(stats.computeMonthlyCategorySeries(eq(3L), any())).thenReturn(List.of(series("Groceries")));
         when(stats.computeMonthlyTotals(eq(3L), any())).thenReturn(List.of(new MonthlyTotal("2026-06", 100.0)));
-        when(anthropic.generatePredictions(any(), any(), any()))
+        when(forecast.generate(any(), any(), any()))
                 .thenReturn(new PredictionsPayload("summary", List.of(), List.of()));
 
         service.refreshPredictions(3L);
@@ -107,7 +107,7 @@ class InsightsServiceTest {
     void refreshForAllAccountsStoresNull() {
         when(stats.computeMonthlyCategorySeries(isNull(), any())).thenReturn(List.of(series("Groceries")));
         when(stats.computeMonthlyTotals(isNull(), any())).thenReturn(List.of(new MonthlyTotal("2026-06", 100.0)));
-        when(anthropic.generatePredictions(any(), any(), any()))
+        when(forecast.generate(any(), any(), any()))
                 .thenReturn(new PredictionsPayload("summary", List.of(), List.of()));
 
         service.refreshPredictions(null);
@@ -120,7 +120,7 @@ class InsightsServiceTest {
     void alwaysUsesFullHistory() {
         when(stats.computeMonthlyCategorySeries(eq(5L), eq(DateRange.ALL))).thenReturn(List.of(series("Groceries")));
         when(stats.computeMonthlyTotals(eq(5L), eq(DateRange.ALL))).thenReturn(List.of());
-        when(anthropic.generatePredictions(any(), any(), any()))
+        when(forecast.generate(any(), any(), any()))
                 .thenReturn(new PredictionsPayload("summary", List.of(), List.of()));
 
         service.refreshPredictions(5L);
@@ -130,14 +130,14 @@ class InsightsServiceTest {
     }
 
     @Test
-    @DisplayName("an account with no categorized spending skips the model entirely")
-    void emptySeriesSkipsTheModel() {
+    @DisplayName("an account with no categorized spending has nothing to forecast")
+    void emptySeriesSkipsTheForecast() {
         when(stats.computeMonthlyCategorySeries(any(), any())).thenReturn(List.of());
         when(stats.computeMonthlyTotals(any(), any())).thenReturn(List.of());
 
         PredictionsResponse response = service.refreshPredictions(2L);
 
-        verify(anthropic, never()).generatePredictions(any(), any(), any());
+        verify(forecast, never()).generate(any(), any(), any());
         assertThat(response.predictions().predictions()).isEmpty();
         verify(cache).upsert(eq(2L), any(), any());
     }

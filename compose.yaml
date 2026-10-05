@@ -5,8 +5,7 @@ services:
     ports:
       - "4000:4000"
     env_file:
-      # Reuses the same .env as a local run. Optional — without a key everything except AI
-      # categorization and predictions still works.
+      # Optional: where APP_PASSWORD can live instead of being exported before `docker compose up`.
       - path: server-springboot/.env
         required: false
     environment:
@@ -15,12 +14,10 @@ services:
       # The password guarding this instance. The image sets APP_AUTH_REQUIRED=true, so if this
       # is unset the container stops with an explanatory message instead of starting open.
       # Put APP_PASSWORD in server-springboot/.env, or export it before `docker compose up`.
-      - APP_PASSWORD
       # Listed without a value so the host's variable is passed through when set and left
-      # alone when not — writing `ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}` would override
-      # whatever .env supplied with an empty string.
-      - ANTHROPIC_API_KEY
-      - ANTHROPIC_MODEL
+      # alone when not — writing `APP_PASSWORD: ${APP_PASSWORD:-}` would override whatever
+      # .env supplied with an empty string.
+      - APP_PASSWORD
     volumes:
       - spending-data:/data
     restart: unless-stopped
