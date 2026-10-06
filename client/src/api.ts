@@ -34,6 +34,7 @@ import type {
   TopMerchantsResponse,
   Transaction,
   TransactionWithTags,
+  UncategorizedMerchant,
   UploadResult,
   YearReview,
 } from "./types";
@@ -284,6 +285,13 @@ export function receiptUrl(id: number) {
 
 export function deleteTransactionReceipt(id: number) {
   return request<{ ok: true }>(`/transactions/${id}/receipt`, { method: "DELETE" });
+}
+
+/** Uncategorized transactions grouped by merchant, most transactions first -- the review queue. */
+export function fetchUncategorizedMerchants(accountId: number | null) {
+  return request<{ merchants: UncategorizedMerchant[]; transactions: number }>(
+    `/transactions/uncategorized-merchants${qs({ accountId })}`
+  );
 }
 
 /** Categorizes several transactions at once, teaching merchant memory for each one's own description. */

@@ -111,6 +111,24 @@ export interface MerchantsResponse {
   totalMemoryHits: number;
 }
 
+/** Every uncategorized transaction at one merchant, in one currency -- one row of the review queue. */
+export interface UncategorizedMerchant {
+  /** The normalized merchant key -- what merchant memory learns. */
+  merchant: string;
+  currency: string;
+  count: number;
+  /** Unsigned sum; debits/credits say which way the money went. */
+  total: number;
+  debits: number;
+  credits: number;
+  first_date: string;
+  last_date: string;
+  /** Up to three distinct raw descriptions. */
+  examples: string[];
+  /** Send these to bulkCategorize to answer the whole group. */
+  transaction_ids: number[];
+}
+
 export type MerchantImportMode = "merge" | "replace";
 
 export interface MerchantImportResult {

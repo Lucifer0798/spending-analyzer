@@ -50,7 +50,9 @@ leave the app to get one:
   and bill types (`STARBUCKS`, `WHOLE FOODS`, `NETFLIX`, `SHELL`, `OVERDRAFT FEE`, `ZELLE`…), matched
   as whole words. Money coming in is income unless it's a transfer.
 - Anything neither recognises is **left uncategorized** rather than guessed at — a blank you can
-  see beats a confident wrong answer you don't notice.
+  see beats a confident wrong answer you don't notice. The upload then offers **Review
+  uncategorized**, which groups those by merchant so one choice covers every transaction from the
+  same place (and teaches merchant memory, so it's automatic from then on).
 
 **4. Learn from your corrections.** If you change a transaction's category by hand, that merchant
 is saved to memory as *your* correction. Memory is checked before the rules on every import and is
@@ -167,7 +169,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V23)
-  src/test/                 548 tests
+  src/test/                 552 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -255,6 +257,7 @@ All endpoints live under `/api`.
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
 | `GET` `POST` `DELETE` | `/transactions/{id}/receipt` | View, attach, or remove a transaction's receipt image or PDF |
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
+| `GET` | `/transactions/uncategorized-merchants` | Uncategorized transactions grouped by merchant (and currency), most first, with the ids to answer each group via `bulk-category` |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
@@ -788,7 +791,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (548).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (552).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -865,6 +868,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Uncategorized review queue~~ — whatever categorization couldn't place is grouped by merchant on
+  the Transactions page (and offered straight after an upload); one choice categorizes the whole
+  group and is remembered for every later import
 - ~~Free deployment~~ — a step-by-step Oracle Cloud Always Free setup with automatic HTTPS, an
   arm64 image alongside x86, a proxy-aware login lockout, and nightly backups to your PC
 - ~~In-app categorization and forecasts~~ — categorization and the spending forecast run on built-in
