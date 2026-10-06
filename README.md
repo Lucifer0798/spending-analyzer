@@ -50,7 +50,9 @@ leave the app to get one:
   and bill types (`STARBUCKS`, `WHOLE FOODS`, `NETFLIX`, `SHELL`, `OVERDRAFT FEE`, `ZELLE`…), matched
   as whole words. Money coming in is income unless it's a transfer.
 - Anything neither recognises is **left uncategorized** rather than guessed at — a blank you can
-  see beats a confident wrong answer you don't notice.
+  see beats a confident wrong answer you don't notice. The upload then offers **Review
+  uncategorized**, which groups those by merchant so one choice covers every transaction from the
+  same place (and teaches merchant memory, so it's automatic from then on).
 
 **4. Learn from your corrections.** If you change a transaction's category by hand, that merchant
 is saved to memory as *your* correction. Memory is checked before the rules on every import and is
@@ -92,9 +94,15 @@ docker run -p 4000:4000 -v spending-data:/data \
   ghcr.io/lucifer0798/spending-analyzer:latest
 ```
 
-Every merge to `main` publishes an image, tagged `latest` and with the commit it was built from.
-Only images that passed the smoke test are pushed, so `latest` is always one that booted and
-served. Pin the commit tag instead of `latest` if you want to control when you move.
+Every merge to `main` publishes an image, tagged `latest` and with the commit it was built from,
+for both `linux/amd64` and `linux/arm64` — so it runs on ordinary servers and on Arm machines
+like Oracle's free Ampere VMs, Apple-silicon Macs or a Raspberry Pi. Only images that passed the
+smoke test on their own architecture are pushed, so `latest` is always one that booted and served.
+Pin the commit tag instead of `latest` if you want to control when you move.
+
+**Hosting it for free:** [`deploy/oracle/`](deploy/oracle/README.md) is a complete, step-by-step
+setup for an Oracle Cloud Always Free VM — HTTPS via Caddy, and a nightly backup pulled down to
+your Windows PC by [`deploy/backup/`](deploy/backup/Backup-SpendingAnalyzer.ps1).
 
 To build it yourself from a checkout instead:
 
@@ -161,13 +169,15 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V23)
-  src/test/                 548 tests
+  src/test/                 552 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
 compose.yaml                Runs that image with a volume for the database
+deploy/oracle/              Free hosting on an Oracle Always Free VM, with Caddy for HTTPS
+deploy/backup/              Nightly backup of a deployed instance to a Windows PC
 
-.github/workflows/ci.yml    Client, server and Docker image; publishes the image on main
+.github/workflows/ci.yml    Client, server, Docker image (amd64 + arm64); publishes on main
 .github/workflows/codeql.yml  CodeQL security scanning
 .github/dependabot.yml      Weekly dependency updates
 ```
@@ -228,6 +238,7 @@ none of them set.
 | `APP_AUTH_REQUIRED` | `false` | When true, the app refuses to start without a password. The Docker image sets this, so a container can never come up open |
 | `APP_AUTH_MAX_ATTEMPTS` | `5` | Consecutive wrong passwords from the same caller before it's locked out |
 | `APP_AUTH_LOCKOUT_MINUTES` | `15` | How long that lockout lasts |
+| `FORWARD_HEADERS_STRATEGY` | `none` | `native` trusts `X-Forwarded-For`/`-Proto` from a private-range proxy, so the login lockout sees real client addresses behind one. Only set it where nothing but the proxy can reach the app — `deploy/oracle` does |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
 | `PORT` | `4000` | Port the server listens on |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:[*]`, `http://127.0.0.1:[*]` | Comma-separated origin patterns allowed to call `/api`. Loopback on any port by default, because Vite moves off 5173 when it's taken. Blank turns CORS off, which is what the container does — packaged as one artifact the frontend is same-origin and needs no exception |
@@ -246,6 +257,7 @@ All endpoints live under `/api`.
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
 | `GET` `POST` `DELETE` | `/transactions/{id}/receipt` | View, attach, or remove a transaction's receipt image or PDF |
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
+| `GET` | `/transactions/uncategorized-merchants` | Uncategorized transactions grouped by merchant (and currency), most first, with the ids to answer each group via `bulk-category` |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
@@ -779,17 +791,19 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (548).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (552).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
 migration that a compile-only check would miss.
 
-**CI.** Every push and pull request runs three jobs in parallel on GitHub Actions: the client, the
-server, and the Docker image. All three are required to merge. The image job doesn't just build —
-it starts the container and checks that the packaged frontend responds, that an unauthenticated
-caller is refused, and that it exits rather than starting without a password. On `main` that same
-job then publishes the image it just tested, so nothing reaches the registry unproven.
+**CI.** Every push and pull request runs on GitHub Actions: the client, the server, and the Docker
+image — built natively twice, on an x86 runner and on GitHub's Arm runner. Client, server and the
+x86 image are required to merge. Each image job doesn't just build — it starts the container and
+checks that the packaged frontend responds, that an unauthenticated caller is refused, and that it
+exits rather than starting without a password (one shared action, so both architectures face the
+same checks). On `main` each job pushes the image it just tested, and a final job joins the two into
+one multi-arch `latest`, so nothing reaches the registry unproven.
 
 **Security scanning.** CodeQL analyses the Java and the TypeScript on every change, and again
 weekly — new queries ship over time, so a scheduled run finds problems in code nobody has touched.
@@ -854,6 +868,11 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Uncategorized review queue~~ — whatever categorization couldn't place is grouped by merchant on
+  the Transactions page (and offered straight after an upload); one choice categorizes the whole
+  group and is remembered for every later import
+- ~~Free deployment~~ — a step-by-step Oracle Cloud Always Free setup with automatic HTTPS, an
+  arm64 image alongside x86, a proxy-aware login lockout, and nightly backups to your PC
 - ~~In-app categorization and forecasts~~ — categorization and the spending forecast run on built-in
   rules and statistics instead of the Claude API: no API key, no external calls, same answer every
   time; unfamiliar merchants are left for you to categorize once

@@ -7,6 +7,8 @@ interface Props {
   accounts: Account[];
   selectedAccountId: number | null;
   onDone: () => void;
+  /** Opens Transactions with the uncategorized review expanded. */
+  onReviewUncategorized: () => void;
 }
 
 type Stage = "idle" | "uploading" | "categorizing" | "done" | "error";
@@ -174,7 +176,7 @@ function ColumnMappingForm({
   );
 }
 
-export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
+export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncategorized }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -394,8 +396,9 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
 
           {categorization && categorization.unmatched > 0 && (
             <p className="mt-2">
-              Set these on the Transactions page — the app remembers each merchant you categorize,
-              so the next statement from the same places is categorized automatically.
+              They're grouped by merchant, so one choice covers every transaction from the same
+              place — and it's remembered, so the next statement from there is categorized
+              automatically.
             </p>
           )}
 
@@ -405,12 +408,22 @@ export function UploadPage({ accounts, selectedAccountId, onDone }: Props) {
             </p>
           )}
 
-          <button
-            onClick={onDone}
-            className="mt-4 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-          >
-            View dashboard →
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {categorization && categorization.unmatched > 0 && (
+              <button
+                onClick={onReviewUncategorized}
+                className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+              >
+                Review {categorization.unmatched} uncategorized →
+              </button>
+            )}
+            <button
+              onClick={onDone}
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              View dashboard →
+            </button>
+          </div>
         </div>
       )}
     </div>

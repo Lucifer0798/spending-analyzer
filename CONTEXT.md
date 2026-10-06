@@ -118,6 +118,20 @@ correction path and per-entry *forget* are the escape hatches.
 used before its built-in rules; nothing writes them now, but older memory and imported files still
 carry them, and they still never overwrite a category fixed by hand.
 
+**The uncategorized review queue is read-only; answering reuses `bulk-category`.**
+`GET /api/transactions/uncategorized-merchants` (`UncategorizedReviewController` →
+`UncategorizedReviewService`) groups `findUncategorized(accountId)` by `MerchantNormalizer` key
+*and* account currency (a merchant on a USD and a EUR account is two rows, never one mixed
+total), sorted by count, then total, then name, and returns each group's `transaction_ids`. The
+client answers a group with the existing `PATCH /transactions/bulk-category`, which already sets
+`category_source = 'user'` and teaches memory once per merchant — so there's a single write path
+for "the user chose this category". A separate controller rather than another method on
+`TransactionController` keeps that constructor (built by hand in some tests) unchanged. The
+Upload page's "Review N uncategorized" uses the same mount-time hand-off as merchant search:
+App sets `reviewUncategorized`, `TransactionsTable` reads `initialReviewOpen` once, and every nav
+button clears it. The group key joins merchant and currency with a NUL built as
+`String.valueOf((char) 0)`, following #73 — not a `"\u0000"` literal.
+
 **Categorization and forecasting are in-process — no model, no API key, no network.** The
 Anthropic SDK, `AnthropicService`, `AnthropicConfig`, `JsonSchemaBuilder` and `DotenvLoader` (which
 only ever existed to read the key from `.env`) are gone; `/health` no longer reports `hasApiKey`.
@@ -1312,6 +1326,61 @@ Both of these compiled cleanly and failed only at runtime:
 - **Spring Boot 4 split auto-configuration into per-technology modules.** `flyway-core` alone is
   no longer auto-configured: no logs, no error, migrations silently skipped. Fixed by adding
   `org.springframework.boot:spring-boot-flyway`.
+
+---
+
+## Deployment
+
+**`deploy/oracle` is the supported free host: one Oracle Always Free Ampere VM running the
+published image behind Caddy.** Render's free tier has no persistent disk (SQLite would be wiped
+on every restart) and Fly.io has no free tier for new orgs; Google's e2-micro is free but billable
+with no hard cap (budgets only alert, and spend caps don't cover Compute Engine). An un-upgraded
+Oracle Free Tier account *can't* be charged, which is why it was chosen. Its real risk is idle
+reclamation (CPU, network and — on A1 — memory all under 20% for 7 days), so the deploy is paired
+with nightly backups to the owner's PC; recovery is "new VM, restore newest backup".
+
+> **The image is multi-arch because Oracle's free VMs are Arm.** CI builds natively on
+> `ubuntu-latest` (job `image`, name "Docker image") and `ubuntu-24.04-arm` (job `image-arm64`,
+> free for public repos), both running `.github/actions/image-smoke-test`, each pushing
+> `:<sha>-amd64` / `:<sha>-arm64` on main; `publish` then `docker buildx imagetools create`s
+> `:latest` and `:<sha>` from the pair. Native rather than QEMU cross-builds: the Maven + npm
+> build under emulation would be very slow, and native runs let each architecture be smoke-tested
+> for real. The amd64 job keeps the exact name "Docker image" because branch protection requires
+> that check; the arm64 job isn't required (changing protection is the owner's call) but
+> `publish` `needs` it, so nothing reaches `latest` without both passing. The per-arch tags stay
+> in GHCR as harmless leftovers. `publish` only runs on pushes to main, so a PR can't exercise
+> it — check the first main run after changing it.
+
+> **`FORWARD_HEADERS_STRATEGY` is opt-in (`none` by default) and `deploy/oracle` sets `native`.**
+> Behind Caddy, `getRemoteAddr()` is Caddy's container IP, so `LoginAttemptLimiter` would lock
+> *everyone* out after five wrong guesses from anyone. `native` makes Tomcat's RemoteIpValve take
+> the client address (and https, so cookies get `Secure` and Spring adds HSTS) from
+> `X-Forwarded-*` — but only from private-range callers, its default trusted list. That is
+> exactly why it can't be the image default: `docker run -p 4000:4000` exposed directly makes
+> outside callers arrive from Docker's bridge gateway, a private address, letting them forge
+> `X-Forwarded-For` to dodge the lockout. In `deploy/oracle` the app publishes no port, so only
+> Caddy can reach it, and Caddy overwrites incoming `X-Forwarded-For` with the real peer address.
+> Verified live: without it a second client is locked out too (429); with it only the guessing
+> client is; through the real Caddy stack a forged `X-Forwarded-For` doesn't escape the lockout,
+> and responses carry `Secure` cookies, HSTS, `nosniff` and `X-Frame-Options: DENY`.
+
+> **`setup.sh` inserts the 80/443 ACCEPT rules above the image's REJECT rule** (Oracle's Ubuntu
+> images reject all but SSH in iptables, in addition to the cloud security list — both must be
+> opened). Appending would never match. It finds the REJECT line number dynamically, skips rules
+> that already exist (`iptables -C`), installs with `DEBIAN_FRONTEND=noninteractive` because
+> `iptables-persistent` otherwise prompts, and saves with `netfilter-persistent`. Tested in a
+> privileged Ubuntu 24.04 container against Oracle's default rule set, run twice.
+
+> **`deploy/backup/Backup-SpendingAnalyzer.ps1` targets Windows PowerShell 5.1.** It stores the
+> app password with `Export-Clixml` (DPAPI: only that Windows user on that PC can decrypt it), does
+> the same CSRF dance as the SPA (GET `/api/auth/status` → `XSRF-TOKEN` cookie → POST
+> `/api/auth/login` with `X-XSRF-TOKEN`), downloads `/api/backup` to `*.partial`, accepts it only if
+> it parses and has `version`, then renames and prunes to `-Keep` newest — pruning only after a
+> success, so repeated failures can never delete the last good copies. 401 / 429 / connection
+> failures are logged to `backup.log` with a hint and exit 1. `Register-BackupTask.ps1` uses an
+> Interactive-logon task with `StartWhenAvailable` (a missed run happens at next login) — S4U or
+> "run whether logged on" would need the Windows password stored, and DPAPI decryption needs the
+> user's profile loaded anyway.
 
 ---
 
