@@ -118,6 +118,20 @@ correction path and per-entry *forget* are the escape hatches.
 used before its built-in rules; nothing writes them now, but older memory and imported files still
 carry them, and they still never overwrite a category fixed by hand.
 
+**The uncategorized review queue is read-only; answering reuses `bulk-category`.**
+`GET /api/transactions/uncategorized-merchants` (`UncategorizedReviewController` →
+`UncategorizedReviewService`) groups `findUncategorized(accountId)` by `MerchantNormalizer` key
+*and* account currency (a merchant on a USD and a EUR account is two rows, never one mixed
+total), sorted by count, then total, then name, and returns each group's `transaction_ids`. The
+client answers a group with the existing `PATCH /transactions/bulk-category`, which already sets
+`category_source = 'user'` and teaches memory once per merchant — so there's a single write path
+for "the user chose this category". A separate controller rather than another method on
+`TransactionController` keeps that constructor (built by hand in some tests) unchanged. The
+Upload page's "Review N uncategorized" uses the same mount-time hand-off as merchant search:
+App sets `reviewUncategorized`, `TransactionsTable` reads `initialReviewOpen` once, and every nav
+button clears it. The group key joins merchant and currency with a NUL built as
+`String.valueOf((char) 0)`, following #73 — not a `"\u0000"` literal.
+
 **Categorization and forecasting are in-process — no model, no API key, no network.** The
 Anthropic SDK, `AnthropicService`, `AnthropicConfig`, `JsonSchemaBuilder` and `DotenvLoader` (which
 only ever existed to read the key from `.env`) are gone; `/health` no longer reports `hasApiKey`.

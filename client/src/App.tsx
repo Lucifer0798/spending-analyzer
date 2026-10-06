@@ -45,6 +45,8 @@ function App() {
   // it only when it mounts, and switching tabs remounts it, so this needs no clearing in step --
   // the nav buttons just reset it so opening Transactions directly starts unfiltered.
   const [transactionSearch, setTransactionSearch] = useState("");
+  // Same hand-off as transactionSearch: read once when Transactions mounts, cleared by the nav.
+  const [reviewUncategorized, setReviewUncategorized] = useState(false);
   const [bounds, setBounds] = useState<DateBounds | null>(null);
   const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -176,6 +178,7 @@ function App() {
                 key={t.id}
                 onClick={() => {
                   setTransactionSearch("");
+                  setReviewUncategorized(false);
                   setTab(t.id);
                 }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -222,6 +225,13 @@ function App() {
               setRefreshKey((k) => k + 1);
               setTab("dashboard");
             }}
+            onReviewUncategorized={() => {
+              loadAccounts();
+              setRefreshKey((k) => k + 1);
+              setTransactionSearch("");
+              setReviewUncategorized(true);
+              setTab("transactions");
+            }}
           />
         )}
         {tab === "dashboard" && <Dashboard accountId={accountId} range={range} onOpenMerchant={openMerchant} />}
@@ -232,6 +242,7 @@ function App() {
             onAccountIdChange={setAccountId}
             onRangeChange={setRange}
             initialSearch={transactionSearch}
+            initialReviewOpen={reviewUncategorized}
           />
         )}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}

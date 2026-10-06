@@ -24,6 +24,7 @@ import {
 import type { DateRangeValue, FilterPreset, Tag, TransactionWithTags } from "../types";
 import { currencyPrecise } from "../format";
 import { ExportLink } from "./ExportLink";
+import { UncategorizedReview } from "./UncategorizedReview";
 
 interface Props {
   accountId: number | null;
@@ -33,6 +34,8 @@ interface Props {
   /** Pre-fills the description search -- read once at mount, the way another page hands off
    *  "show me these" (App remounts this page whenever its tab is opened). */
   initialSearch?: string;
+  /** Opens the uncategorized review panel expanded -- read once at mount, like initialSearch. */
+  initialReviewOpen?: boolean;
 }
 
 interface EditDraft {
@@ -44,7 +47,14 @@ interface EditDraft {
 
 const PAGE_SIZE = 50;
 
-export function TransactionsTable({ accountId, range, onAccountIdChange, onRangeChange, initialSearch = "" }: Props) {
+export function TransactionsTable({
+  accountId,
+  range,
+  onAccountIdChange,
+  onRangeChange,
+  initialSearch = "",
+  initialReviewOpen = false,
+}: Props) {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -444,6 +454,14 @@ export function TransactionsTable({ accountId, range, onAccountIdChange, onRange
           />
         </div>
       </div>
+
+      {/* Renders nothing once every transaction has a category. */}
+      <UncategorizedReview
+        accountId={accountId}
+        categories={categories}
+        onChanged={load}
+        initiallyOpen={initialReviewOpen}
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {presets.map((p) => (
