@@ -20,12 +20,12 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+/** Memory first, then the built-in rules, and an honest blank when neither knows. */
 class CategorizationServiceTest {
 
     private TransactionRepository transactions;
     private CategoryRepository categories;
     private MerchantCategoryRepository memory;
-    private AnthropicService anthropic;
     private CategorizationService service;
 
     @BeforeEach
@@ -33,15 +33,19 @@ class CategorizationServiceTest {
         transactions = mock(TransactionRepository.class);
         categories = mock(CategoryRepository.class);
         memory = mock(MerchantCategoryRepository.class);
-        anthropic = mock(AnthropicService.class);
-        service = new CategorizationService(transactions, categories, memory, anthropic);
+        service = new CategorizationService(transactions, categories, memory);
 
-        when(categories.findAllNames()).thenReturn(List.of("Groceries", "Dining & Coffee", "Shopping", "Other"));
+        when(categories.findAllNames()).thenReturn(List.of(
+                "Groceries", "Dining & Coffee", "Shopping", "Income", "Transfer", "Other", "Pets"));
         when(memory.loadAll()).thenReturn(Map.of());
     }
 
     private static Transaction tx(long id, String description) {
-        return new Transaction(id, "2026-05-01", description, 10.0, "debit",
+        return tx(id, description, "debit");
+    }
+
+    private static Transaction tx(long id, String description, String type) {
+        return new Transaction(id, "2026-05-01", description, 10.0, type,
                 null, null, "batch", "2026-05-01", 1L, "Default", "USD", null, null);
     }
 
@@ -49,17 +53,6 @@ class CategorizationServiceTest {
     private static List<MerchantCategory> remembered(String key, String category, String source) {
         return List.of(new MerchantCategory(1, key, category,
                 0, MerchantCategory.UNBOUNDED, source, 0, "2026-01-01", "2026-01-01"));
-    }
-
-    private void modelAnswers(Map<Long, String> answers) {
-        when(anthropic.categorizeBatch(any())).thenAnswer(invocation -> {
-            List<Transaction> batch = invocation.getArgument(0);
-            List<AnthropicService.CategorizationEntry> entries = batch.stream()
-                    .filter(t -> answers.containsKey(t.id()))
-                    .map(t -> new AnthropicService.CategorizationEntry(t.id(), answers.get(t.id())))
-                    .toList();
-            return new AnthropicService.CategorizationResult(entries);
-        });
     }
 
     @Test
@@ -70,23 +63,22 @@ class CategorizationServiceTest {
         CategorizeResponse response = service.categorizeAll();
 
         assertThat(response.categorized()).isZero();
-        verify(anthropic, never()).categorizeBatch(any());
+        verify(transactions, never()).updateCategory(anyLong(), any(), any());
     }
 
     @Test
-    @DisplayName("a remembered merchant is categorized without asking the model at all")
-    void rememberedMerchantSkipsTheModel() {
+    @DisplayName("a remembered merchant is categorized from memory, ahead of any rule")
+    void memoryOutranksRules() {
+        // A rule would call this Dining & Coffee; the user taught otherwise, and that wins.
         when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "STARBUCKS STORE 4521")));
         when(memory.loadAll()).thenReturn(Map.of(
-                "STARBUCKS STORE", remembered("STARBUCKS STORE", "Dining & Coffee", "ai")));
+                "STARBUCKS STORE", remembered("STARBUCKS STORE", "Groceries", "user")));
 
         CategorizeResponse response = service.categorizeAll();
 
-        verify(anthropic, never()).categorizeBatch(any());
-        verify(transactions).updateCategory(1L, "Dining & Coffee", "cache");
+        verify(transactions).updateCategory(1L, "Groceries", "cache");
         assertThat(response.fromMemory()).isEqualTo(1);
-        assertThat(response.fromModel()).isZero();
-        assertThat(response.merchantsQueried()).isZero();
+        assertThat(response.fromRules()).isZero();
     }
 
     @Test
@@ -99,97 +91,69 @@ class CategorizationServiceTest {
 
         service.categorizeAll();
 
-        verify(anthropic, never()).categorizeBatch(any());
         verify(transactions).updateCategory(1L, "Groceries", "cache");
     }
 
     @Test
-    @DisplayName("an unknown merchant goes to the model and is then remembered")
-    void unknownMerchantIsAskedOnceAndRemembered() {
-        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "NEW CAFE 123")));
-        modelAnswers(Map.of(1L, "Dining & Coffee"));
-
-        CategorizeResponse response = service.categorizeAll();
-
-        verify(transactions).updateCategory(1L, "Dining & Coffee", "ai");
-        verify(memory).remember("NEW CAFE", "Dining & Coffee", MerchantCategory.SOURCE_AI);
-        assertThat(response.fromModel()).isEqualTo(1);
-        assertThat(response.merchantsQueried()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("many transactions at one merchant are a single question to the model")
-    void asksOncePerMerchantNotPerTransaction() {
-        // Fifty coffees at the same shop should cost one answer, not fifty.
+    @DisplayName("an unknown merchant a rule recognises is categorized as 'rule' and not written to memory")
+    void rulesCategorizeWithoutTouchingMemory() {
         when(transactions.findUncategorized()).thenReturn(List.of(
-                tx(1, "STARBUCKS STORE 4521"),
-                tx(2, "STARBUCKS STORE 8899"),
-                tx(3, "STARBUCKS STORE 4521")));
-        modelAnswers(Map.of(1L, "Dining & Coffee"));
+                tx(1, "NEW CORNER CAFE 123"),
+                tx(2, "ACME PAYROLL", "credit")));
 
         CategorizeResponse response = service.categorizeAll();
 
-        ArgumentCaptor<List<Transaction>> sent = ArgumentCaptor.forClass(List.class);
-        verify(anthropic, times(1)).categorizeBatch(sent.capture());
-        assertThat(sent.getValue()).hasSize(1);
-
-        // The single answer is applied to every transaction at that merchant.
-        verify(transactions).updateCategory(1L, "Dining & Coffee", "ai");
-        verify(transactions).updateCategory(2L, "Dining & Coffee", "ai");
-        verify(transactions).updateCategory(3L, "Dining & Coffee", "ai");
-        assertThat(response.fromModel()).isEqualTo(3);
-        assertThat(response.merchantsQueried()).isEqualTo(1);
+        verify(transactions).updateCategory(1L, "Dining & Coffee", "rule");
+        verify(transactions).updateCategory(2L, "Income", "rule");
+        // Rules are re-run on every import, so improving one improves every later import --
+        // a remembered copy would freeze today's answer.
+        verify(memory, never()).remember(any(), any(), any());
+        assertThat(response.fromRules()).isEqualTo(2);
+        assertThat(response.unmatched()).isZero();
     }
 
     @Test
-    @DisplayName("only the unknown merchants are sent when some are already remembered")
-    void sendsOnlyTheUnknownMerchants() {
+    @DisplayName("a debit nothing recognises stays uncategorized rather than being filed under Other")
+    void unknownDebitIsLeftBlank() {
         when(transactions.findUncategorized()).thenReturn(List.of(
-                tx(1, "STARBUCKS STORE 4521"),
-                tx(2, "UNKNOWN SHOP")));
-        when(memory.loadAll()).thenReturn(Map.of(
-                "STARBUCKS STORE", remembered("STARBUCKS STORE", "Dining & Coffee", "ai")));
-        modelAnswers(Map.of(2L, "Shopping"));
+                tx(1, "ZQX HOLDINGS 4471"),
+                tx(2, "SUPERMARKET 12")));
 
         CategorizeResponse response = service.categorizeAll();
 
-        ArgumentCaptor<List<Transaction>> sent = ArgumentCaptor.forClass(List.class);
-        verify(anthropic).categorizeBatch(sent.capture());
-        assertThat(sent.getValue()).singleElement()
-                .extracting(Transaction::description).isEqualTo("UNKNOWN SHOP");
-
-        assertThat(response.fromMemory()).isEqualTo(1);
-        assertThat(response.fromModel()).isEqualTo(1);
+        verify(transactions, never()).updateCategory(eq(1L), any(), any());
+        verify(transactions).updateCategory(2L, "Groceries", "rule");
+        assertThat(response.categorized()).isEqualTo(1);
+        assertThat(response.unmatched()).isEqualTo(1);
+        assertThat(response.total()).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("a remembered category that no longer exists falls through to the model")
+    @DisplayName("a remembered category that no longer exists falls through to the rules")
     void staleRememberedCategoryIsIgnored() {
         // The user deleted the custom category this entry points at; reusing it would
         // write a category that is no longer valid.
-        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "PET SHOP")));
+        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "AMAZON MKTPLACE")));
         when(memory.loadAll()).thenReturn(Map.of(
-                "PET SHOP", remembered("PET SHOP", "Deleted Category", "user")));
-        modelAnswers(Map.of(1L, "Other"));
+                "AMAZON MKTPLACE", remembered("AMAZON MKTPLACE", "Deleted Category", "user")));
 
         CategorizeResponse response = service.categorizeAll();
 
         verify(transactions, never()).updateCategory(anyLong(), eq("Deleted Category"), any());
-        verify(anthropic).categorizeBatch(any());
-        assertThat(response.fromModel()).isEqualTo(1);
+        verify(transactions).updateCategory(1L, "Shopping", "rule");
+        assertThat(response.fromRules()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("a category the model invents is not written or remembered")
-    void ignoresCategoriesOutsideTheKnownSet() {
-        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "ODD MERCHANT")));
-        modelAnswers(Map.of(1L, "Not A Real Category"));
+    @DisplayName("a rule pointing at a built-in category that has been removed is skipped, not written")
+    void ruleForMissingCategoryIsSkipped() {
+        when(categories.findAllNames()).thenReturn(List.of("Groceries", "Other"));   // no Dining & Coffee
+        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "CORNER CAFE")));
 
         CategorizeResponse response = service.categorizeAll();
 
         verify(transactions, never()).updateCategory(anyLong(), any(), any());
-        verify(memory, never()).remember(any(), any(), any());
-        assertThat(response.categorized()).isZero();
+        assertThat(response.unmatched()).isEqualTo(1);
     }
 
     @Test

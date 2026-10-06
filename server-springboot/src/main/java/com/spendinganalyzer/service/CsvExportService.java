@@ -119,7 +119,7 @@ public class CsvExportService {
     }
 
     /**
-     * The AI forecast, one row per category.
+     * The forecast, one row per category.
      *
      * <p>{@code generated_at} is repeated on every row rather than being stated once: a forecast
      * is only meaningful next to the moment it was made, and a spreadsheet has nowhere to put a

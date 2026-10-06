@@ -16,7 +16,6 @@ how to work on it.
 | Node | 22 |
 | Shell | Git Bash and PowerShell both available |
 | `gh` CLI | Installed at `C:\Program Files\GitHub CLI`, **not on PATH**. Prefix commands with `export PATH="$PATH:/c/Program Files/GitHub CLI"` |
-| API key | **Not configured.** AI categorization and predictions return 401; everything else works, including merchant memory |
 
 | Docker | Desktop 4.87 / engine 29.7.2, WSL2 backend. Must be **running** — start `Docker Desktop.exe` first, the daemon does not start on demand |
 
@@ -115,8 +114,63 @@ zero-day gap that drags the median interval to zero and hides the subscription e
 spans Shopping and Subscriptions — the first answer sticks until corrected. Accepted trade; the
 correction path and per-entry *forget* are the escape hatches.
 
-**`user` memory entries outrank `ai` ones.** A model run fills gaps but never overwrites a
-category fixed by hand, otherwise the same correction is needed on every import.
+**`user` memory entries outrank `ai` ones.** `ai` entries were written by the model this app
+used before its built-in rules; nothing writes them now, but older memory and imported files still
+carry them, and they still never overwrite a category fixed by hand.
+
+**The uncategorized review queue is read-only; answering reuses `bulk-category`.**
+`GET /api/transactions/uncategorized-merchants` (`UncategorizedReviewController` →
+`UncategorizedReviewService`) groups `findUncategorized(accountId)` by `MerchantNormalizer` key
+*and* account currency (a merchant on a USD and a EUR account is two rows, never one mixed
+total), sorted by count, then total, then name, and returns each group's `transaction_ids`. The
+client answers a group with the existing `PATCH /transactions/bulk-category`, which already sets
+`category_source = 'user'` and teaches memory once per merchant — so there's a single write path
+for "the user chose this category". A separate controller rather than another method on
+`TransactionController` keeps that constructor (built by hand in some tests) unchanged. The
+Upload page's "Review N uncategorized" uses the same mount-time hand-off as merchant search:
+App sets `reviewUncategorized`, `TransactionsTable` reads `initialReviewOpen` once, and every nav
+button clears it. The group key joins merchant and currency with a NUL built as
+`String.valueOf((char) 0)`, following #73 — not a `"\u0000"` literal.
+
+**Categorization and forecasting are in-process — no model, no API key, no network.** The
+Anthropic SDK, `AnthropicService`, `AnthropicConfig`, `JsonSchemaBuilder` and `DotenvLoader` (which
+only ever existed to read the key from `.env`) are gone; `/health` no longer reports `hasApiKey`.
+`CategorizationService` is memory first, then `RuleBasedCategorizer` — static keyword lists, whole-
+word regexes (`(?<![A-Z0-9])` + quoted keyword + `(?![A-Z0-9])`, so `BP` can't fire in `BPAY`),
+first match wins. Order is the conflict policy: on a debit, **fees** before transfers (`TRANSFER
+FEE` is spent), then **transfers**, then subscriptions → dining (`UBER EATS`) → transport (`UBER`)
+→ groceries → travel → utilities → rent → healthcare → entertainment → personal care → education
+→ shopping last (`AMAZON PRIME` is a subscription, plain `AMAZON` shopping). A credit that isn't
+a transfer is `Income`. An unmatched debit stays **null**, never "Other" — the user categorizing
+it is what teaches memory. A rule naming a built-in that's been renamed or deleted is skipped.
+Rule hits are written with `category_source = 'rule'` (V23 widened the CHECK; see below) and are
+**not** written to merchant memory, so memory stays "what the user taught" and a rule fix reaches
+every later import. `CategorizeResponse` is now `fromMemory / fromRules / unmatched` (was
+`fromModel / merchantsQueried`).
+
+> `ForecastService` keeps the old `PredictionsPayload` shape so the cache, CSV exports and
+> Dashboard needed no change. Per category, over the newest `WINDOW` (6) months *with any spend*
+> (a whole-month gap is an import gap, skipped; a month the category alone missed is a real 0):
+> forecast = mean(last 3) when there are < 4 months, else the average of mean(last 3) and the
+> least-squares point for next month **clamped to [0.5×, 1.5×] mean(last 3)** — the old prompt's
+> "smooth out one-off spikes", made explicit. Trend = slope / window mean beyond ±5%; confidence =
+> coefficient of variation (≤0.25 with 6 months → high, ≤0.5 → medium, else low; < 3 months is
+> always low). Categories with no spend in the window are dropped. Suggestions (max 4, one per
+> category, biggest saving first): fees in full; a category whose last-3 average beats its earlier
+> average by >15% and ≥ $10 → back to the earlier level; 15% trims of discretionary categories
+> (Dining, Shopping, Entertainment, Subscriptions, Personal Care, Travel). Rent and fees are never
+> "trimmed". Known weakness: a category alternating high/low months can read as mildly rising if
+> the last three happen to hold more of the highs. All money in text uses `NumberFormat` for the
+> account currency with no decimals.
+
+> **V23 rebuilt `transactions`** (SQLite can't alter a CHECK) to allow `'rule'`, copying every
+> column explicitly — including `split_share`/`split_note`, added by ALTER since V5's rebuild — and
+> recreating all five indexes. It also carries the `sqlite_sequence` high-water mark across: copying
+> explicit ids only advances the new table's sequence to the highest id *still present*, so after
+> deleting the newest transactions their ids would be reissued — and anything still keyed to an old
+> id would attach to the wrong row. The INSERT-then-UPDATE on `sqlite_sequence` covers both a
+> populated copy and an empty one. Verified against in-memory copies (rows / newest deleted / all
+> deleted) before shipping.
 
 **Categories carry `is_income` / `is_transfer` flags** rather than the code matching the literal
 names. That is what lets a user-created category be excluded from spend totals.
@@ -1110,11 +1164,8 @@ regardless of how irregularly balances happen to have been logged.
 > dollar is already degenerate enough that a $1 reference doesn't change the answer for any
 > realistic net worth figure.
 
-> No AI is involved, deliberately, unlike the dashboard's spend predictions. A spend forecast
-> needs judgment a plain regression doesn't have ("smooth out a one-off spike," per
-> `AnthropicService`'s own prompt) — projecting a straight line through logged balances doesn't,
-> so there was nothing for Claude to add here. The practical payoff: the Net Worth page's forecast
-> works with no `ANTHROPIC_API_KEY` configured at all, unlike `/predictions`.
+> Unlike the spend forecast, this line isn't bounded against spikes: a logged balance doesn't
+> spike the way one month of spending does, so the raw regression is the honest projection.
 
 **`net_worth_target` is a singleton table (`CHECK (id = 1)`), not a row per something else --
 there's only ever one target, so the schema says so directly rather than the application layer
@@ -1256,7 +1307,7 @@ touched; a BOM is a text-encoding artifact and never appears in an `.xlsx` cell.
 - **Pure logic** → plain unit tests, no Spring. Fast, and most of the suite.
 - **Database behaviour** → `@SpringBootTest` + `@ActiveProfiles("test")` + `@Transactional`, so
   inserts roll back and the shared test database is left as found.
-- The **smoke test boots the app with no API key**, matching CI. This is what catches broken
+- The **smoke test boots the app with no configuration at all**, matching CI. This is what catches broken
   wiring and failed migrations. It has earned its place twice — see below.
 
 > ⚠️ Test config must be `application-test.properties` (**profile-specific**). A plain
@@ -1275,6 +1326,61 @@ Both of these compiled cleanly and failed only at runtime:
 - **Spring Boot 4 split auto-configuration into per-technology modules.** `flyway-core` alone is
   no longer auto-configured: no logs, no error, migrations silently skipped. Fixed by adding
   `org.springframework.boot:spring-boot-flyway`.
+
+---
+
+## Deployment
+
+**`deploy/oracle` is the supported free host: one Oracle Always Free Ampere VM running the
+published image behind Caddy.** Render's free tier has no persistent disk (SQLite would be wiped
+on every restart) and Fly.io has no free tier for new orgs; Google's e2-micro is free but billable
+with no hard cap (budgets only alert, and spend caps don't cover Compute Engine). An un-upgraded
+Oracle Free Tier account *can't* be charged, which is why it was chosen. Its real risk is idle
+reclamation (CPU, network and — on A1 — memory all under 20% for 7 days), so the deploy is paired
+with nightly backups to the owner's PC; recovery is "new VM, restore newest backup".
+
+> **The image is multi-arch because Oracle's free VMs are Arm.** CI builds natively on
+> `ubuntu-latest` (job `image`, name "Docker image") and `ubuntu-24.04-arm` (job `image-arm64`,
+> free for public repos), both running `.github/actions/image-smoke-test`, each pushing
+> `:<sha>-amd64` / `:<sha>-arm64` on main; `publish` then `docker buildx imagetools create`s
+> `:latest` and `:<sha>` from the pair. Native rather than QEMU cross-builds: the Maven + npm
+> build under emulation would be very slow, and native runs let each architecture be smoke-tested
+> for real. The amd64 job keeps the exact name "Docker image" because branch protection requires
+> that check; the arm64 job isn't required (changing protection is the owner's call) but
+> `publish` `needs` it, so nothing reaches `latest` without both passing. The per-arch tags stay
+> in GHCR as harmless leftovers. `publish` only runs on pushes to main, so a PR can't exercise
+> it — check the first main run after changing it.
+
+> **`FORWARD_HEADERS_STRATEGY` is opt-in (`none` by default) and `deploy/oracle` sets `native`.**
+> Behind Caddy, `getRemoteAddr()` is Caddy's container IP, so `LoginAttemptLimiter` would lock
+> *everyone* out after five wrong guesses from anyone. `native` makes Tomcat's RemoteIpValve take
+> the client address (and https, so cookies get `Secure` and Spring adds HSTS) from
+> `X-Forwarded-*` — but only from private-range callers, its default trusted list. That is
+> exactly why it can't be the image default: `docker run -p 4000:4000` exposed directly makes
+> outside callers arrive from Docker's bridge gateway, a private address, letting them forge
+> `X-Forwarded-For` to dodge the lockout. In `deploy/oracle` the app publishes no port, so only
+> Caddy can reach it, and Caddy overwrites incoming `X-Forwarded-For` with the real peer address.
+> Verified live: without it a second client is locked out too (429); with it only the guessing
+> client is; through the real Caddy stack a forged `X-Forwarded-For` doesn't escape the lockout,
+> and responses carry `Secure` cookies, HSTS, `nosniff` and `X-Frame-Options: DENY`.
+
+> **`setup.sh` inserts the 80/443 ACCEPT rules above the image's REJECT rule** (Oracle's Ubuntu
+> images reject all but SSH in iptables, in addition to the cloud security list — both must be
+> opened). Appending would never match. It finds the REJECT line number dynamically, skips rules
+> that already exist (`iptables -C`), installs with `DEBIAN_FRONTEND=noninteractive` because
+> `iptables-persistent` otherwise prompts, and saves with `netfilter-persistent`. Tested in a
+> privileged Ubuntu 24.04 container against Oracle's default rule set, run twice.
+
+> **`deploy/backup/Backup-SpendingAnalyzer.ps1` targets Windows PowerShell 5.1.** It stores the
+> app password with `Export-Clixml` (DPAPI: only that Windows user on that PC can decrypt it), does
+> the same CSRF dance as the SPA (GET `/api/auth/status` → `XSRF-TOKEN` cookie → POST
+> `/api/auth/login` with `X-XSRF-TOKEN`), downloads `/api/backup` to `*.partial`, accepts it only if
+> it parses and has `version`, then renames and prunes to `-Keep` newest — pruning only after a
+> success, so repeated failures can never delete the last good copies. 401 / 429 / connection
+> failures are logged to `backup.log` with a hint and exit 1. `Register-BackupTask.ps1` uses an
+> Interactive-logon task with `StartWhenAvailable` (a missed run happens at next login) — S4U or
+> "run whether logged on" would need the Windows password stored, and DPAPI decryption needs the
+> user's profile loaded anyway.
 
 ---
 

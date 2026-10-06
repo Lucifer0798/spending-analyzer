@@ -6,7 +6,8 @@ export interface Transaction {
   type: "debit" | "credit";
   category: string | null;
   /** "cache" means it came from merchant memory rather than a fresh model call. */
-  category_source: "ai" | "user" | "import" | "cache" | null;
+  /** "rule" is the built-in keyword rules; "ai" only appears on rows categorized before those replaced the model. */
+  category_source: "ai" | "rule" | "user" | "import" | "cache" | null;
   upload_batch_id: string;
   created_at: string;
   account_id: number;
@@ -80,11 +81,12 @@ export interface CategorizeResult {
   categorized: number;
   total?: number;
   message?: string;
-  /** Answered from merchant memory, costing no model call. */
+  /** Answered from merchant memory -- what the user has taught. */
   fromMemory: number;
-  fromModel: number;
-  /** Distinct merchants actually sent to the model — what drives cost. */
-  merchantsQueried: number;
+  /** Answered by the built-in keyword rules. */
+  fromRules: number;
+  /** Left uncategorized: neither memory nor a rule recognised them. */
+  unmatched: number;
 }
 
 export interface MerchantMemory {
@@ -107,6 +109,24 @@ export interface MerchantsResponse {
   merchants: MerchantMemory[];
   count: number;
   totalMemoryHits: number;
+}
+
+/** Every uncategorized transaction at one merchant, in one currency -- one row of the review queue. */
+export interface UncategorizedMerchant {
+  /** The normalized merchant key -- what merchant memory learns. */
+  merchant: string;
+  currency: string;
+  count: number;
+  /** Unsigned sum; debits/credits say which way the money went. */
+  total: number;
+  debits: number;
+  credits: number;
+  first_date: string;
+  last_date: string;
+  /** Up to three distinct raw descriptions. */
+  examples: string[];
+  /** Send these to bulkCategorize to answer the whole group. */
+  transaction_ids: number[];
 }
 
 export type MerchantImportMode = "merge" | "replace";

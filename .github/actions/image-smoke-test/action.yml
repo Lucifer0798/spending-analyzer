@@ -1,0 +1,59 @@
+name: Image smoke test
+description: >
+  Starts a built image and proves it boots, serves the packaged frontend, refuses an
+  unauthenticated caller, and refuses to start with no password. Shared by every architecture's
+  image job, so each one is held to exactly the same checks before anything is published.
+
+inputs:
+  image:
+    description: The local image tag to test.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The image sets APP_AUTH_REQUIRED=true, so this also proves that a password is enough
+    # to start it — the refusal path is covered by the last step.
+    - name: Start container
+      shell: bash
+      run: docker run -d --name app -p 4000:4000 -e APP_PASSWORD=ci-smoke-test '${{ inputs.image }}'
+
+    - name: Wait for it to come up
+      shell: bash
+      run: |
+        # /api/auth/status is the one endpoint outside the gate, so it is what a health
+        # check or a load balancer should poll. Everything else answers 401 until sign-in.
+        for _ in $(seq 1 60); do
+          if curl -sf -o /dev/null http://localhost:4000/api/auth/status; then
+            echo "up"; exit 0
+          fi
+          sleep 2
+        done
+        echo "::error::container did not become healthy within 120s"
+        docker logs app
+        exit 1
+
+    - name: Check the packaged frontend is served and the API is locked
+      shell: bash
+      run: |
+        curl -sf http://localhost:4000/ | grep -qi '<div id="root">'
+        curl -sf http://localhost:4000/api/auth/status | grep -q '"authRequired":true'
+
+        # The whole point of shipping with a password: data endpoints must refuse a caller
+        # who has not signed in. A 200 here would mean the image ships wide open.
+        status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/summary)
+        if [ "$status" != "401" ]; then
+          echo "::error::/api/summary answered $status to an unauthenticated caller, expected 401"
+          exit 1
+        fi
+
+    - name: Check it refuses to start with no password
+      shell: bash
+      run: |
+        # Silently falling back to an open instance is the failure this guards against, so
+        # the container must exit rather than come up.
+        if docker run --rm --name no-password '${{ inputs.image }}'; then
+          echo "::error::container started without APP_PASSWORD, expected it to refuse"
+          exit 1
+        fi
+        echo "refused to start without a password, as intended"

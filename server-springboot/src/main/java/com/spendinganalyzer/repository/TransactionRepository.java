@@ -288,7 +288,15 @@ public class TransactionRepository {
     }
 
     public List<Transaction> findUncategorized() {
-        return jdbc.query(SELECT_WITH_ACCOUNT + " WHERE t.category IS NULL ORDER BY t.id", ROW_MAPPER);
+        return findUncategorized(null);
+    }
+
+    /** As {@link #findUncategorized()}, limited to one account when {@code accountId} is non-null. */
+    public List<Transaction> findUncategorized(Long accountId) {
+        String sql = SELECT_WITH_ACCOUNT + " WHERE t.category IS NULL"
+                + (accountId != null ? " AND t.account_id = :accountId" : "")
+                + " ORDER BY t.id";
+        return jdbc.query(sql, new MapSqlParameterSource("accountId", accountId), ROW_MAPPER);
     }
 
     /** All debit rows in spend categories (income and transfers excluded), for recurring detection. */
