@@ -75,11 +75,11 @@ public class CategoryRepository {
     }
 
     /**
-     * Renames a category and cascades the new name everywhere it is stored. Three other tables
+     * Renames a category and cascades the new name everywhere it is stored. Four other tables
      * reference a category by name rather than by id, so the rename has to reach all of them
      * inside one transaction or they fall out of sync: transactions would keep the old label,
-     * merchant memory would re-apply a category that no longer exists on the next import, and
-     * the budget would silently stop matching any spend.
+     * merchant memory and keyword rules would re-apply a category that no longer exists on the
+     * next import, and the budget would silently stop matching any spend.
      */
     @Transactional
     public void rename(long id, String oldName, String newName) {
@@ -92,6 +92,7 @@ public class CategoryRepository {
         jdbc.update("UPDATE transactions SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE merchant_categories SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE budgets SET category = :newName WHERE category = :oldName", names);
+        jdbc.update("UPDATE keyword_rules SET category = :newName WHERE category = :oldName", names);
     }
 
     public boolean updateFlags(long id, Boolean isIncome, Boolean isTransfer) {
@@ -129,8 +130,8 @@ public class CategoryRepository {
 
     /**
      * Deletes a category and moves any transactions using it to {@code reassignTo}, so nothing
-     * is left pointing at a category that no longer exists. Merchant memory moves with them —
-     * left behind, it would re-apply the deleted category on the next import.
+     * is left pointing at a category that no longer exists. Merchant memory and keyword rules move
+     * with them — left behind, they would re-apply the deleted category on the next import.
      *
      * <p>The budget is dropped rather than moved: folding one category's target into another's
      * would quietly change a number the user set deliberately.
@@ -143,6 +144,7 @@ public class CategoryRepository {
 
         jdbc.update("UPDATE transactions SET category = :reassignTo WHERE category = :name", reassign);
         jdbc.update("UPDATE merchant_categories SET category = :reassignTo WHERE category = :name", reassign);
+        jdbc.update("UPDATE keyword_rules SET category = :reassignTo WHERE category = :name", reassign);
         jdbc.update("DELETE FROM budgets WHERE category = :name", new MapSqlParameterSource("name", name));
         jdbc.update("DELETE FROM categories WHERE id = :id", new MapSqlParameterSource("id", id));
     }

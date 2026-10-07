@@ -84,6 +84,8 @@ export interface CategorizeResult {
   /** Answered from merchant memory -- what the user has taught. */
   fromMemory: number;
   /** Answered by the built-in keyword rules. */
+  /** Answered by your own keyword rules. */
+  fromKeywordRules: number;
   fromRules: number;
   /** Left uncategorized: neither memory nor a rule recognised them. */
   unmatched: number;
@@ -555,6 +557,25 @@ export interface BackupSummary {
   accountBalances: number;
   filterPresets: number;
   transactionReceipts: number;
+  netWorthTarget: boolean;
+  keywordRules: number;
+}
+
+/** "A description containing this keyword, as a whole word, goes in this category." */
+export interface KeywordRule {
+  id: number;
+  keyword: string;
+  category: string;
+  created_at: string;
+}
+
+/** What a keyword would match before it's saved as a rule. */
+export interface KeywordRulePreview {
+  keyword: string;
+  matches: number;
+  /** Of those, still uncategorized -- what a new rule would actually fill in. */
+  uncategorized: number;
+  examples: string[];
 }
 
 export interface Goal {

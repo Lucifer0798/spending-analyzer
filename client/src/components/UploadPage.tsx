@@ -380,6 +380,11 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
                     Categorized from merchant memory: <strong>{categorization.fromMemory}</strong>
                   </li>
                 )}
+                {categorization.fromKeywordRules > 0 && (
+                  <li>
+                    Categorized by your keyword rules: <strong>{categorization.fromKeywordRules}</strong>
+                  </li>
+                )}
                 {categorization.fromRules > 0 && (
                   <li>
                     Categorized by the built-in rules: <strong>{categorization.fromRules}</strong>

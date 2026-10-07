@@ -1,9 +1,11 @@
 package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.CategorizeResponse;
+import com.spendinganalyzer.model.KeywordRule;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.KeywordRuleRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
@@ -17,10 +19,12 @@ import java.util.Set;
 
 /**
  * Assigns categories to uncategorized transactions, entirely in-process: merchant memory first,
- * then {@link RuleBasedCategorizer}'s keyword rules. Nothing leaves the machine.
+ * then the user's own keyword rules, then {@link RuleBasedCategorizer}'s built-in ones. Nothing
+ * leaves the machine.
  *
- * <p>Memory comes first because it's what the user has taught -- a correction always outranks a
- * built-in rule. Rule matches are <em>not</em> written back into memory: rules are re-evaluated on
+ * <p>Memory comes first because it's the most specific thing the user has said -- this exact
+ * merchant goes here -- so it outranks a keyword rule, which outranks a built-in one: the user's
+ * word beats the app's guess. Rule matches are <em>not</em> written back into memory: rules are re-evaluated on
  * every run, so improving a rule improves every later import, whereas a remembered copy would
  * freeze today's answer. Memory stays exactly what its name says: what the user taught.
  *
@@ -33,15 +37,18 @@ public class CategorizationService {
     private final TransactionRepository transactionRepository;
     private final CategoryRepository categoryRepository;
     private final MerchantCategoryRepository merchantCategoryRepository;
+    private final KeywordRuleRepository keywordRuleRepository;
 
     public CategorizationService(
             TransactionRepository transactionRepository,
             CategoryRepository categoryRepository,
-            MerchantCategoryRepository merchantCategoryRepository
+            MerchantCategoryRepository merchantCategoryRepository,
+            KeywordRuleRepository keywordRuleRepository
     ) {
         this.transactionRepository = transactionRepository;
         this.categoryRepository = categoryRepository;
         this.merchantCategoryRepository = merchantCategoryRepository;
+        this.keywordRuleRepository = keywordRuleRepository;
     }
 
     public CategorizeResponse categorizeAll() {
@@ -52,8 +59,10 @@ public class CategorizationService {
 
         Set<String> validCategories = new HashSet<>(categoryRepository.findAllNames());
         Map<String, List<MerchantCategory>> memory = merchantCategoryRepository.loadAll();
+        KeywordRuleMatcher keywordRules = new KeywordRuleMatcher(keywordRuleRepository.findAll());
 
         int fromMemory = 0;
+        int fromKeywordRules = 0;
         int fromRules = 0;
         // Keyed by rule id, not merchant: a merchant with several bands should only credit the
         // band that actually answered.
@@ -77,6 +86,15 @@ public class CategorizationService {
                 continue;
             }
 
+            // Labelled 'rule' like a built-in match: both are rules rather than a per-merchant
+            // correction, and CategorizeResponse already reports which kind answered.
+            Optional<KeywordRule> keyword = keywordRules.match(t.description(), validCategories);
+            if (keyword.isPresent()) {
+                transactionRepository.updateCategory(t.id(), keyword.get().category(), "rule");
+                fromKeywordRules++;
+                continue;
+            }
+
             Optional<String> ruled = RuleBasedCategorizer.categorize(t.description(), t.type(), validCategories);
             if (ruled.isPresent()) {
                 transactionRepository.updateCategory(t.id(), ruled.get(), "rule");
@@ -85,6 +103,6 @@ public class CategorizationService {
         }
         merchantCategoryRepository.recordHits(memoryHits);
 
-        return CategorizeResponse.of(fromMemory, fromRules, uncategorized.size());
+        return CategorizeResponse.of(fromMemory, fromKeywordRules, fromRules, uncategorized.size());
     }
 }

@@ -3,7 +3,9 @@ package com.spendinganalyzer.service;
 import com.spendinganalyzer.dto.CategorizeResponse;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.model.KeywordRule;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.KeywordRuleRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,12 +22,13 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/** Memory first, then the built-in rules, and an honest blank when neither knows. */
+/** Memory first, then the user's keyword rules, then the built-in ones, and an honest blank when none knows. */
 class CategorizationServiceTest {
 
     private TransactionRepository transactions;
     private CategoryRepository categories;
     private MerchantCategoryRepository memory;
+    private KeywordRuleRepository keywordRules;
     private CategorizationService service;
 
     @BeforeEach
@@ -33,7 +36,9 @@ class CategorizationServiceTest {
         transactions = mock(TransactionRepository.class);
         categories = mock(CategoryRepository.class);
         memory = mock(MerchantCategoryRepository.class);
-        service = new CategorizationService(transactions, categories, memory);
+        keywordRules = mock(KeywordRuleRepository.class);
+        service = new CategorizationService(transactions, categories, memory, keywordRules);
+        when(keywordRules.findAll()).thenReturn(List.of());
 
         when(categories.findAllNames()).thenReturn(List.of(
                 "Groceries", "Dining & Coffee", "Shopping", "Income", "Transfer", "Other", "Pets"));
@@ -171,5 +176,55 @@ class CategorizationServiceTest {
         verify(memory).recordHits(hits.capture());
         // Keyed by the rule that answered, so a merchant with several bands credits only one.
         assertThat(hits.getValue()).containsEntry(1L, 2);
+    }
+
+    // --- the user's keyword rules ---------------------------------------------------
+
+    private static KeywordRule keyword(long id, String keyword, String category) {
+        return new KeywordRule(id, keyword, category, "2026-01-01");
+    }
+
+    @Test
+    @DisplayName("a keyword rule places what the built-in rules don't know")
+    void keywordRuleCategorizesUnknownMerchant() {
+        when(keywordRules.findAll()).thenReturn(List.of(keyword(1, "VET", "Pets")));
+        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "PAWS & CLAWS VET 0091")));
+
+        CategorizeResponse response = service.categorizeAll();
+
+        verify(transactions).updateCategory(1L, "Pets", "rule");
+        assertThat(response.fromKeywordRules()).isEqualTo(1);
+        assertThat(response.unmatched()).isZero();
+    }
+
+    @Test
+    @DisplayName("a keyword rule outranks a built-in rule, and memory outranks both")
+    void precedenceIsMemoryThenKeywordThenBuiltIn() {
+        when(keywordRules.findAll()).thenReturn(List.of(keyword(1, "COFFEE", "Groceries")));
+        when(transactions.findUncategorized()).thenReturn(List.of(
+                tx(1, "BLUE BOTTLE COFFEE"),          // built-in says Dining; the user's rule says Groceries
+                tx(2, "STARBUCKS STORE 4521")));      // memory says Shopping; no keyword applies
+        when(memory.loadAll()).thenReturn(Map.of(
+                "STARBUCKS STORE", remembered("STARBUCKS STORE", "Shopping", "user")));
+
+        CategorizeResponse response = service.categorizeAll();
+
+        verify(transactions).updateCategory(1L, "Groceries", "rule");
+        verify(transactions).updateCategory(2L, "Shopping", "cache");
+        assertThat(response.fromKeywordRules()).isEqualTo(1);
+        assertThat(response.fromMemory()).isEqualTo(1);
+        assertThat(response.fromRules()).isZero();
+    }
+
+    @Test
+    @DisplayName("keyword rules match whole words only, the same as the built-in ones")
+    void keywordRulesMatchWholeWords() {
+        when(keywordRules.findAll()).thenReturn(List.of(keyword(1, "VET", "Pets")));
+        when(transactions.findUncategorized()).thenReturn(List.of(tx(1, "CORVETTE PARTS DEPOT")));
+
+        CategorizeResponse response = service.categorizeAll();
+
+        verify(transactions, never()).updateCategory(anyLong(), eq("Pets"), any());
+        assertThat(response.fromKeywordRules()).isZero();
     }
 }

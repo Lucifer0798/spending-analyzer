@@ -7,6 +7,7 @@ import com.spendinganalyzer.model.Category;
 import com.spendinganalyzer.model.FilterPreset;
 import com.spendinganalyzer.model.Goal;
 import com.spendinganalyzer.model.GoalContribution;
+import com.spendinganalyzer.model.KeywordRule;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.NetWorthTarget;
 import com.spendinganalyzer.model.RecurringOverride;
@@ -42,9 +43,10 @@ public record BackupData(
         List<FilterPreset> filterPresets,
         List<TransactionReceipt> transactionReceipts,
         /** Null when no target is set -- a singleton, not a list, since there is only ever one. */
-        NetWorthTarget netWorthTarget
+        NetWorthTarget netWorthTarget,
+        List<KeywordRule> keywordRules
 ) {
-    // Bumped from 6: netWorthTarget is a new field a version-6 file has no value for, and there
+    // Bumped from 7: keywordRules is a new field a version-7 file has no value for, and there
     // is no migration path between backup versions -- see BackupController.
-    public static final int CURRENT_VERSION = 7;
+    public static final int CURRENT_VERSION = 8;
 }

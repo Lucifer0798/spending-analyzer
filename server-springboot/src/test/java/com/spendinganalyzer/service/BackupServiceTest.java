@@ -84,6 +84,9 @@ class BackupServiceTest {
     @Autowired
     private NetWorthTargetRepository netWorthTarget;
 
+    @Autowired
+    private com.spendinganalyzer.repository.KeywordRuleRepository keywordRules;
+
     private long goalId;
     private long taggedTransactionId;
 
@@ -201,11 +204,29 @@ class BackupServiceTest {
     }
 
     @Test
+    @DisplayName("keyword rules round-trip through a backup, ids included")
+    void keywordRulesRoundTrip() {
+        var vet = keywordRules.create("VET", "Healthcare");
+        keywordRules.create("PET STORE", "Shopping");
+        BackupData exported = backupService.export();
+
+        keywordRules.restoreAll(List.of());
+        var summary = backupService.restore(exported);
+
+        assertThat(summary.keywordRules()).isEqualTo(2);
+        assertThat(keywordRules.findAll())
+                .extracting(com.spendinganalyzer.model.KeywordRule::keyword)
+                .containsExactly("PET STORE", "VET");   // longest first, the order they're tried in
+        assertThat(keywordRules.findById(vet.id())).get()
+                .extracting(com.spendinganalyzer.model.KeywordRule::category).isEqualTo("Healthcare");
+    }
+
+    @Test
     @DisplayName("restoring an empty backup wipes every table it covers down to nothing")
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), null);
+                List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of());
 
         backupService.restore(empty);
 

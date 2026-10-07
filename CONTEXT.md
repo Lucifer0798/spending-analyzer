@@ -118,6 +118,22 @@ correction path and per-entry *forget* are the escape hatches.
 used before its built-in rules; nothing writes them now, but older memory and imported files still
 carry them, and they still never overwrite a category fixed by hand.
 
+**Keyword rules sit between merchant memory and the built-in rules.** `keyword_rules` (V24:
+`keyword UNIQUE COLLATE NOCASE`, category by name) is loaded once per `categorizeAll` into a
+`KeywordRuleMatcher`, ordered longest keyword first then oldest. Precedence is memory → keyword
+rules → `RuleBasedCategorizer`: an exact merchant the user corrected is more specific than any
+keyword, and the user's keyword outranks the app's guess. Matching reuses
+`RuleBasedCategorizer.wholeWord` / `matchText`, so "contains" means the same whole-word thing for
+both kinds of rule (`VET` never matches `CORVETTE`). Hits are labelled `category_source = 'rule'`
+like built-in ones (no CHECK rebuild needed); `CategorizeResponse` now splits `fromKeywordRules`
+from `fromRules`. Category rename/delete cascade to `keyword_rules` in `CategoryRepository`,
+alongside merchant memory and budgets. A rule is create/delete only (no edit, and a duplicate
+keyword is 409): changing a category means delete-and-recreate, which keeps "what does VET mean"
+unambiguous. Creating a rule doesn't touch transactions server-side; the Manage section then calls
+`POST /api/categorize`, which only ever fills *uncategorized* rows, so a new rule never overwrites
+a category someone chose. `GET /keyword-rules/preview` scans every transaction in Java (fine at
+personal scale). Backups include the rules: `BackupData.CURRENT_VERSION` 7 → 8.
+
 **The uncategorized review queue is read-only; answering reuses `bulk-category`.**
 `GET /api/transactions/uncategorized-merchants` (`UncategorizedReviewController` →
 `UncategorizedReviewService`) groups `findUncategorized(accountId)` by `MerchantNormalizer` key
