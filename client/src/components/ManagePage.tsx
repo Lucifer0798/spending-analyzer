@@ -40,6 +40,7 @@ import type {
 } from "../types";
 import { accountTypeLabel, currency } from "../format";
 import { ExportLink } from "./ExportLink";
+import { KeywordRulesSection } from "./KeywordRulesSection";
 
 interface Props {
   onAccountsChanged: () => void;
@@ -161,7 +162,8 @@ export function ManagePage({ onAccountsChanged }: Props) {
           `${summary.categories} categories, ${summary.budgets} budgets, ` +
           `${summary.merchantCategories} merchant rules, ${summary.recurringOverrides} recurring flags, ` +
           `${summary.goals} savings goals, ${summary.tags} tags, ${summary.accountBalances} balance entries, ` +
-          `${summary.filterPresets} filter presets, ${summary.transactionReceipts} receipts.`
+          `${summary.filterPresets} filter presets, ${summary.transactionReceipts} receipts, ` +
+          `${summary.keywordRules} keyword rules.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed.");
@@ -957,6 +959,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
           </div>
         </div>
       </section>
+
+      {/* ---------------- Keyword rules ---------------- */}
+      <KeywordRulesSection categories={categories.map((c) => c.name)} />
 
       {/* ---------------- Recurring overrides ---------------- */}
       <section className="mt-10">

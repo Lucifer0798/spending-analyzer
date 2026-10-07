@@ -46,6 +46,8 @@ leave the app to get one:
 
 - Merchants already in **merchant memory** — ones you've categorized before — are answered from
   the database first.
+- Then **your own keyword rules**, set on the Manage page — "anything containing `VET` goes in
+  Pets" — for patterns broader than one merchant. Longest keyword first.
 - Everything else goes through the **built-in rules**: a few hundred keywords for common merchants
   and bill types (`STARBUCKS`, `WHOLE FOODS`, `NETFLIX`, `SHELL`, `OVERDRAFT FEE`, `ZELLE`…), matched
   as whole words. Money coming in is income unless it's a transfer.
@@ -168,8 +170,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V23)
-  src/test/                 552 tests
+    db/migration/           Versioned schema migrations (V1–V24)
+  src/test/                 562 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -197,7 +199,7 @@ forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
 
 ## The database
 
-Fifteen tables, all created automatically:
+Sixteen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -216,9 +218,10 @@ Fifteen tables, all created automatically:
 | `filter_presets` | A saved combination of the Transactions page's filters, applied with one click |
 | `transaction_receipts` | A receipt image or PDF attached to a transaction, at most one each, stored as a BLOB |
 | `net_worth_target` | A single target net worth to compare the forecast against, optionally by a date |
+| `keyword_rules` | Your own "description contains this word → this category" rules |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V24__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V25__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -291,6 +294,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group and display color |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
+| `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
@@ -791,7 +795,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (552).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (562).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -868,6 +872,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Custom keyword rules~~ — your own "description contains X → category" rules on the Manage page,
+  checked after merchant memory and before the built-in rules, with a preview of what a keyword
+  matches before you save it; a new rule fills in matching uncategorized transactions right away
 - ~~Uncategorized review queue~~ — whatever categorization couldn't place is grouped by merchant on
   the Transactions page (and offered straight after an upload); one choice categorizes the whole
   group and is remembered for every later import

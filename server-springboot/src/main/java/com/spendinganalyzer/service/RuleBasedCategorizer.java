@@ -109,7 +109,7 @@ public final class RuleBasedCategorizer {
      * @return the category, or empty when no rule recognises a debit
      */
     public static Optional<String> categorize(String description, String type, Set<String> validCategories) {
-        String text = " " + description.toUpperCase(Locale.ROOT) + " ";
+        String text = matchText(description);
 
         if (!"credit".equals(type)) {
             Optional<String> fee = firstMatch(FEE_RULES, text, validCategories);
@@ -144,10 +144,23 @@ public final class RuleBasedCategorizer {
     private static List<Rule> rules(String category, String... keywords) {
         List<Rule> list = new ArrayList<>();
         for (String keyword : keywords) {
-            list.add(new Rule(category,
-                    Pattern.compile("(?<![A-Z0-9])" + Pattern.quote(keyword) + "(?![A-Z0-9])")));
+            list.add(new Rule(category, wholeWord(keyword)));
         }
         return list;
+    }
+
+    /**
+     * The whole-word pattern every keyword is matched with -- shared with the user's own keyword
+     * rules ({@link KeywordRuleMatcher}) so both kinds of rule mean exactly the same thing by
+     * "contains". Match it against {@link #matchText}, which upper-cases the description.
+     */
+    public static Pattern wholeWord(String keyword) {
+        return Pattern.compile("(?<![A-Z0-9])" + Pattern.quote(keyword.trim().toUpperCase(Locale.ROOT)) + "(?![A-Z0-9])");
+    }
+
+    /** A description in the form {@link #wholeWord} patterns are matched against. */
+    public static String matchText(String description) {
+        return " " + description.toUpperCase(Locale.ROOT) + " ";
     }
 
     @SafeVarargs

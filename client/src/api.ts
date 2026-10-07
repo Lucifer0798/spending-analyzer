@@ -19,6 +19,8 @@ import type {
   GoalContribution,
   GoalFundingPlan,
   GoalProgress,
+  KeywordRule,
+  KeywordRulePreview,
   MerchantImportMode,
   MerchantImportResult,
   MerchantMemory,
@@ -576,6 +578,25 @@ export function addSplitGoalContribution(split: {
 }
 
 // --- insights ---------------------------------------------------------------
+
+// --- keyword rules -----------------------------------------------------------
+
+/** Your keyword rules, in the order they're tried (longest keyword first). */
+export function fetchKeywordRules() {
+  return request<KeywordRule[]>("/keyword-rules");
+}
+
+export function createKeywordRule(keyword: string, category: string) {
+  return request<KeywordRule>("/keyword-rules", { method: "POST", body: JSON.stringify({ keyword, category }) });
+}
+
+export function deleteKeywordRule(id: number) {
+  return request<{ ok: true }>(`/keyword-rules/${id}`, { method: "DELETE" });
+}
+
+export function previewKeywordRule(keyword: string) {
+  return request<KeywordRulePreview>(`/keyword-rules/preview${qs({ keyword })}`);
+}
 
 export function runCategorization() {
   return request<CategorizeResult>("/categorize", { method: "POST" });
