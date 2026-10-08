@@ -47,6 +47,14 @@ interface EditDraft {
 
 const PAGE_SIZE = 50;
 
+/**
+ * Below md a row is a card: a three-column grid (checkbox | details | amount) with each cell
+ * placed by col/row classes, stacking into lines -- description, date, category, tags, actions.
+ * From md up the same markup is an ordinary table row and the grid classes do nothing.
+ */
+const CARD_ROW = "grid grid-cols-[auto_1fr_auto] items-start gap-x-3 gap-y-1.5 p-3 md:table-row md:p-0";
+const CARD_CELL = "block md:table-cell md:px-4 md:py-2 md:align-middle";
+
 export function TransactionsTable({
   accountId,
   range,
@@ -408,7 +416,7 @@ export function TransactionsTable({
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Transactions</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
@@ -461,6 +469,7 @@ export function TransactionsTable({
         categories={categories}
         onChanged={load}
         initiallyOpen={initialReviewOpen}
+        refreshKey={transactions}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -556,9 +565,19 @@ export function TransactionsTable({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900">
+      {/* Below md the header is hidden (rows become cards), so its select-all moves up here. */}
+      {transactions.length > 0 && (
+        <label className="mb-2 flex items-center gap-2 text-xs text-slate-500 md:hidden">
+          <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} />
+          Select all on this page
+        </label>
+      )}
+
+      {/* One set of markup for both layouts: a table from md up, and below that each row is a
+          three-column grid card (checkbox | details | amount) -- see CARD_ROW / CARD_CELL. */}
+      <div className="rounded-lg border border-slate-200 md:overflow-x-auto dark:border-slate-800">
+        <table className="block min-w-full md:table md:divide-y md:divide-slate-200 dark:md:divide-slate-800">
+          <thead className="hidden bg-slate-50 md:table-header-group dark:bg-slate-900">
             <tr>
               <th className="px-4 py-2">
                 <input
@@ -579,17 +598,17 @@ export function TransactionsTable({
               <th className="px-4 py-2 text-right text-xs font-medium uppercase text-slate-500"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
+          <tbody className="block divide-y divide-slate-100 bg-white md:table-row-group dark:divide-slate-800 dark:bg-slate-950">
             {loading && (
-              <tr>
-                <td colSpan={columnCount} className="px-4 py-6 text-center text-sm text-slate-500">
+              <tr className="block md:table-row">
+                <td colSpan={columnCount} className="block px-4 py-6 text-center text-sm text-slate-500 md:table-cell">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && transactions.length === 0 && (
-              <tr>
-                <td colSpan={columnCount} className="px-4 py-6 text-center text-sm text-slate-500">
+              <tr className="block md:table-row">
+                <td colSpan={columnCount} className="block px-4 py-6 text-center text-sm text-slate-500 md:table-cell">
                   No transactions found.
                 </td>
               </tr>
@@ -597,15 +616,15 @@ export function TransactionsTable({
 
             {transactions.map((t) =>
               editingId === t.id && draft ? (
-                <tr key={t.id} className="bg-indigo-50/50 dark:bg-indigo-950/20">
-                  <td className="px-4 py-2">
+                <tr key={t.id} className={`${CARD_ROW} bg-indigo-50/50 dark:bg-indigo-950/20`}>
+                  <td className={`${CARD_CELL} col-start-1 row-start-1`}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(t.id)}
                       onChange={() => toggleSelected(t.id)}
                     />
                   </td>
-                  <td className="px-4 py-2">
+                  <td className={`${CARD_CELL} col-start-2 row-start-2`}>
                     <input
                       type="date"
                       value={draft.date}
@@ -613,14 +632,14 @@ export function TransactionsTable({
                       className={inputClass}
                     />
                   </td>
-                  <td className="px-4 py-2" colSpan={showAccountColumn ? 2 : 1}>
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-1`} colSpan={showAccountColumn ? 2 : 1}>
                     <input
                       value={draft.description}
                       onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                       className={inputClass}
                     />
                   </td>
-                  <td className="px-4 py-2">
+                  <td className={`${CARD_CELL} col-start-3 row-start-2`}>
                     <div className="flex items-center gap-1">
                       <select
                         value={draft.type}
@@ -640,7 +659,7 @@ export function TransactionsTable({
                       />
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-xs text-slate-500">
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-3 text-xs text-slate-500`}>
                     {t.category && colorByCategory[t.category] && (
                       <span
                         className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
@@ -649,10 +668,10 @@ export function TransactionsTable({
                     )}
                     {t.category ?? "Uncategorized"}
                   </td>
-                  <td className="px-4 py-2 text-xs text-slate-500">
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-4 text-xs text-slate-500`}>
                     {t.tags.length > 0 ? t.tags.join(", ") : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-2 text-right">
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-5 whitespace-nowrap md:text-right`}>
                     <button
                       disabled={saving}
                       onClick={() => saveEdit(t)}
@@ -670,23 +689,27 @@ export function TransactionsTable({
                   </td>
                 </tr>
               ) : (
-                <tr key={t.id} className={selectedIds.has(t.id) ? "bg-indigo-50/30 dark:bg-indigo-950/10" : undefined}>
-                  <td className="px-4 py-2">
+                <tr key={t.id} className={`${CARD_ROW} ${selectedIds.has(t.id) ? "bg-indigo-50/30 dark:bg-indigo-950/10" : ""}`}>
+                  <td className={`${CARD_CELL} col-start-1 row-start-1`}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(t.id)}
                       onChange={() => toggleSelected(t.id)}
                     />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
+                  <td className={`${CARD_CELL} col-start-2 row-start-2 whitespace-nowrap text-xs text-slate-500 md:text-sm md:text-slate-600 dark:md:text-slate-400`}>
                     {t.date}
+                    {/* The account column is hidden on a card, so the name rides along with the date. */}
+                    {showAccountColumn && <span className="md:hidden"> · {t.account_name}</span>}
                   </td>
-                  <td className="px-4 py-2 text-sm text-slate-800 dark:text-slate-200">{t.description}</td>
+                  <td className={`${CARD_CELL} col-start-2 row-start-1 text-sm font-medium text-slate-800 md:font-normal dark:text-slate-200`}>
+                    {t.description}
+                  </td>
                   {showAccountColumn && (
-                    <td className="whitespace-nowrap px-4 py-2 text-xs text-slate-500">{t.account_name}</td>
+                    <td className="hidden whitespace-nowrap px-4 py-2 text-xs text-slate-500 md:table-cell">{t.account_name}</td>
                   )}
                   <td
-                    className={`whitespace-nowrap px-4 py-2 text-right text-sm font-medium ${
+                    className={`${CARD_CELL} col-start-3 row-span-2 row-start-1 whitespace-nowrap text-right text-sm font-medium ${
                       t.type === "credit" ? "text-emerald-600" : "text-slate-800 dark:text-slate-200"
                     }`}
                   >
@@ -717,7 +740,7 @@ export function TransactionsTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-sm">
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-3 text-sm`}>
                     {t.category && colorByCategory[t.category] && (
                       <span
                         className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
@@ -742,7 +765,7 @@ export function TransactionsTable({
                       <span className="ml-2 text-[10px] uppercase text-slate-400">{t.category_source}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-sm">
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-4 text-sm`}>
                     <div className="flex flex-wrap items-center gap-1">
                       {t.tags.map((tag) => (
                         <span
@@ -771,7 +794,7 @@ export function TransactionsTable({
                       />
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-2 text-right">
+                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-5 -ml-2 whitespace-nowrap md:ml-0 md:text-right`}>
                     {t.has_receipt ? (
                       <>
                         <a

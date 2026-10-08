@@ -134,6 +134,20 @@ unambiguous. Creating a rule doesn't touch transactions server-side; the Manage 
 a category someone chose. `GET /keyword-rules/preview` scans every transaction in Java (fine at
 personal scale). Backups include the rules: `BackupData.CURRENT_VERSION` 7 → 8.
 
+**The transactions table is one set of markup with two layouts.** Below `md`, `CARD_ROW` makes
+each `<tr>` a `grid-cols-[auto_1fr_auto]` card and `CARD_CELL` makes each `<td>` a block placed by
+`col-start`/`row-start` classes (checkbox | description + date line | amount spanning two rows;
+category, tags, actions as full-width lines); `md:` restores `table`/`table-row`/`table-cell`, so
+the desktop table is untouched. `thead` is hidden on phones, so a `md:hidden` "select all on this
+page" sits above the list; the account column is hidden there too and its name rides along on the
+date line. Chosen over a separate card component so a new column or action can't be added to one
+layout and forgotten in the other. The header filter bar needed `flex-wrap` — it, not the table,
+was what pushed the page to 529px.
+
+> The review panel takes `refreshKey={transactions}`: any table change (a row's category set
+> directly, a delete, a reload) yields a new array and re-fetches the queue. Before this it only
+> refreshed after its own Apply, so categorizing from a row left a stale "N need a category".
+
 **The uncategorized review queue is read-only; answering reuses `bulk-category`.**
 `GET /api/transactions/uncategorized-merchants` (`UncategorizedReviewController` →
 `UncategorizedReviewService`) groups `findUncategorized(accountId)` by `MerchantNormalizer` key

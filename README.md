@@ -872,6 +872,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Phone-friendly transactions~~ — on a phone each transaction is a stacked card (description and
+  amount, date and account, category, tags, actions) instead of a table that scrolls sideways
 - ~~Custom keyword rules~~ — your own "description contains X → category" rules on the Manage page,
   checked after merchant memory and before the built-in rules, with a preview of what a keyword
   matches before you save it; a new rule fills in matching uncategorized transactions right away
