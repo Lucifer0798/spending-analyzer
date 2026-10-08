@@ -291,6 +291,12 @@ public class TransactionRepository {
         return findUncategorized(null);
     }
 
+    /** Every transaction whose category came from {@code source} ('rule', 'user', 'cache', ...). */
+    public List<Transaction> findByCategorySource(String source) {
+        return jdbc.query(SELECT_WITH_ACCOUNT + " WHERE t.category_source = :source ORDER BY t.id",
+                new MapSqlParameterSource("source", source), ROW_MAPPER);
+    }
+
     /** As {@link #findUncategorized()}, limited to one account when {@code accountId} is non-null. */
     public List<Transaction> findUncategorized(Long accountId) {
         String sql = SELECT_WITH_ACCOUNT + " WHERE t.category IS NULL"

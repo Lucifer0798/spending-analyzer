@@ -569,6 +569,20 @@ export interface KeywordRule {
   created_at: string;
 }
 
+/** What re-applying the rules to rule-categorized transactions did, or would do. */
+export interface ReapplyRulesResult {
+  /** True when nothing was written -- a preview. */
+  dryRun: boolean;
+  /** Transactions a rule had categorized. */
+  checked: number;
+  changed: number;
+  /** No rule supports their category any more; they go back to uncategorized. */
+  cleared: number;
+  unchanged: number;
+  /** Up to ten of the changes; `to` is null for "back to uncategorized". */
+  examples: { id: number; description: string; from: string | null; to: string | null }[];
+}
+
 /** What a keyword would match before it's saved as a rule. */
 export interface KeywordRulePreview {
   keyword: string;
