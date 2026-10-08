@@ -11,6 +11,9 @@ interface Props {
   onChanged: () => void;
   /** Start expanded -- when arriving from "Review now" after an import. */
   initiallyOpen?: boolean;
+  /** Any value that changes whenever the page's transactions change -- a category set on a row,
+   *  a delete, an import -- so the queue re-fetches instead of showing stale counts. */
+  refreshKey?: unknown;
 }
 
 function shortDate(iso: string) {
@@ -27,7 +30,7 @@ function shortDate(iso: string) {
  * transaction in the row at once and teaches merchant memory, so the next statement from the same
  * merchant is categorized automatically. Renders nothing when there's nothing left to review.
  */
-export function UncategorizedReview({ accountId, categories, onChanged, initiallyOpen = false }: Props) {
+export function UncategorizedReview({ accountId, categories, onChanged, initiallyOpen = false, refreshKey }: Props) {
   const [groups, setGroups] = useState<UncategorizedMerchant[] | null>(null);
   const [open, setOpen] = useState(initiallyOpen);
   const [choices, setChoices] = useState<Record<string, string>>({});
@@ -41,7 +44,7 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
       .catch(() => setGroups([]));
   };
 
-  useEffect(load, [accountId]);
+  useEffect(load, [accountId, refreshKey]);
 
   if (!groups || groups.length === 0) {
     return lastDone ? (
