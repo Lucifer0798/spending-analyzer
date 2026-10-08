@@ -171,7 +171,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V24)
-  src/test/                 562 tests
+  src/test/                 565 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -294,6 +294,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/accounts/{id}/balances` | Log, list, or remove an account's balance entries |
 | `GET` `POST` `PATCH` `DELETE` | `/categories` | Manage categories, including an optional rollup group and display color |
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
+| `POST` | `/categorize/reapply-rules` | Re-decide transactions a rule categorized, after rules change; `dryRun=true` (default) only reports. Categories you set are never touched |
 | `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
@@ -795,7 +796,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (562).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (565).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -872,6 +873,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Re-apply rules to past transactions~~ — after adding, changing or removing a keyword rule,
+  re-check the transactions a rule categorized earlier: preview what would move, then apply.
+  Categories you or merchant memory set are never touched
 - ~~Custom keyword rules~~ — your own "description contains X → category" rules on the Manage page,
   checked after merchant memory and before the built-in rules, with a preview of what a keyword
   matches before you save it; a new rule fills in matching uncategorized transactions right away

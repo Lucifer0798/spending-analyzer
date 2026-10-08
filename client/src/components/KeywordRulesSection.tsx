@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
-import { createKeywordRule, deleteKeywordRule, fetchKeywordRules, previewKeywordRule, runCategorization } from "../api";
-import type { KeywordRule, KeywordRulePreview } from "../types";
+import {
+  createKeywordRule,
+  deleteKeywordRule,
+  fetchKeywordRules,
+  previewKeywordRule,
+  reapplyRules,
+  runCategorization,
+} from "../api";
+import type { KeywordRule, KeywordRulePreview, ReapplyRulesResult } from "../types";
 
 interface Props {
   /** Category names to offer. */
@@ -25,6 +32,9 @@ export function KeywordRulesSection({ categories }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // A dry-run result awaiting confirmation; null when no re-apply is in progress.
+  const [reapplyPreview, setReapplyPreview] = useState<ReapplyRulesResult | null>(null);
+  const [reapplying, setReapplying] = useState(false);
 
   const load = () => {
     fetchKeywordRules().then(setRules).catch(() => setRules([]));
@@ -72,12 +82,49 @@ export function KeywordRulesSection({ categories }: Props) {
     setNotice(null);
     try {
       await deleteKeywordRule(rule.id);
-      setNotice(`Removed "${rule.keyword}". Transactions it already categorized keep their category.`);
+      setNotice(
+        `Removed "${rule.keyword}". Transactions it already categorized keep their category until you re-apply rules below.`
+      );
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to remove the rule.");
     }
   };
+
+  /** Step one: ask what would change, without changing anything. */
+  const previewReapply = async () => {
+    setError(null);
+    setNotice(null);
+    setReapplying(true);
+    try {
+      setReapplyPreview(await reapplyRules(true));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't check the rules.");
+    } finally {
+      setReapplying(false);
+    }
+  };
+
+  /** Step two, after the user has seen the preview. */
+  const confirmReapply = async () => {
+    setReapplying(true);
+    setError(null);
+    try {
+      const r = await reapplyRules(false);
+      setReapplyPreview(null);
+      setNotice(
+        `Re-applied rules: ${r.changed} recategorized` +
+          (r.cleared > 0 ? `, ${r.cleared} back to uncategorized (see the review on the Transactions page)` : "") +
+          "."
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't re-apply the rules.");
+    } finally {
+      setReapplying(false);
+    }
+  };
+
+  const nothingToChange = reapplyPreview !== null && reapplyPreview.changed + reapplyPreview.cleared === 0;
 
   return (
     <section className="mt-10">
@@ -157,6 +204,75 @@ export function KeywordRulesSection({ categories }: Props) {
           )}
         </p>
       )}
+
+      <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-slate-600 dark:text-slate-400">
+            Changed your rules? Re-check transactions a rule categorized earlier — ones you or
+            merchant memory set are never touched.
+          </p>
+          {reapplyPreview === null && (
+            <button
+              disabled={reapplying}
+              onClick={previewReapply}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {reapplying ? "Checking…" : "Re-apply rules to past transactions"}
+            </button>
+          )}
+        </div>
+
+        {reapplyPreview !== null && (
+          <div className="mt-3">
+            {nothingToChange ? (
+              <p className="text-slate-600 dark:text-slate-400">
+                All {reapplyPreview.checked} rule-categorized transactions already match your current rules.
+              </p>
+            ) : (
+              <>
+                <p className="text-slate-800 dark:text-slate-200">
+                  Of {reapplyPreview.checked} rule-categorized transactions, <strong>{reapplyPreview.changed}</strong>{" "}
+                  would change category
+                  {reapplyPreview.cleared > 0 && (
+                    <>
+                      {" "}and <strong>{reapplyPreview.cleared}</strong> would go back to uncategorized (no rule matches them now)
+                    </>
+                  )}
+                  .
+                </p>
+                <ul className="mt-2 space-y-0.5 text-xs text-slate-600 dark:text-slate-400">
+                  {reapplyPreview.examples.map((c) => (
+                    <li key={c.id} className="truncate">
+                      {c.description}: {c.from ?? "Uncategorized"} → <strong>{c.to ?? "Uncategorized"}</strong>
+                    </li>
+                  ))}
+                  {reapplyPreview.changed + reapplyPreview.cleared > reapplyPreview.examples.length && (
+                    <li>…and {reapplyPreview.changed + reapplyPreview.cleared - reapplyPreview.examples.length} more</li>
+                  )}
+                </ul>
+              </>
+            )}
+            <div className="mt-3 flex gap-2">
+              {!nothingToChange && (
+                <button
+                  disabled={reapplying}
+                  onClick={confirmReapply}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {reapplying ? "Applying…" : "Apply these changes"}
+                </button>
+              )}
+              <button
+                disabled={reapplying}
+                onClick={() => setReapplyPreview(null)}
+                className="rounded-md px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                {nothingToChange ? "Close" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

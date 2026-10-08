@@ -118,6 +118,19 @@ correction path and per-entry *forget* are the escape hatches.
 used before its built-in rules; nothing writes them now, but older memory and imported files still
 carry them, and they still never overwrite a category fixed by hand.
 
+**Re-applying rules only ever touches `category_source = 'rule'` rows.** `CategorizationService`
+has one private `Decider` (memory → keyword rules → built-in, built once per run) shared by
+`categorizeAll` and `reapplyRules`, so the two can't disagree about precedence.
+`POST /api/categorize/reapply-rules` loads `findByCategorySource("rule")` and re-decides each;
+'user', 'cache' (memory), 'import' (from the file) and legacy 'ai' rows are never considered.
+A rule row no rule supports any more goes back to **uncategorized** (category and source null)
+rather than keeping a label nothing justifies, which drops it into the review queue. A row that
+memory now answers becomes `cache` — memory outranks rules here exactly as at import. `dryRun`
+defaults to true so a stray POST can't rewrite anything; the UI previews (counts plus up to 10
+examples), then confirms with `dryRun=false`. `@Transactional`, and idempotent — a second run
+changes nothing. Deleting a keyword rule deliberately does *not* re-apply on its own: the user
+sees what would move first.
+
 **Keyword rules sit between merchant memory and the built-in rules.** `keyword_rules` (V24:
 `keyword UNIQUE COLLATE NOCASE`, category by name) is loaded once per `categorizeAll` into a
 `KeywordRuleMatcher`, ordered longest keyword first then oldest. Precedence is memory → keyword

@@ -21,6 +21,7 @@ import type {
   GoalProgress,
   KeywordRule,
   KeywordRulePreview,
+  ReapplyRulesResult,
   MerchantImportMode,
   MerchantImportResult,
   MerchantMemory,
@@ -596,6 +597,14 @@ export function deleteKeywordRule(id: number) {
 
 export function previewKeywordRule(keyword: string) {
   return request<KeywordRulePreview>(`/keyword-rules/preview${qs({ keyword })}`);
+}
+
+/**
+ * Re-decides transactions a rule categorized, against today's memory and rules. Only rule-set rows
+ * are considered -- categories you set are never touched. `dryRun` (the default) only reports.
+ */
+export function reapplyRules(dryRun = true) {
+  return request<ReapplyRulesResult>(`/categorize/reapply-rules${qs({ dryRun })}`, { method: "POST" });
 }
 
 export function runCategorization() {
