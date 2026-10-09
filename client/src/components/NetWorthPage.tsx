@@ -3,6 +3,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import {
   clearNetWorthTarget,
   deleteAccountBalance,
+  exportUrl,
   fetchAccountBalances,
   fetchAccounts,
   fetchNetWorth,
@@ -19,6 +20,7 @@ import type {
   NetWorthTargetProgress,
 } from "../types";
 import { accountTypeLabel, currency } from "../format";
+import { ExportLink } from "./ExportLink";
 
 const BLUE = "#2a78d6";
 const MUTED = "#898781";
@@ -467,9 +469,30 @@ export function NetWorthPage() {
     ? (netWorth.perCurrency ?? []).flatMap((c) => c.accounts)
     : netWorth.accounts;
 
+  // Anything logged at all -- across currencies too -- means there's something to download.
+  const hasHistory = netWorth.history.length > 0 || (netWorth.perCurrency ?? []).some((c) => c.history.length > 0);
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Net worth</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Net worth</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <ExportLink
+            compact
+            href={exportUrl("net-worth")}
+            label="Export history CSV"
+            disabled={!hasHistory}
+            title="Log a balance first"
+          />
+          <ExportLink
+            compact
+            href={exportUrl("balances")}
+            label="Export balances CSV"
+            disabled={!hasHistory}
+            title="Log a balance first"
+          />
+        </div>
+      </div>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
         Log each account's balance whenever you check it — this app tracks categorized spending,
         not live balances, so there's no automatic way to know what an account currently holds.

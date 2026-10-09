@@ -172,7 +172,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V24)
-  src/test/                 565 tests
+  src/test/                 568 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -285,6 +285,7 @@ All endpoints live under `/api`.
 | `GET` | `/export/monthly.csv` | Download spend per month |
 | `GET` | `/export/predictions.csv` | Download the forecast |
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
+| `GET` | `/export/net-worth.csv` `/export/balances.csv` | Download net worth over time (as the Net Worth page charts it, one series per currency) and every logged account balance |
 | `GET` | `/export/merchants.csv` | Download merchant memory, in the format `/merchants/import` reads back |
 | `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances and target, receipts |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
@@ -797,7 +798,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (565).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (568).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -874,6 +875,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Net worth CSV export~~ — download net worth over time and every logged account balance from the
+  Net Worth page, matching the other exports
 - ~~AWS deployment~~ — the VM guide (now `deploy/server`) covers the AWS Free plan on an EC2
   t4g.micro alongside Oracle; `setup.sh` adds swap on 1 GB machines and only touches the firewall
   where the image blocks ports

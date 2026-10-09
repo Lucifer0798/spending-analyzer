@@ -118,6 +118,15 @@ correction path and per-entry *forget* are the escape hatches.
 used before its built-in rules; nothing writes them now, but older memory and imported files still
 carry them, and they still never overwrite a category fixed by hand.
 
+**The net worth exports reuse `NetWorthService`, not a second calculation.** `net-worth.csv` is
+`compute()`'s history — each account's last balance carried forward, archived accounts left out —
+written as `date,currency,net_worth`; with one currency `compute()` returns a flat history, which
+the controller wraps as a single `CurrencyNetWorth` so `CsvExportService.netWorthHistory` only
+ever sees per-currency series. Several currencies come out as separate series in the same file,
+never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
+account filter, like the page itself; nothing logged gives a header-only file, and the page
+disables both links until there's history.
+
 **Re-applying rules only ever touches `category_source = 'rule'` rows.** `CategorizationService`
 has one private `Decider` (memory → keyword rules → built-in, built once per run) shared by
 `categorizeAll` and `reapplyRules`, so the two can't disagree about precedence.

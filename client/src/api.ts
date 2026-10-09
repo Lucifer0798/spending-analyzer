@@ -753,7 +753,15 @@ export function resetAllData() {
 
 // --- export -----------------------------------------------------------------
 
-export type ExportKind = "transactions" | "categories" | "monthly" | "predictions" | "recommendations" | "merchants";
+export type ExportKind =
+  | "transactions"
+  | "categories"
+  | "monthly"
+  | "predictions"
+  | "recommendations"
+  | "merchants"
+  | "net-worth"
+  | "balances";
 
 /**
  * Builds a download URL rather than fetching. The browser handles the response, which keeps
