@@ -98,6 +98,14 @@ function App() {
     setTab("transactions");
   };
 
+  // A calendar day click: narrow the shared date filter to that day and show its transactions.
+  // The filter stays set afterwards, visible in the picker, so getting back is one click on it.
+  const openDay = (date: string) => {
+    setTransactionSearch("");
+    setRange({ from: date, to: date });
+    setTab("transactions");
+  };
+
   const handleReset = async () => {
     if (!confirm("This will delete all imported transactions. Accounts and categories are kept. Continue?")) {
       return;
@@ -234,7 +242,7 @@ function App() {
             }}
           />
         )}
-        {tab === "dashboard" && <Dashboard accountId={accountId} range={range} onOpenMerchant={openMerchant} />}
+        {tab === "dashboard" && <Dashboard accountId={accountId} range={range} onOpenMerchant={openMerchant} onOpenDay={openDay} />}
         {tab === "transactions" && (
           <TransactionsTable
             accountId={accountId}

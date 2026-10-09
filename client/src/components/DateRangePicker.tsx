@@ -52,19 +52,28 @@ function rangeForPreset(preset: PresetId, anchorDate: string): DateRangeValue {
   }
 }
 
+function sameRange(a: DateRangeValue, b: DateRangeValue) {
+  return a.from === b.from && a.to === b.to;
+}
+
 export function DateRangePicker({ value, bounds, onChange }: Props) {
-  const [preset, setPreset] = useState<PresetId>("all");
-  const [showCustom, setShowCustom] = useState(false);
+  // Only remembers "the user picked Custom… and hasn't typed dates yet". Everything else is
+  // derived from `value`, so a range set from elsewhere -- clicking a day on the Dashboard's
+  // calendar, say -- shows here as what it is instead of the picker still claiming "All time".
+  const [customOpen, setCustomOpen] = useState(false);
 
   const anchor = bounds?.latest ?? iso(new Date());
 
+  const matchingPreset = PRESETS.find((p) => p.id !== "custom" && sameRange(rangeForPreset(p.id, anchor), value))?.id;
+  const preset: PresetId = customOpen || !matchingPreset ? "custom" : matchingPreset;
+  const showCustom = preset === "custom";
+
   const handlePreset = (id: PresetId) => {
-    setPreset(id);
     if (id === "custom") {
-      setShowCustom(true);
+      setCustomOpen(true);
       return;
     }
-    setShowCustom(false);
+    setCustomOpen(false);
     onChange(rangeForPreset(id, anchor));
   };
 

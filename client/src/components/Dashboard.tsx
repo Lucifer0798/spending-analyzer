@@ -20,11 +20,13 @@ import { BudgetsCard } from "./BudgetsCard";
 import { BudgetVsIncomeCard } from "./BudgetVsIncomeCard";
 import { ComparisonCard } from "./ComparisonCard";
 import { TopMerchantsCard } from "./TopMerchantsCard";
+import { SpendingCalendar } from "./SpendingCalendar";
 
 interface Props {
   accountId: number | null;
   range: DateRangeValue;
   onOpenMerchant: (merchant: string) => void;
+  onOpenDay: (date: string) => void;
 }
 
 const BLUE = "#2a78d6";
@@ -170,7 +172,7 @@ function groupTotals(categoryTotals: CategoryTotal[], groupByCategory: Record<st
   return Array.from(byGroup, ([category, v]) => ({ category, total: v.total, count: v.count }));
 }
 
-export function Dashboard({ accountId, range, onOpenMerchant }: Props) {
+export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -344,6 +346,9 @@ export function Dashboard({ accountId, range, onOpenMerchant }: Props) {
 
       {/* Renders nothing without spend in range, or across mixed currencies. */}
       <TopMerchantsCard accountId={accountId} range={range} onOpenMerchant={onOpenMerchant} />
+
+      {/* Same: nothing without spend in range, or across mixed currencies. */}
+      <SpendingCalendar accountId={accountId} range={range} onOpenDay={onOpenDay} />
 
       <MonthlyTrendChart
         data={summary.monthlyTotals}
