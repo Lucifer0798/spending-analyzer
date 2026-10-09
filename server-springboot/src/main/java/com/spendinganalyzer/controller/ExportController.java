@@ -3,11 +3,15 @@ package com.spendinganalyzer.controller;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.model.Category;
+import com.spendinganalyzer.dto.CurrencyNetWorth;
+import com.spendinganalyzer.dto.NetWorthResponse;
+import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.CsvExportService;
 import com.spendinganalyzer.service.InsightsService;
+import com.spendinganalyzer.service.NetWorthService;
 import com.spendinganalyzer.service.StatsService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -53,6 +57,8 @@ public class ExportController {
     private final InsightsService insightsService;
     private final CategoryRepository categoryRepository;
     private final MerchantCategoryRepository merchantRepository;
+    private final NetWorthService netWorthService;
+    private final AccountBalanceRepository accountBalances;
     private final CsvExportService csv;
 
     public ExportController(
@@ -61,6 +67,8 @@ public class ExportController {
             InsightsService insightsService,
             CategoryRepository categoryRepository,
             MerchantCategoryRepository merchantRepository,
+            NetWorthService netWorthService,
+            AccountBalanceRepository accountBalances,
             CsvExportService csv
     ) {
         this.transactionRepository = transactionRepository;
@@ -68,6 +76,8 @@ public class ExportController {
         this.insightsService = insightsService;
         this.categoryRepository = categoryRepository;
         this.merchantRepository = merchantRepository;
+        this.netWorthService = netWorthService;
+        this.accountBalances = accountBalances;
         this.csv = csv;
     }
 
@@ -154,6 +164,28 @@ public class ExportController {
         return attachment("recommendations", csv.recommendations(
                 payload == null ? List.of() : payload.recommendations(), cached.generatedAt(),
                 currency != null ? currency : "USD"));
+    }
+
+    /**
+     * Net worth over time, as the Net Worth page charts it. Not account- or date-scoped, like the
+     * page itself. A single currency comes back as one series; several come back side by side,
+     * each with its own currency column, never summed into one.
+     */
+    @GetMapping("/net-worth.csv")
+    public ResponseEntity<byte[]> netWorth() {
+        NetWorthResponse nw = netWorthService.compute();
+        List<CurrencyNetWorth> series = nw.perCurrency() != null
+                ? nw.perCurrency()
+                : nw.history().isEmpty()
+                        ? List.of()
+                        : List.of(new CurrencyNetWorth(nw.currency(), nw.total(), nw.accounts(), nw.history(), null, null));
+        return attachment("net-worth", csv.netWorthHistory(series));
+    }
+
+    /** Every balance logged for an active (non-archived) account -- what the history is built from. */
+    @GetMapping("/balances.csv")
+    public ResponseEntity<byte[]> balances() {
+        return attachment("account-balances", csv.accountBalances(accountBalances.findAllForActiveAccounts()));
     }
 
     /**

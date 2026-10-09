@@ -1,11 +1,14 @@
 package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.CategoryTotal;
+import com.spendinganalyzer.dto.CurrencyNetWorth;
 import com.spendinganalyzer.dto.MonthlyTotal;
+import com.spendinganalyzer.dto.NetWorthPoint;
 import com.spendinganalyzer.dto.Prediction;
 import com.spendinganalyzer.dto.Recommendation;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.repository.AccountBalanceRepository;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.springframework.stereotype.Service;
@@ -168,6 +171,31 @@ public class CsvExportService {
     }
 
     /** Spend per month, matching the dashboard's trend line. */
+    /**
+     * Net worth over time, one row per point on the Net Worth page's chart -- each account's
+     * last-known balance carried forward, archived accounts left out (see NetWorthService). One
+     * series per currency, side by side in the same file: a currency column instead of a total,
+     * since balances in different currencies are never added together.
+     */
+    public byte[] netWorthHistory(List<CurrencyNetWorth> perCurrency) {
+        return toCsv(new String[]{"date", "currency", "net_worth"}, printer -> {
+            for (CurrencyNetWorth c : perCurrency) {
+                for (NetWorthPoint p : c.history()) {
+                    printer.printRecord(p.date(), c.currency(), p.total());
+                }
+            }
+        });
+    }
+
+    /** Every logged account balance -- the raw entries the net worth history is built from. */
+    public byte[] accountBalances(List<AccountBalanceRepository.BalanceRow> rows) {
+        return toCsv(new String[]{"date", "account", "currency", "balance"}, printer -> {
+            for (AccountBalanceRepository.BalanceRow r : rows) {
+                printer.printRecord(r.date(), r.accountName(), r.currency(), r.balance());
+            }
+        });
+    }
+
     public byte[] monthlyTotals(List<MonthlyTotal> totals, String currency) {
         return toCsv(new String[]{"month", "total", "currency"}, printer -> {
             for (MonthlyTotal m : totals) {
