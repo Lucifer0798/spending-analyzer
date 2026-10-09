@@ -3,6 +3,7 @@ package com.spendinganalyzer.service;
 import com.spendinganalyzer.dto.CategoryComparison;
 import com.spendinganalyzer.dto.CategoryMonthlySeries;
 import com.spendinganalyzer.dto.CategoryTotal;
+import com.spendinganalyzer.dto.DailyTotal;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.MerchantTotal;
 import com.spendinganalyzer.dto.MonthlyTotal;
@@ -337,6 +338,19 @@ public class StatsService {
         totals.sort(Comparator.comparingDouble(MerchantTotal::total).reversed()
                 .thenComparing(MerchantTotal::merchant));
         return totals;
+    }
+
+    /**
+     * Spend per calendar day in range, only days that had any -- the client fills the gaps, since a
+     * day with nothing is the overwhelmingly common case and not worth a row each. Same spend
+     * definition as every other total here (SPEND_FILTER, EFFECTIVE_AMOUNT).
+     */
+    public List<DailyTotal> computeDailyTotals(Long accountId, DateRange range, String currency) {
+        String sql = "SELECT t.date AS day, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total, COUNT(*) AS count "
+                + SPEND_FILTER + filters(accountId, range, currency)
+                + " GROUP BY t.date ORDER BY t.date";
+        return jdbc.query(sql, params(accountId, range, currency), (rs, rowNum) ->
+                new DailyTotal(rs.getString("day"), rs.getDouble("total"), rs.getInt("count")));
     }
 
     /** Every calendar year with at least one transaction of any kind, oldest first. */

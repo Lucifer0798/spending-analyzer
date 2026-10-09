@@ -10,11 +10,37 @@
      separation against its own surface -- the dark pair isn't just the light pair reused. */
   --series-1: #2a78d6;
   --series-2: #eb6834;
+
+  /* Sequential ramp for the spending calendar: one hue (blue), five steps, least -> most spend.
+     The least step recedes toward the surface; each step carries an ink color that clears 5.3:1
+     on it (WCAG, checked), so day numbers read on every shade. */
+  --seq-0: #b7d3f6;
+  --seq-1: #86b6ef;
+  --seq-2: #256abf;
+  --seq-3: #184f95;
+  --seq-4: #0d366b;
+  --seq-ink-0: #0d366b;
+  --seq-ink-1: #0d366b;
+  --seq-ink-2: #ffffff;
+  --seq-ink-3: #ffffff;
+  --seq-ink-4: #ffffff;
 }
 
 .dark {
   --series-1: #3987e5;
   --series-2: #d95926;
+
+  /* Dark surface: the same ramp run the other way, so "least" still recedes toward the surface. */
+  --seq-0: #0d366b;
+  --seq-1: #184f95;
+  --seq-2: #256abf;
+  --seq-3: #86b6ef;
+  --seq-4: #cde2fb;
+  --seq-ink-0: #cde2fb;
+  --seq-ink-1: #ffffff;
+  --seq-ink-2: #ffffff;
+  --seq-ink-3: #0d366b;
+  --seq-ink-4: #0d366b;
 }
 
 body {

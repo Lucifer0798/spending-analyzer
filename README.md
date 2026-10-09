@@ -172,7 +172,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V24)
-  src/test/                 565 tests
+  src/test/                 568 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -265,6 +265,7 @@ All endpoints live under `/api`.
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
+| `GET` | `/daily-spend` | Spend per day in range (only days with spend), for the Dashboard's calendar |
 | `GET` | `/top-merchants` | Merchants ranked by spend in the active range, branches of a chain counted as one (`limit`, default 10) |
 | `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
@@ -797,7 +798,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (565).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (568).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -874,6 +875,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Spending calendar~~ — a month grid on the Dashboard shading each day by how much was spent,
+  with the average per weekday underneath; click a day to see its transactions
 - ~~AWS deployment~~ — the VM guide (now `deploy/server`) covers the AWS Free plan on an EC2
   t4g.micro alongside Oracle; `setup.sh` adds swap on 1 GB machines and only touches the firewall
   where the image blocks ports

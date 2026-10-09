@@ -118,6 +118,25 @@ correction path and per-entry *forget* are the escape hatches.
 used before its built-in rules; nothing writes them now, but older memory and imported files still
 carry them, and they still never overwrite a category fixed by hand.
 
+**The spending calendar shades days on one scale for the whole range, by quantile.**
+`GET /api/daily-spend` returns only days with spend (`StatsService.computeDailyTotals`, same
+`SPEND_FILTER`/`EFFECTIVE_AMOUNT` as every total; not applicable across mixed currencies), and
+`SpendingCalendar` fills the gaps. Step bounds are the 20/40/60/80th percentiles of every spending
+day *in range*, not per month — so a shade means the same amount as you page through months, and
+one $640 flight doesn't push every coffee day into the lightest step the way a max-based scale
+would. The cost: very different amounts can share the top step; the tooltip gives the exact figure.
+Colors are the dataviz palette's blue ramp as `--seq-0..4` with matching `--seq-ink-0..4`, run in
+reverse under `.dark` so "least" always recedes toward the surface; every ink/fill pair was checked
+at >= 5.3:1 (step 300 `#3987e5` failed 4.5:1 with white, so step 500 `#256abf` replaced it). Weekday
+averages count *every* such weekday in the month, zero days included. The month shown is derived
+(`picked` if still in range, else the newest month), never reset in an effect. A day click sets the
+shared range to that day and opens Transactions.
+
+> **`DateRangePicker` derives its selection from `value`.** It used to keep its own `preset` state,
+> so a range set from elsewhere (the calendar) left it claiming "All time" while a one-day filter was
+> active. Now it shows the preset whose range equals `value`, else "Custom…" with the dates; the only
+> state left is `customOpen` (picked Custom, dates not typed yet).
+
 **Re-applying rules only ever touches `category_source = 'rule'` rows.** `CategorizationService`
 has one private `Decider` (memory → keyword rules → built-in, built once per run) shared by
 `categorizeAll` and `reapplyRules`, so the two can't disagree about precedence.

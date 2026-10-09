@@ -132,6 +132,26 @@ public class InsightsController {
     }
 
     /**
+     * Spend per day for the Dashboard's calendar. Not applicable across mixed currencies -- a
+     * day's total would add unlike amounts -- the same refusal as every other total.
+     */
+    @GetMapping("/daily-spend")
+    public Map<String, Object> dailySpend(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return Map.of("applicable", false, "days", List.of());
+        }
+        return Map.of(
+                "applicable", true,
+                "currency", currency,
+                "days", statsService.computeDailyTotals(accountId, DateRange.of(from, to), null));
+    }
+
+    /**
      * Merchants ranked by spend in range. {@code limit} caps the list (default 10, at most 100);
      * {@code merchantCount} still reports how many there were in all.
      */
