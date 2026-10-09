@@ -1,5 +1,5 @@
-# Spending Analyzer on a single VM (written for an Oracle Cloud Always Free Ampere VM, but nothing
-# here is Oracle-specific). Two containers:
+# Spending Analyzer on a single Linux VM -- Oracle Cloud Always Free or AWS EC2, see README.md;
+# nothing here is provider-specific. Two containers:
 #   app   -- the published image, reachable only from caddy on this compose network
 #   caddy -- the only thing listening on the internet; terminates HTTPS with a free, automatically
 #            renewed Let's Encrypt certificate and forwards to app
