@@ -102,9 +102,10 @@ like Oracle's free Ampere VMs, Apple-silicon Macs or a Raspberry Pi. Only images
 smoke test on their own architecture are pushed, so `latest` is always one that booted and served.
 Pin the commit tag instead of `latest` if you want to control when you move.
 
-**Hosting it for free:** [`deploy/oracle/`](deploy/oracle/README.md) is a complete, step-by-step
-setup for an Oracle Cloud Always Free VM — HTTPS via Caddy, and a nightly backup pulled down to
-your Windows PC by [`deploy/backup/`](deploy/backup/Backup-SpendingAnalyzer.ps1).
+**Hosting it on a VM:** [`deploy/server/`](deploy/server/README.md) is a complete, step-by-step
+setup for one Linux VM — on Oracle Cloud Always Free (free indefinitely) or the AWS Free plan (free
+from credits, for up to 6 months) — with HTTPS via Caddy, and a nightly backup pulled down to your
+Windows PC by [`deploy/backup/`](deploy/backup/Backup-SpendingAnalyzer.ps1).
 
 To build it yourself from a checkout instead:
 
@@ -176,7 +177,7 @@ server-springboot/          Spring Boot backend
 
 Dockerfile                  Multi-stage build producing the single deployable image
 compose.yaml                Runs that image with a volume for the database
-deploy/oracle/              Free hosting on an Oracle Always Free VM, with Caddy for HTTPS
+deploy/server/              One-VM hosting (Oracle Always Free or AWS EC2), with Caddy for HTTPS
 deploy/backup/              Nightly backup of a deployed instance to a Windows PC
 
 .github/workflows/ci.yml    Client, server, Docker image (amd64 + arm64); publishes on main
@@ -241,7 +242,7 @@ none of them set.
 | `APP_AUTH_REQUIRED` | `false` | When true, the app refuses to start without a password. The Docker image sets this, so a container can never come up open |
 | `APP_AUTH_MAX_ATTEMPTS` | `5` | Consecutive wrong passwords from the same caller before it's locked out |
 | `APP_AUTH_LOCKOUT_MINUTES` | `15` | How long that lockout lasts |
-| `FORWARD_HEADERS_STRATEGY` | `none` | `native` trusts `X-Forwarded-For`/`-Proto` from a private-range proxy, so the login lockout sees real client addresses behind one. Only set it where nothing but the proxy can reach the app — `deploy/oracle` does |
+| `FORWARD_HEADERS_STRATEGY` | `none` | `native` trusts `X-Forwarded-For`/`-Proto` from a private-range proxy, so the login lockout sees real client addresses behind one. Only set it where nothing but the proxy can reach the app — `deploy/server` does |
 | `SPENDING_ANALYZER_DB` | `./data.sqlite` | Path to the SQLite file. The container points this at `/data` on a volume |
 | `PORT` | `4000` | Port the server listens on |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:[*]`, `http://127.0.0.1:[*]` | Comma-separated origin patterns allowed to call `/api`. Loopback on any port by default, because Vite moves off 5173 when it's taken. Blank turns CORS off, which is what the container does — packaged as one artifact the frontend is same-origin and needs no exception |
@@ -873,6 +874,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~AWS deployment~~ — the VM guide (now `deploy/server`) covers the AWS Free plan on an EC2
+  t4g.micro alongside Oracle; `setup.sh` adds swap on 1 GB machines and only touches the firewall
+  where the image blocks ports
 - ~~Re-apply rules to past transactions~~ — after adding, changing or removing a keyword rule,
   re-check the transactions a rule categorized earlier: preview what would move, then apply.
   Categories you or merchant memory set are never touched

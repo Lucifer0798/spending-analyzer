@@ -1374,13 +1374,32 @@ Both of these compiled cleanly and failed only at runtime:
 
 ## Deployment
 
-**`deploy/oracle` is the supported free host: one Oracle Always Free Ampere VM running the
-published image behind Caddy.** Render's free tier has no persistent disk (SQLite would be wiped
+**`deploy/server` runs the published image behind Caddy on one Linux VM — Oracle Always Free
+(the free host) or the AWS Free plan.** Render's free tier has no persistent disk (SQLite would be wiped
 on every restart) and Fly.io has no free tier for new orgs; Google's e2-micro is free but billable
 with no hard cap (budgets only alert, and spend caps don't cover Compute Engine). An un-upgraded
 Oracle Free Tier account *can't* be charged, which is why it was chosen. Its real risk is idle
 reclamation (CPU, network and — on A1 — memory all under 20% for 7 days), so the deploy is paired
 with nightly backups to the owner's PC; recovery is "new VM, restore newest backup".
+
+> **AWS is the same files with different first steps.** The AWS Free plan (accounts since mid-2025)
+> is credits, not the old 12-month free micro instance: up to $200, and the account *closes* at 6
+> months or when credits run out — it can't bill, but the VM and its EBS disk go with it, so the
+> guide treats the backup as the migration path (to Oracle) and says to watch Billing → Credits.
+> The recommended instance is **t4g.micro** (Arm, on the Free-plan list, ~$11/month all-in with
+> its IPv4 address and 20 GB gp3, so ~6 months fits the first $100); t4g.small also qualifies but
+> burns credits about twice as fast. App Runner / Beanstalk have no persistent disk and Fargate +
+> EFS puts SQLite on NFS, so neither fits. An Elastic IP keeps `SITE_ADDRESS` and the backup task
+> valid across stop/start.
+
+> **`setup.sh` only touches the firewall when an INPUT `REJECT` rule exists (Oracle), and does it
+> before Docker is installed.** Saving rules with `netfilter-persistent` after Docker has started
+> would freeze Docker's own chains into `rules.v4` and restore stale copies at boot; AWS's Ubuntu
+> has no REJECT rule, so it gets no iptables changes and no `iptables-persistent` at all. Memory
+> under 2000 MB with no swap gets a 2 GB `/swapfile` (with an idempotent fstab line): the JVM plus
+> Caddy fit in a t4g.micro's 1 GB but with little headroom. Tested in privileged Ubuntu 24.04
+> containers for both shapes, twice each (`sudo VAR=value cmd` works for the cloud images' `ubuntu`
+> user, whose `ALL` rule implies SETENV).
 
 > **The image is multi-arch because Oracle's free VMs are Arm.** CI builds natively on
 > `ubuntu-latest` (job `image`, name "Docker image") and `ubuntu-24.04-arm` (job `image-arm64`,
@@ -1394,14 +1413,14 @@ with nightly backups to the owner's PC; recovery is "new VM, restore newest back
 > in GHCR as harmless leftovers. `publish` only runs on pushes to main, so a PR can't exercise
 > it — check the first main run after changing it.
 
-> **`FORWARD_HEADERS_STRATEGY` is opt-in (`none` by default) and `deploy/oracle` sets `native`.**
+> **`FORWARD_HEADERS_STRATEGY` is opt-in (`none` by default) and `deploy/server` sets `native`.**
 > Behind Caddy, `getRemoteAddr()` is Caddy's container IP, so `LoginAttemptLimiter` would lock
 > *everyone* out after five wrong guesses from anyone. `native` makes Tomcat's RemoteIpValve take
 > the client address (and https, so cookies get `Secure` and Spring adds HSTS) from
 > `X-Forwarded-*` — but only from private-range callers, its default trusted list. That is
 > exactly why it can't be the image default: `docker run -p 4000:4000` exposed directly makes
 > outside callers arrive from Docker's bridge gateway, a private address, letting them forge
-> `X-Forwarded-For` to dodge the lockout. In `deploy/oracle` the app publishes no port, so only
+> `X-Forwarded-For` to dodge the lockout. In `deploy/server` the app publishes no port, so only
 > Caddy can reach it, and Caddy overwrites incoming `X-Forwarded-For` with the real peer address.
 > Verified live: without it a second client is locked out too (429); with it only the guessing
 > client is; through the real Caddy stack a forged `X-Forwarded-For` doesn't escape the lockout,
