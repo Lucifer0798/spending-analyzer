@@ -366,6 +366,14 @@ export interface SummaryResponse {
   perCurrency: CurrencyBreakdown[] | null;
 }
 
+/** Spend per day for the Dashboard calendar; only days with spend are listed. */
+export interface DailySpend {
+  /** False when "all accounts" spans more than one currency. */
+  applicable: boolean;
+  currency?: string;
+  days: { date: string; total: number; count: number }[];
+}
+
 /** Spend at one merchant -- branches and order references counted as one place. */
 export interface MerchantTotal {
   merchant: string;
