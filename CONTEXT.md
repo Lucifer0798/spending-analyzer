@@ -126,6 +126,24 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**The category drill-down is assembled from the dashboard's own queries.**
+`CategoryDetailService` uses `computeCategoryTotals` (total, count, share), `computeComparison`
+(the change — null unless the range has both ends), `computeMonthlyTotals` for the timeline with
+the new `computeMonthlyTotalsForCategory` mapped onto it (so a month the category skipped is 0,
+not missing, and the per-month average divides by every month with spend), the new
+category-filtered `computeMerchantTotals` overload, and `transactions.find(category, ...)` for the
+latest ten. It therefore always agrees with the bar it was opened from. `GET /category-detail`
+404s for a category that doesn't exist; mixed currencies on "all accounts" are not applicable.
+Only the main category chart's bars open it (`onSelect`) — never the group rollup (a group isn't a
+category) or "Uncategorized" — and a "View a category…" select under the chart gives keyboard
+users the same thing. The page is an App tab with no nav button (`openedCategory`), keeps the
+date and account filters, draws the **base** monthly budget (not this month's rollover-adjusted
+limit) as a dashed line, and links out to Transactions pre-filtered by category (`initialCategory`,
+the same mount-time hand-off as `initialSearch`).
+
+> The client type is `CategoryDrilldown`, not `CategoryDetail`: `types.ts` already had a
+> `CategoryDetail` (a category's own settings), and TypeScript *merges* two interfaces of the same
+> name instead of erroring, so the clash would have compiled into a nonsense combined shape.
 **Upcoming bills on the calendar are a client-side projection of recurring detection.**
 `upcomingBills.ts` takes `/api/recurring` (full history, ignoring the date filter — "what's due" is
 about now) and repeats each series from `next_expected_date` every `median_interval_days` up to 60

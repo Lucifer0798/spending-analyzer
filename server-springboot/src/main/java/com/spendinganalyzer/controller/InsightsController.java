@@ -11,9 +11,11 @@ import com.spendinganalyzer.dto.SpendingAnomaly;
 import com.spendinganalyzer.dto.SummaryResponse;
 import com.spendinganalyzer.dto.TopMerchantsResponse;
 import com.spendinganalyzer.model.RecurringOverride;
+import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.AnomalyDetectionService;
+import com.spendinganalyzer.service.CategoryDetailService;
 import com.spendinganalyzer.service.InsightsService;
 import com.spendinganalyzer.service.RecurringDetectionService;
 import com.spendinganalyzer.service.StatsService;
@@ -42,6 +44,8 @@ public class InsightsController {
     private final TransactionRepository transactionRepository;
     private final RecurringOverrideRepository recurringOverrideRepository;
     private final YearReviewService yearReviewService;
+    private final CategoryDetailService categoryDetailService;
+    private final CategoryRepository categoryRepository;
 
     public InsightsController(
             StatsService statsService,
@@ -50,7 +54,9 @@ public class InsightsController {
             AnomalyDetectionService anomalyDetectionService,
             TransactionRepository transactionRepository,
             RecurringOverrideRepository recurringOverrideRepository,
-            YearReviewService yearReviewService
+            YearReviewService yearReviewService,
+            CategoryDetailService categoryDetailService,
+            CategoryRepository categoryRepository
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
@@ -59,6 +65,8 @@ public class InsightsController {
         this.transactionRepository = transactionRepository;
         this.recurringOverrideRepository = recurringOverrideRepository;
         this.yearReviewService = yearReviewService;
+        this.categoryDetailService = categoryDetailService;
+        this.categoryRepository = categoryRepository;
     }
 
     @GetMapping("/summary")
@@ -129,6 +137,20 @@ public class InsightsController {
         return statsService.computeComparison(accountId, range, explicitPreviousRange)
                 .map(comparison -> ComparisonResponse.of(comparison, currency))
                 .orElse(ComparisonResponse.NOT_APPLICABLE);
+    }
+
+    /** One category's drill-down for the active range and account -- see {@link CategoryDetailService}. */
+    @GetMapping("/category-detail")
+    public ResponseEntity<?> categoryDetail(
+            @RequestParam String category,
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        if (!categoryRepository.exists(category)) {
+            return ResponseEntity.status(404).body(new ErrorResponse("No category named \"" + category + "\"."));
+        }
+        return ResponseEntity.ok(categoryDetailService.detail(category, accountId, DateRange.of(from, to)));
     }
 
     /**

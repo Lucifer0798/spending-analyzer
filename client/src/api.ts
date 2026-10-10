@@ -9,6 +9,7 @@ import type {
   BudgetPeriod,
   BudgetSummary,
   CategorizeResult,
+  CategoryDrilldown,
   DailySpend,
   CategoryDetail,
   ComparisonResponse,
@@ -662,6 +663,11 @@ export function fetchSummary(accountId: number | null, range: DateRangeValue = A
  * `compareAgainst` compares against that exact range instead of the auto-derived previous period;
  * omit it (or pass null) to keep the default behavior.
  */
+/** One category's drill-down for the active range and account. 404s for an unknown category. */
+export function fetchCategoryDetail(category: string, accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<CategoryDrilldown>(`/category-detail${qs({ category, accountId, from: range.from, to: range.to })}`);
+}
+
 /** Spend per day in range, for the Dashboard's calendar heatmap. */
 export function fetchDailySpend(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<DailySpend>(`/daily-spend${qs({ accountId, from: range.from, to: range.to })}`);

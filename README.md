@@ -172,7 +172,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V24)
-  src/test/                 571 tests
+  src/test/                 575 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -265,6 +265,7 @@ All endpoints live under `/api`.
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
+| `GET` | `/category-detail` | One category for the active range and account — total, share, monthly trend, change vs. the period before, top merchants, latest transactions (`category`, required) |
 | `GET` | `/daily-spend` | Spend per day in range (only days with spend), for the Dashboard's calendar |
 | `GET` | `/top-merchants` | Merchants ranked by spend in the active range, branches of a chain counted as one (`limit`, default 10) |
 | `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
@@ -799,7 +800,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (571).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (575).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -876,6 +877,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Category drill-down~~ — click a bar in the Dashboard's category chart (or pick from the list
+  under it) for that category's page: total and share, month-by-month trend with its budget line,
+  change vs. the period before, where the money goes, and the latest transactions
 - ~~Bill calendar~~ — upcoming recurring charges appear on the spending calendar as markers on their
   expected dates (weekly ones every week), with a list of the next 30 days' bills underneath
 - ~~Net worth CSV export~~ — download net worth over time and every logged account balance from the

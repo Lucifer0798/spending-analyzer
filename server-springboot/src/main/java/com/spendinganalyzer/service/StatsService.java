@@ -212,6 +212,15 @@ public class StatsService {
         return computeMonthlyTotals(accountId, range, null);
     }
 
+    /** One category's spend per calendar month -- months it had none are simply absent. */
+    public List<MonthlyTotal> computeMonthlyTotalsForCategory(Long accountId, DateRange range, String category) {
+        String sql = "SELECT strftime('%Y-%m', t.date) AS month, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total "
+                + SPEND_FILTER + filters(accountId, range, null) + " AND t.category = :category"
+                + " GROUP BY month ORDER BY month";
+        return jdbc.query(sql, params(accountId, range, null).addValue("category", category), (rs, rowNum) ->
+                new MonthlyTotal(rs.getString("month"), rs.getDouble("total")));
+    }
+
     public List<MonthlyTotal> computeMonthlyTotals(Long accountId, DateRange range, String currency) {
         String sql = "SELECT strftime('%Y-%m', t.date) AS month, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total "
                 + SPEND_FILTER + filters(accountId, range, currency)
@@ -299,12 +308,18 @@ public class StatsService {
      * @return every merchant with spend in range, ties broken by name so the order is stable
      */
     public List<MerchantTotal> computeMerchantTotals(Long accountId, DateRange range, String currency) {
+        return computeMerchantTotals(accountId, range, currency, null);
+    }
+
+    /** As above, limited to one category when {@code category} is non-null -- for a category's drill-down. */
+    public List<MerchantTotal> computeMerchantTotals(Long accountId, DateRange range, String currency, String category) {
         record Row(String description, String date, String category, double amount) {}
 
         String sql = "SELECT t.description, t.date, COALESCE(t.category, 'Uncategorized') AS category, "
                 + EFFECTIVE_AMOUNT + " AS amount "
-                + SPEND_FILTER + filters(accountId, range, currency);
-        List<Row> rows = jdbc.query(sql, params(accountId, range, currency), (rs, rowNum) ->
+                + SPEND_FILTER + filters(accountId, range, currency)
+                + (category != null ? " AND t.category = :category" : "");
+        List<Row> rows = jdbc.query(sql, params(accountId, range, currency).addValue("category", category), (rs, rowNum) ->
                 new Row(rs.getString("description"), rs.getString("date"),
                         rs.getString("category"), rs.getDouble("amount")));
 

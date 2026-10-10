@@ -6,6 +6,7 @@ import { RecurringPage } from "./components/RecurringPage";
 import { GoalsPage } from "./components/GoalsPage";
 import { NetWorthPage } from "./components/NetWorthPage";
 import { YearReviewPage } from "./components/YearReviewPage";
+import { CategoryDetailPage } from "./components/CategoryDetailPage";
 import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
@@ -22,7 +23,8 @@ import {
 import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
-type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "year" | "goals" | "net-worth" | "manage";
+// "category" is reached by drilling into a Dashboard bar, so it has no button in TABS.
+type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "year" | "goals" | "net-worth" | "manage" | "category";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "upload", label: "Upload" },
@@ -45,6 +47,10 @@ function App() {
   // it only when it mounts, and switching tabs remounts it, so this needs no clearing in step --
   // the nav buttons just reset it so opening Transactions directly starts unfiltered.
   const [transactionSearch, setTransactionSearch] = useState("");
+  // The category a Dashboard bar drilled into, for the "category" tab.
+  const [openedCategory, setOpenedCategory] = useState<string | null>(null);
+  // Same hand-off as transactionSearch, for the category filter.
+  const [transactionCategory, setTransactionCategory] = useState("");
   // Same hand-off as transactionSearch: read once when Transactions mounts, cleared by the nav.
   const [reviewUncategorized, setReviewUncategorized] = useState(false);
   const [bounds, setBounds] = useState<DateBounds | null>(null);
@@ -95,6 +101,18 @@ function App() {
 
   const openMerchant = (merchant: string) => {
     setTransactionSearch(merchant);
+    setTransactionCategory("");
+    setTab("transactions");
+  };
+
+  const openCategory = (category: string) => {
+    setOpenedCategory(category);
+    setTab("category");
+  };
+
+  const openCategoryTransactions = (category: string) => {
+    setTransactionSearch("");
+    setTransactionCategory(category);
     setTab("transactions");
   };
 
@@ -102,6 +120,7 @@ function App() {
   // The filter stays set afterwards, visible in the picker, so getting back is one click on it.
   const openDay = (date: string) => {
     setTransactionSearch("");
+    setTransactionCategory("");
     setRange({ from: date, to: date });
     setTab("transactions");
   };
@@ -186,6 +205,7 @@ function App() {
                 key={t.id}
                 onClick={() => {
                   setTransactionSearch("");
+                  setTransactionCategory("");
                   setReviewUncategorized(false);
                   setTab(t.id);
                 }}
@@ -242,7 +262,25 @@ function App() {
             }}
           />
         )}
-        {tab === "dashboard" && <Dashboard accountId={accountId} range={range} onOpenMerchant={openMerchant} onOpenDay={openDay} />}
+        {tab === "dashboard" && (
+          <Dashboard
+            accountId={accountId}
+            range={range}
+            onOpenMerchant={openMerchant}
+            onOpenDay={openDay}
+            onOpenCategory={openCategory}
+          />
+        )}
+        {tab === "category" && openedCategory && (
+          <CategoryDetailPage
+            category={openedCategory}
+            accountId={accountId}
+            range={range}
+            onBack={() => setTab("dashboard")}
+            onOpenMerchant={openMerchant}
+            onOpenTransactions={openCategoryTransactions}
+          />
+        )}
         {tab === "transactions" && (
           <TransactionsTable
             accountId={accountId}
@@ -250,6 +288,7 @@ function App() {
             onAccountIdChange={setAccountId}
             onRangeChange={setRange}
             initialSearch={transactionSearch}
+            initialCategory={transactionCategory}
             initialReviewOpen={reviewUncategorized}
           />
         )}
