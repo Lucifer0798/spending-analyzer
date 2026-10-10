@@ -366,6 +366,25 @@ export interface SummaryResponse {
   perCurrency: CurrencyBreakdown[] | null;
 }
 
+/** One category up close -- see CategoryDetailPage. (Not `CategoryDetail`, which is a category's own settings.) */
+export interface CategoryDrilldown {
+  /** False when "all accounts" spans more than one currency. */
+  applicable: boolean;
+  category: string;
+  currency: string | null;
+  total: number;
+  count: number;
+  sharePercent: number;
+  /** Over every month with any spend in range, months this category skipped counted as zero. */
+  averagePerMonth: number;
+  months: MonthlyTotal[];
+  /** Null unless the range has both ends. */
+  change: CategoryComparison | null;
+  topMerchants: MerchantTotal[];
+  merchantCount: number;
+  recent: Transaction[];
+}
+
 /** Spend per day for the Dashboard calendar; only days with spend are listed. */
 export interface DailySpend {
   /** False when "all accounts" spans more than one currency. */

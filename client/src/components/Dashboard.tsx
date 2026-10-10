@@ -27,6 +27,7 @@ interface Props {
   range: DateRangeValue;
   onOpenMerchant: (merchant: string) => void;
   onOpenDay: (date: string) => void;
+  onOpenCategory: (category: string) => void;
 }
 
 const BLUE = "#2a78d6";
@@ -124,6 +125,7 @@ function CategoryBarChart({
   exportHref,
   exportTitle,
   colorByCategory = {},
+  onSelect,
 }: {
   title?: string;
   data: CategoryTotal[];
@@ -132,6 +134,9 @@ function CategoryBarChart({
   exportTitle?: string;
   /** A category (or group) with no entry here just renders in the chart's default blue. */
   colorByCategory?: Record<string, string>;
+  /** Makes each bar open that category's page. Left off for group rollups -- a group isn't a
+   *  category -- and never offered for "Uncategorized", which isn't one either. */
+  onSelect?: (category: string) => void;
 }) {
   // Income and transfers are already excluded server-side via category flags,
   // which also covers user-created categories marked as such.
@@ -150,12 +155,39 @@ function CategoryBarChart({
           <YAxis type="category" dataKey="category" stroke={MUTED} fontSize={12} width={130} tickLine={false} axisLine={false} />
           <Tooltip content={<ChartTooltip currencyCode={currencyCode} />} />
           <Bar dataKey="total" name="Spend" radius={[0, 4, 4, 0]}>
-            {bars.map((b) => (
-              <Cell key={b.category} fill={colorByCategory[b.category] ?? BLUE} />
-            ))}
+            {bars.map((b) => {
+              const selectable = onSelect && b.category !== "Uncategorized";
+              return (
+                <Cell
+                  key={b.category}
+                  fill={colorByCategory[b.category] ?? BLUE}
+                  cursor={selectable ? "pointer" : undefined}
+                  onClick={selectable ? () => onSelect(b.category) : undefined}
+                />
+              );
+            })}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      {onSelect && (
+        // The chart isn't keyboard-reachable, so the same drill-down is a plain select too.
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>Click a bar to see that category up close.</span>
+          <select
+            value=""
+            onChange={(e) => e.target.value && onSelect(e.target.value)}
+            aria-label="View a category in detail"
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="">View a category…</option>
+            {bars
+              .filter((b) => b.category !== "Uncategorized")
+              .map((b) => (
+                <option key={b.category} value={b.category}>{b.category}</option>
+              ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -172,7 +204,7 @@ function groupTotals(categoryTotals: CategoryTotal[], groupByCategory: Record<st
   return Array.from(byGroup, ([category, v]) => ({ category, total: v.total, count: v.count }));
 }
 
-export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay }: Props) {
+export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenCategory }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -362,6 +394,7 @@ export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay }: Props
         exportHref={exportUrl("categories", { accountId, range })}
         exportTitle="Download every category, not just the top 12 shown"
         colorByCategory={colorByCategory}
+        onSelect={onOpenCategory}
       />
 
       {/* Renders nothing until at least one category has a group set, so the dashboard is

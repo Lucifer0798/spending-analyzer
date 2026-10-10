@@ -36,6 +36,8 @@ interface Props {
   initialSearch?: string;
   /** Opens the uncategorized review panel expanded -- read once at mount, like initialSearch. */
   initialReviewOpen?: boolean;
+  /** Pre-selects the category filter -- read once at mount, like initialSearch. */
+  initialCategory?: string;
 }
 
 interface EditDraft {
@@ -62,11 +64,12 @@ export function TransactionsTable({
   onRangeChange,
   initialSearch = "",
   initialReviewOpen = false,
+  initialCategory = "",
 }: Props) {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState(initialCategory);
   const [tagFilter, setTagFilter] = useState("");
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [searchFilter, setSearchFilter] = useState(initialSearch);
