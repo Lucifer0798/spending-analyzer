@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { fetchDailySpend } from "../api";
-import type { DailySpend, DateRangeValue } from "../types";
+import { fetchDailySpend, fetchRecurring } from "../api";
+import type { DailySpend, DateRangeValue, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
+import { upcomingBills, type UpcomingBill } from "../upcomingBills";
 
 interface Props {
   accountId: number | null;
@@ -12,6 +13,21 @@ interface Props {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const STEPS = 5;
+/** How far ahead recurring charges are projected onto the calendar. */
+const BILL_HORIZON_DAYS = 60;
+/** How far ahead the "Upcoming bills" list reaches -- the calendar itself shows the full horizon. */
+const LIST_DAYS = 30;
+
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDaysIso(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 function monthKey(date: string) {
   return date.slice(0, 7);
@@ -71,19 +87,42 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
   // The month picked with the arrows; null means "the latest month with spend". Derived below
   // rather than reset in an effect, so a new range simply falls back to its own latest month.
   const [picked, setPicked] = useState<string | null>(null);
+  // Recurring charges from full history, regardless of the date filter -- "what's due next"
+  // belongs to now, not to whichever past range is being browsed.
+  const [recurring, setRecurring] = useState<RecurringSeries[]>([]);
 
   useEffect(() => {
     fetchDailySpend(accountId, range).then(setData).catch(() => setData(null));
   }, [accountId, range]);
 
-  if (!data?.applicable || !data.currency || data.days.length === 0) return null;
+  useEffect(() => {
+    fetchRecurring(accountId)
+      .then((r) => setRecurring(r.mixedCurrencies ? [] : r.recurring))
+      .catch(() => setRecurring([]));
+  }, [accountId]);
+
+  if (!data?.applicable || !data.currency) return null;
+
+  const today = todayIso();
+  const bills = upcomingBills(recurring, today, BILL_HORIZON_DAYS);
+  if (data.days.length === 0 && bills.length === 0) return null;
 
   const cur = data.currency;
   const byDate = new Map(data.days.map((d) => [d.date, d]));
-  const months = monthsBetween(monthKey(data.days[0].date), monthKey(data.days[data.days.length - 1].date));
-  const month = picked && months.includes(picked) ? picked : months[months.length - 1];
+  const billsByDate = new Map<string, UpcomingBill[]>();
+  for (const b of bills) billsByDate.set(b.date, [...(billsByDate.get(b.date) ?? []), b]);
+  const soon = bills.filter((b) => b.overdue || b.date <= addDaysIso(today, LIST_DAYS));
+
+  // From the first month with spend to the last month with spend or an expected bill, so the
+  // arrows also reach the coming weeks.
+  const edgeMonths = [...data.days.map((d) => monthKey(d.date)), ...bills.map((b) => monthKey(b.date))].sort();
+  const months = monthsBetween(edgeMonths[0], edgeMonths[edgeMonths.length - 1]);
+  // Default to the newest month with spend: what was spent comes first; upcoming months are one
+  // click forward (or a click on a bill below).
+  const newestSpendMonth = data.days.length ? monthKey(data.days[data.days.length - 1].date) : monthKey(today);
+  const month = picked && months.includes(picked) ? picked : months.includes(newestSpendMonth) ? newestSpendMonth : months[months.length - 1];
   const index = months.indexOf(month);
-  const bounds = stepBounds(data.days.map((d) => d.total));
+  const bounds = data.days.length ? stepBounds(data.days.map((d) => d.total)) : [];
 
   const [y, m] = month.split("-").map(Number);
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -103,6 +142,9 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
     const total = ofWeekday.reduce((sum, d) => sum + (byDate.get(d)?.total ?? 0), 0);
     return ofWeekday.length ? total / ofWeekday.length : 0;
   });
+
+  const isFutureMonth = month > monthKey(today);
+  const monthBills = bills.filter((b) => monthKey(b.date) === month && !b.overdue);
 
   const lowerBound = (step: number) => (step === 0 ? 0 : bounds[step - 1]);
   const legendTitle = (step: number) =>
@@ -152,9 +194,18 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
               {week.map((date, i) => {
                 if (!date) return <td key={i} />;
                 const day = byDate.get(date);
-                const label = day
-                  ? `${dayLabel(date)}: ${currencyPrecise(day.total, cur)} across ${day.count} transaction${day.count === 1 ? "" : "s"}`
-                  : `${dayLabel(date)}: no spending`;
+                const dayBills = billsByDate.get(date) ?? [];
+                const billText = dayBills
+                  .map((b) => `${b.overdue ? "overdue: " : "due: "}${b.merchant} ~${currencyPrecise(b.amount, cur)}${b.cancelling ? " (flagged to cancel)" : ""}`)
+                  .join("; ");
+                const label = [
+                  day
+                    ? `${dayLabel(date)}: ${currencyPrecise(day.total, cur)} across ${day.count} transaction${day.count === 1 ? "" : "s"}`
+                    : `${dayLabel(date)}: no spending`,
+                  billText,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
                 const step = day ? stepFor(day.total, bounds) : null;
                 return (
                   <td key={date} className="p-0">
@@ -162,12 +213,21 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
                       onClick={() => onOpenDay(date)}
                       title={label}
                       aria-label={label}
-                      className={`flex h-10 w-full items-start justify-end rounded-md p-1 text-[11px] font-medium transition hover:ring-2 hover:ring-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-12 ${
+                      className={`relative flex h-10 w-full items-start justify-end rounded-md p-1 text-[11px] font-medium transition hover:ring-2 hover:ring-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-12 ${
                         step === null ? "bg-slate-50 text-slate-400 dark:bg-slate-800/60 dark:text-slate-500" : ""
-                      }`}
+                      } ${date === today ? "outline outline-1 outline-offset-1 outline-slate-400" : ""}`}
                       style={step === null ? undefined : { background: `var(--seq-${step})`, color: `var(--seq-ink-${step})` }}
                     >
                       {Number(date.slice(8))}
+                      {dayBills.length > 0 && (
+                        // A second hue (orange) so a bill never reads as a shade of spend; the
+                        // ring separates it from whatever fill is underneath.
+                        <span
+                          aria-hidden="true"
+                          className="absolute bottom-1 left-1 h-2 w-2 rounded-full ring-2 ring-white dark:ring-slate-900"
+                          style={{ background: "var(--series-2)" }}
+                        />
+                      )}
                     </button>
                   </td>
                 );
@@ -175,7 +235,7 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
             </tr>
           ))}
         </tbody>
-        <tfoot>
+        <tfoot className={isFutureMonth ? "hidden" : undefined}>
           <tr>
             {weekdayAverages.map((avg, i) => (
               <td key={WEEKDAYS[i]} className="pt-1 text-center text-[10px] text-slate-500" title={`Average per ${WEEKDAYS[i]} this month`}>
@@ -188,7 +248,16 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
         <span>
-          {monthDays.length > 0 ? (
+          {isFutureMonth ? (
+            monthBills.length > 0 ? (
+              <>
+                Coming up: {monthBills.length} expected charge{monthBills.length === 1 ? "" : "s"}, about{" "}
+                {currency(monthBills.reduce((sum, b) => sum + b.amount, 0), 0, cur)}
+              </>
+            ) : (
+              "Nothing expected this month."
+            )
+          ) : monthDays.length > 0 ? (
             <>
               {currency(monthTotal, 0, cur)} over {monthDays.length} day{monthDays.length === 1 ? "" : "s"} with spending
               {busiest && <> · busiest {dayLabel(busiest.date)} ({currency(busiest.total, 0, cur)})</>}
@@ -204,8 +273,50 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
             <span key={s} title={legendTitle(s)} className="inline-block h-3 w-3 rounded-sm" style={{ background: `var(--seq-${s})` }} />
           ))}
           More
+          {bills.length > 0 && (
+            <>
+              <span className="ml-3 inline-block h-2 w-2 rounded-full" style={{ background: "var(--series-2)" }} />
+              bill due
+            </>
+          )}
         </span>
       </div>
+
+      {soon.length > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Upcoming bills · next {LIST_DAYS} days
+          </h3>
+          <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+            {soon.map((b) => (
+              <li key={`${b.merchant}|${b.date}`} className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-sm">
+                <button
+                  onClick={() => setPicked(monthKey(b.date))}
+                  title="Show this month on the calendar"
+                  className="flex min-w-0 items-baseline gap-2 text-left hover:underline"
+                >
+                  <span className={`w-24 shrink-0 text-xs ${b.overdue ? "font-medium text-amber-700 dark:text-amber-400" : "text-slate-500"}`}>
+                    {b.overdue ? "overdue" : dayLabel(b.date)}
+                  </span>
+                  <span className={`truncate text-slate-800 dark:text-slate-200 ${b.cancelling ? "line-through opacity-70" : ""}`}>
+                    {b.merchant}
+                  </span>
+                </button>
+                <span className="text-right text-slate-700 dark:text-slate-300">
+                  ~{currencyPrecise(b.amount, cur)}
+                  <span className="ml-2 text-xs text-slate-500">{b.cancelling ? "flagged to cancel" : b.cadence}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-slate-500">
+            About {currency(soon.filter((b) => !b.overdue && !b.cancelling).reduce((sum, b) => sum + b.amount, 0), 0, cur)}{" "}
+            expected over the next {LIST_DAYS} days{soon.some((b) => b.overdue) ? " (not counting overdue ones)" : ""}, from
+            charges the Recurring page has detected.
+            {soon.some((b) => b.overdue) && " Overdue means its expected date passed with no newer charge imported yet."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
