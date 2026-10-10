@@ -126,6 +126,19 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**Upcoming bills on the calendar are a client-side projection of recurring detection.**
+`upcomingBills.ts` takes `/api/recurring` (full history, ignoring the date filter — "what's due" is
+about now) and repeats each series from `next_expected_date` every `median_interval_days` up to 60
+days ahead, so a weekly charge appears weekly. A `next_expected_date` already in the past becomes a
+single *overdue* entry and is not projected further (its statement may just not be imported;
+guessing past a missed charge compounds the guess). The amount is `last_amount` when
+`price_changed`, else `average_amount`. No backend change. Markers use `--series-2` (orange), the
+palette's second hue, so a bill never reads as a shade of the blue spend ramp, with a surface ring
+to separate it from the fill. The month list extends forward to bill months; the default stays the
+newest month with spend. Future months hide the weekday-average row and summarise expected charges
+instead. The "expected" total excludes overdue and flagged-to-cancel bills and says so. Checked with
+a Node (`--experimental-strip-types`) script: weekly repeats, overdue, horizon, sorting, price change.
+
 **The spending calendar shades days on one scale for the whole range, by quantile.**
 `GET /api/daily-spend` returns only days with spend (`StatsService.computeDailyTotals`, same
 `SPEND_FILTER`/`EFFECTIVE_AMOUNT` as every total; not applicable across mixed currencies), and

@@ -876,6 +876,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Bill calendar~~ — upcoming recurring charges appear on the spending calendar as markers on their
+  expected dates (weekly ones every week), with a list of the next 30 days' bills underneath
 - ~~Net worth CSV export~~ — download net worth over time and every logged account balance from the
   Net Worth page, matching the other exports
 - ~~Spending calendar~~ — a month grid on the Dashboard shading each day by how much was spent,
