@@ -75,7 +75,7 @@ public class CategoryRepository {
     }
 
     /**
-     * Renames a category and cascades the new name everywhere it is stored. Four other tables
+     * Renames a category and cascades the new name everywhere it is stored. Five other tables
      * reference a category by name rather than by id, so the rename has to reach all of them
      * inside one transaction or they fall out of sync: transactions would keep the old label,
      * merchant memory and keyword rules would re-apply a category that no longer exists on the
@@ -93,6 +93,8 @@ public class CategoryRepository {
         jdbc.update("UPDATE merchant_categories SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE budgets SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE keyword_rules SET category = :newName WHERE category = :oldName", names);
+        jdbc.update("UPDATE transfer_pairs SET debit_prev_category = :newName WHERE debit_prev_category = :oldName", names);
+        jdbc.update("UPDATE transfer_pairs SET credit_prev_category = :newName WHERE credit_prev_category = :oldName", names);
     }
 
     public boolean updateFlags(long id, Boolean isIncome, Boolean isTransfer) {
@@ -130,8 +132,9 @@ public class CategoryRepository {
 
     /**
      * Deletes a category and moves any transactions using it to {@code reassignTo}, so nothing
-     * is left pointing at a category that no longer exists. Merchant memory and keyword rules move
-     * with them — left behind, they would re-apply the deleted category on the next import.
+     * is left pointing at a category that no longer exists. Merchant memory, keyword rules and the
+     * categories a transfer pairing would restore on undo move with them — left behind, they would
+     * re-apply the deleted category on the next import (or on an undo).
      *
      * <p>The budget is dropped rather than moved: folding one category's target into another's
      * would quietly change a number the user set deliberately.
@@ -145,6 +148,8 @@ public class CategoryRepository {
         jdbc.update("UPDATE transactions SET category = :reassignTo WHERE category = :name", reassign);
         jdbc.update("UPDATE merchant_categories SET category = :reassignTo WHERE category = :name", reassign);
         jdbc.update("UPDATE keyword_rules SET category = :reassignTo WHERE category = :name", reassign);
+        jdbc.update("UPDATE transfer_pairs SET debit_prev_category = :reassignTo WHERE debit_prev_category = :name", reassign);
+        jdbc.update("UPDATE transfer_pairs SET credit_prev_category = :reassignTo WHERE credit_prev_category = :name", reassign);
         jdbc.update("DELETE FROM budgets WHERE category = :name", new MapSqlParameterSource("name", name));
         jdbc.update("DELETE FROM categories WHERE id = :id", new MapSqlParameterSource("id", id));
     }

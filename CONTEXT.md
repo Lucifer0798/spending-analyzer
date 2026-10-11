@@ -126,6 +126,41 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**Transfer matching pairs strictly and changes nothing until confirmed.** `TransferMatchingService`
+loads just id/account/currency/date/cents/is-transfer for every unsplit row, buckets credits by
+currency + amount in cents, and keeps debit-credit edges in different accounts at most
+`MAX_DAYS_APART` (3) days apart, skipping pairs already both in transfer categories, dismissed
+pairs, and rows in a confirmed pair. It's greedy: edges sorted by days apart then ids, each row used
+once, so the closest partner wins and the answer is stable. No fuzzy amounts (fees, FX): a wrong pair
+hides real spending, a missed one just leaves things counted as before. Suggestions ignore the
+account and date filters on purpose -- a transfer *is* two accounts. Confirming re-validates each
+pair (skips with a reason rather than failing the batch), moves each side not already in a
+transfer-flagged category into `transferCategory()` ("Transfer" if still flagged, else the first
+flagged) with source `user`, and records the previous category/source on `transfer_pairs` (V25) for
+undo. It doesn't teach merchant memory: "ONLINE PAYMENT" is a transfer because of its other half, not
+its text. Undo restores a side only while it's still in a transfer-flagged category (checked by
+flag, so renaming "Transfer" doesn't break it); a side recategorized since keeps the newer choice,
+and a previous category deleted since falls back to uncategorized. Category rename/delete cascade
+into the `*_prev_category` columns. Dismissals are rows with status `dismissed` and no prev values;
+undoing one only deletes it. Partial unique indexes keep a transaction in at most one *confirmed*
+pair. No foreign keys, like `transaction_tags`: single, bulk delete and reset drop pairs explicitly,
+and the surviving half keeps its transfer category. The Manage list sorts by the debit's date, not
+by when the pair was recorded, since "mark all" records a batch at once. Pairs are in the backup
+(`CURRENT_VERSION` 8 -> 9).
+
+**The money flow is the dashboard's totals rearranged, plus a client-side Sankey.** `/money-flow`
+(`MoneyFlowService`) is `computeIncomeCategoryTotals` (new, `INCOME_FILTER` grouped by category)
+and `computeCategoryTotals` tagged with each category's group; saved/shortfall is the difference,
+at most one non-zero. Transfers are on neither side, which is why transfer matching matters here.
+`moneyFlow.ts` builds the graph: income categories (+ "From savings" on a shortfall) -> one "Money
+in" hub -> Saved first, then groups biggest first fanning out to their categories, then ungrouped
+categories. Sinks under 2% of the hub fold into "Smaller categories" / "Other <group>" when there are
+at least two. The Sankey uses `sort={false}` -- Recharts' own sort split a group's children apart
+and crossed bands. Links take the color of where the money went (category color if set, else
+`--series-2`); income and Saved are `--series-1`. Hover is a hand-rolled HTML tooltip (state set
+from the custom node/link elements), not Recharts' Tooltip. Below `sm` the chart and legend are
+hidden and the table is shown instead -- labels on both sides don't fit a phone.
+
 **The category drill-down is assembled from the dashboard's own queries.**
 `CategoryDetailService` uses `computeCategoryTotals` (total, count, share), `computeComparison`
 (the change — null unless the range has both ends), `computeMonthlyTotals` for the timeline with

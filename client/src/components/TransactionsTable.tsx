@@ -25,6 +25,7 @@ import type { DateRangeValue, FilterPreset, Tag, TransactionWithTags } from "../
 import { currencyPrecise } from "../format";
 import { ExportLink } from "./ExportLink";
 import { UncategorizedReview } from "./UncategorizedReview";
+import { TransferReview } from "./TransferReview";
 
 interface Props {
   accountId: number | null;
@@ -474,6 +475,8 @@ export function TransactionsTable({
         initiallyOpen={initialReviewOpen}
         refreshKey={transactions}
       />
+      {/* Same: nothing once every likely transfer is matched or dismissed. */}
+      <TransferReview onChanged={load} refreshKey={transactions} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {presets.map((p) => (

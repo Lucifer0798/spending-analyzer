@@ -300,6 +300,19 @@ public class StatsService {
     }
 
     /**
+     * Income per income category, biggest first -- the credit-side mirror of {@link
+     * #computeCategoryTotals}, for the money flow's sources.
+     */
+    public List<CategoryTotal> computeIncomeCategoryTotals(Long accountId, DateRange range, String currency) {
+        String sql = "SELECT t.category AS category, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total, COUNT(*) AS count "
+                + INCOME_FILTER + filters(accountId, range, currency)
+                + " GROUP BY t.category ORDER BY total DESC";
+
+        return jdbc.query(sql, params(accountId, range, currency), (rs, rowNum) ->
+                new CategoryTotal(rs.getString("category"), rs.getDouble("total"), rs.getInt("count")));
+    }
+
+    /**
      * Spend grouped by merchant, biggest total first. Grouped in Java rather than SQL because the
      * key is {@link MerchantNormalizer#normalize} of the description -- store numbers and order
      * references stripped -- which SQLite can't compute; a {@code GROUP BY description} would

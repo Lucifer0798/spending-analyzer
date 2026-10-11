@@ -20,6 +20,7 @@ import { BudgetsCard } from "./BudgetsCard";
 import { BudgetVsIncomeCard } from "./BudgetVsIncomeCard";
 import { ComparisonCard } from "./ComparisonCard";
 import { TopMerchantsCard } from "./TopMerchantsCard";
+import { MoneyFlowCard } from "./MoneyFlowCard";
 import { SpendingCalendar } from "./SpendingCalendar";
 
 interface Props {
@@ -406,6 +407,9 @@ export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenC
           currencyCode={cur}
         />
       )}
+
+      {/* Nothing without income or spending in range. */}
+      <MoneyFlowCard accountId={accountId} range={range} colorByCategory={colorByCategory} />
 
       {error && (
         <div className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">

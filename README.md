@@ -17,6 +17,7 @@ there's no hosted database and no account to sign up for.
 | **Skip duplicates** | Re-importing an overlapping statement adds only what's new |
 | **Categorize** | Sorts transactions into categories with built-in rules, and remembers every merchant you correct |
 | **Multiple accounts** | Keep a current account and a credit card separate, or view everything together |
+| **Transfers** | Spots money moved between your own accounts so it isn't counted as spending or income |
 | **Recurring charges** | Finds subscriptions and regular bills, with an annual cost and next expected date |
 | **Predictions** | Forecasts next month per category and suggests where to reduce spending |
 | **Private** | Everything runs on your machine — no external service, no API key, nothing sent anywhere |
@@ -171,8 +172,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V24)
-  src/test/                 575 tests
+    db/migration/           Versioned schema migrations (V1–V25)
+  src/test/                 592 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -200,7 +201,7 @@ forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
 
 ## The database
 
-Sixteen tables, all created automatically:
+Seventeen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -220,9 +221,10 @@ Sixteen tables, all created automatically:
 | `transaction_receipts` | A receipt image or PDF attached to a transaction, at most one each, stored as a BLOB |
 | `net_worth_target` | A single target net worth to compare the forecast against, optionally by a date |
 | `keyword_rules` | Your own "description contains this word → this category" rules |
+| `transfer_pairs` | A debit and credit you matched as one transfer (with what each was before, for undo), or ruled out |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V25__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V26__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -267,6 +269,7 @@ All endpoints live under `/api`.
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/category-detail` | One category for the active range and account — total, share, monthly trend, change vs. the period before, top merchants, latest transactions (`category`, required) |
 | `GET` | `/daily-spend` | Spend per day in range (only days with spend), for the Dashboard's calendar |
+| `GET` | `/money-flow` | Income per income category and spend per category (with its group) for the active range, and what was saved or overspent |
 | `GET` | `/top-merchants` | Merchants ranked by spend in the active range, branches of a chain counted as one (`limit`, default 10) |
 | `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
@@ -289,7 +292,7 @@ All endpoints live under `/api`.
 | `GET` | `/export/recommendations.csv` | Download the savings suggestions |
 | `GET` | `/export/net-worth.csv` `/export/balances.csv` | Download net worth over time (as the Net Worth page charts it, one series per currency) and every logged account balance |
 | `GET` | `/export/merchants.csv` | Download merchant memory, in the format `/merchants/import` reads back |
-| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances and target, receipts |
+| `GET` | `/backup` | Everything as one JSON file — accounts, transactions, categories, budgets, merchant memory, recurring overrides, savings goals, tags, net worth balances and target, receipts, keyword rules, matched transfers |
 | `POST` | `/backup/import` | Restore from a backup file, replacing everything currently in this instance |
 | `GET` | `/net-worth` | Net worth across every active account, its history over time, and a trend-line forecast |
 | `POST` `DELETE` | `/net-worth/target` | Set or clear a single target net worth, optionally by a date |
@@ -300,6 +303,8 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
 | `POST` | `/categorize/reapply-rules` | Re-decide transactions a rule categorized, after rules change; `dryRun=true` (default) only reports. Categories you set are never touched |
 | `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
+| `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50) |
+| `GET` `POST` `DELETE` | `/transfers` | Matched and dismissed pairs; `/transfers/confirm` and `/transfers/dismiss` take `{"pairs": [{"debit_id", "credit_id"}]}`; `DELETE /transfers/{id}` undoes one |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
 | `GET` | `/auth/status` | Whether this instance has a password, and whether you're past it. The only endpoint outside the gate, so it's what a health check should poll |
@@ -725,6 +730,22 @@ or (on a rejected version) untouched. The cost is that import is destructive by 
 why it asks first and why forecasts are left out of the file entirely: they're a cache, not
 data, the same reasoning that let the old prediction cache row be dropped rather than migrated.
 
+**Transfers between your own accounts are matched, not guessed from the description.** Paying
+your credit card from checking shows up twice — a debit in one account, a credit in the other —
+and unless both land in a transfer category the payment counts as spending and the deposit can
+count as income. The Transactions page suggests pairs: the same amount, in the same currency, out
+of one account and into another within three days. Nothing changes until you confirm; then both
+sides move to **Transfer**, remembering what they were so **Manage → Transfers** can undo it.
+"Not a transfer" stops a coincidence being suggested again. Matching is exact to the cent on
+purpose — pairing loosely would hide real spending behind a lookalike, which is worse than
+leaving a transfer for you to categorize by hand.
+
+**The money flow diagram uses the same totals as the rest of the Dashboard.** Income categories
+flow into one hub, out to category groups and their categories, with whatever is left as
+**Saved** — or, when spending outran income, a **From savings** source makes up the difference.
+Very small categories fold together so their labels stay readable; the table under it lists every
+one, and on a phone the table replaces the chart.
+
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
 one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
@@ -800,7 +821,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (575).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (592).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -877,6 +898,11 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Transfer matching~~ — money moved between your own accounts (same amount out of one, into
+  another, within three days) is suggested on the Transactions page; confirming moves both halves
+  to Transfer so neither counts as spending or income, with undo under Manage → Transfers
+- ~~Money flow diagram~~ — a Sankey on the Dashboard from income categories, through category
+  groups, to categories and savings; follows the account and date filters, table on phones
 - ~~Category drill-down~~ — click a bar in the Dashboard's category chart (or pick from the list
   under it) for that category's page: total and share, month-by-month trend with its budget line,
   change vs. the period before, where the money goes, and the latest transactions

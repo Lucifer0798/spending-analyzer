@@ -28,6 +28,7 @@ import type {
   MerchantImportResult,
   MerchantMemory,
   MerchantsResponse,
+  MoneyFlow,
   NetWorthResponse,
   PredictionsResponse,
   RecurringAction,
@@ -39,6 +40,8 @@ import type {
   TopMerchantsResponse,
   Transaction,
   TransactionWithTags,
+  TransferPairView,
+  TransferSuggestionsResponse,
   UncategorizedMerchant,
   UploadResult,
   YearReview,
@@ -816,4 +819,43 @@ export function importBackup(json: string) {
     method: "POST",
     body: json,
   });
+}
+
+// --- transfers ----------------------------------------------------------------
+
+/** Likely transfers between your own accounts, newest first. Spans every account and all time. */
+export function fetchTransferSuggestions(limit = 50) {
+  return request<TransferSuggestionsResponse>(`/transfers/suggestions${qs({ limit })}`);
+}
+
+export function fetchTransferPairs() {
+  return request<{ confirmed: TransferPairView[]; dismissed: TransferPairView[] }>("/transfers");
+}
+
+type PairRef = { debit_id: number; credit_id: number };
+
+/** Moves both sides of each pair into the transfer category; pairs that no longer qualify come back in `skipped`. */
+export function confirmTransfers(pairs: PairRef[]) {
+  return request<{ confirmed: number; skipped: (PairRef & { reason: string })[] }>("/transfers/confirm", {
+    method: "POST",
+    body: JSON.stringify({ pairs }),
+  });
+}
+
+/** "Not a transfer" -- stops the pair being suggested again. Changes no transaction. */
+export function dismissTransfers(pairs: PairRef[]) {
+  return request<{ dismissed: number }>("/transfers/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ pairs }),
+  });
+}
+
+/** Undoes a confirmation (restoring both categories) or forgets a dismissal. */
+export function undoTransferPair(id: number) {
+  return request<{ ok: true; restored: number }>(`/transfers/${id}`, { method: "DELETE" });
+}
+
+/** Income sources against spending categories for the range -- see MoneyFlow. */
+export function fetchMoneyFlow(accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<MoneyFlow>(`/money-flow${qs({ accountId, from: range.from, to: range.to })}`);
 }
