@@ -17,6 +17,7 @@ import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.repository.TransferPairRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +49,7 @@ public class BackupService {
     private final TransactionReceiptRepository transactionReceipts;
     private final NetWorthTargetRepository netWorthTarget;
     private final KeywordRuleRepository keywordRules;
+    private final TransferPairRepository transferPairs;
 
     public BackupService(
             AccountRepository accounts,
@@ -64,7 +66,8 @@ public class BackupService {
             PredictionsCacheRepository predictionsCache,
             TransactionReceiptRepository transactionReceipts,
             NetWorthTargetRepository netWorthTarget,
-            KeywordRuleRepository keywordRules
+            KeywordRuleRepository keywordRules,
+            TransferPairRepository transferPairs
     ) {
         this.accounts = accounts;
         this.categories = categories;
@@ -81,6 +84,7 @@ public class BackupService {
         this.transactionReceipts = transactionReceipts;
         this.netWorthTarget = netWorthTarget;
         this.keywordRules = keywordRules;
+        this.transferPairs = transferPairs;
     }
 
     public record BackupSummary(
@@ -97,7 +101,8 @@ public class BackupService {
             int filterPresets,
             int transactionReceipts,
             boolean netWorthTarget,
-            int keywordRules
+            int keywordRules,
+            int transferPairs
     ) {}
 
     public BackupData export() {
@@ -118,7 +123,8 @@ public class BackupService {
                 filterPresets.findAll(),
                 transactionReceipts.findAll(),
                 netWorthTarget.find().orElse(null),
-                keywordRules.findAll()
+                keywordRules.findAll(),
+                transferPairs.findAll()
         );
     }
 
@@ -143,6 +149,7 @@ public class BackupService {
         transactionReceipts.restoreAll(data.transactionReceipts());
         netWorthTarget.restoreAll(data.netWorthTarget());
         keywordRules.restoreAll(data.keywordRules());
+        transferPairs.restoreAll(data.transferPairs());
         predictionsCache.deleteAll();
 
         return new BackupSummary(
@@ -159,7 +166,8 @@ public class BackupService {
                 data.filterPresets().size(),
                 data.transactionReceipts().size(),
                 data.netWorthTarget() != null,
-                data.keywordRules() == null ? 0 : data.keywordRules().size()
+                data.keywordRules() == null ? 0 : data.keywordRules().size(),
+                data.transferPairs() == null ? 0 : data.transferPairs().size()
         );
     }
 }

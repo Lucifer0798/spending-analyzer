@@ -6,6 +6,7 @@ import com.spendinganalyzer.dto.CurrencyBreakdown;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.dto.MerchantTotal;
+import com.spendinganalyzer.dto.MoneyFlow;
 import com.spendinganalyzer.dto.RecurringSeries;
 import com.spendinganalyzer.dto.SpendingAnomaly;
 import com.spendinganalyzer.dto.SummaryResponse;
@@ -17,6 +18,7 @@ import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.AnomalyDetectionService;
 import com.spendinganalyzer.service.CategoryDetailService;
 import com.spendinganalyzer.service.InsightsService;
+import com.spendinganalyzer.service.MoneyFlowService;
 import com.spendinganalyzer.service.RecurringDetectionService;
 import com.spendinganalyzer.service.StatsService;
 import com.spendinganalyzer.service.YearReviewService;
@@ -46,6 +48,7 @@ public class InsightsController {
     private final YearReviewService yearReviewService;
     private final CategoryDetailService categoryDetailService;
     private final CategoryRepository categoryRepository;
+    private final MoneyFlowService moneyFlowService;
 
     public InsightsController(
             StatsService statsService,
@@ -56,7 +59,8 @@ public class InsightsController {
             RecurringOverrideRepository recurringOverrideRepository,
             YearReviewService yearReviewService,
             CategoryDetailService categoryDetailService,
-            CategoryRepository categoryRepository
+            CategoryRepository categoryRepository,
+            MoneyFlowService moneyFlowService
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
@@ -67,6 +71,7 @@ public class InsightsController {
         this.yearReviewService = yearReviewService;
         this.categoryDetailService = categoryDetailService;
         this.categoryRepository = categoryRepository;
+        this.moneyFlowService = moneyFlowService;
     }
 
     @GetMapping("/summary")
@@ -151,6 +156,16 @@ public class InsightsController {
             return ResponseEntity.status(404).body(new ErrorResponse("No category named \"" + category + "\"."));
         }
         return ResponseEntity.ok(categoryDetailService.detail(category, accountId, DateRange.of(from, to)));
+    }
+
+    /** Income sources against spending categories for the active range -- see {@link MoneyFlowService}. */
+    @GetMapping("/money-flow")
+    public MoneyFlow moneyFlow(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        return moneyFlowService.flow(accountId, DateRange.of(from, to));
     }
 
     /**

@@ -87,6 +87,9 @@ class BackupServiceTest {
     @Autowired
     private com.spendinganalyzer.repository.KeywordRuleRepository keywordRules;
 
+    @Autowired
+    private com.spendinganalyzer.repository.TransferPairRepository transferPairs;
+
     private long goalId;
     private long taggedTransactionId;
 
@@ -226,7 +229,7 @@ class BackupServiceTest {
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of(), List.of());
 
         backupService.restore(empty);
 
@@ -243,5 +246,28 @@ class BackupServiceTest {
         assertThat(filterPresets.findAll()).isEmpty();
         assertThat(transactionReceipts.findAll()).isEmpty();
         assertThat(netWorthTarget.find()).isEmpty();
+        assertThat(transferPairs.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("transfer pairs round-trip through a backup, undo information included")
+    void transferPairsRoundTrip() {
+        transferPairs.save(taggedTransactionId, taggedTransactionId + 1000, "confirmed",
+                "Dining & Coffee", "user", "Income", "rule");
+        transferPairs.save(taggedTransactionId, taggedTransactionId + 2000, "dismissed", null, null, null, null);
+        BackupData exported = backupService.export();
+
+        transferPairs.deleteAll();
+        var summary = backupService.restore(exported);
+
+        assertThat(summary.transferPairs()).isEqualTo(2);
+        assertThat(transferPairs.findAll()).isEqualTo(exported.transferPairs());
+        assertThat(transferPairs.findAll())
+                .filteredOn(p -> p.status().equals("confirmed"))
+                .singleElement()
+                .satisfies(p -> {
+                    assertThat(p.debitPrevCategory()).isEqualTo("Dining & Coffee");
+                    assertThat(p.creditPrevSource()).isEqualTo("rule");
+                });
     }
 }

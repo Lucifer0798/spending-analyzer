@@ -586,6 +586,7 @@ export interface BackupSummary {
   transactionReceipts: number;
   netWorthTarget: boolean;
   keywordRules: number;
+  transferPairs: number;
 }
 
 /** "A description containing this keyword, as a whole word, goes in this category." */
@@ -690,4 +691,44 @@ export interface GoalFundingPlan {
   /** Negative is a monthly shortfall. */
   leftover: number | null;
   goals: GoalFundingSuggestion[];
+}
+
+/** A debit and a credit that look like the same money moving between two of your accounts. */
+export interface TransferSuggestion {
+  debit: Transaction;
+  credit: Transaction;
+  days_apart: number;
+}
+
+export interface TransferSuggestionsResponse {
+  /** Every suggestion; `suggestions` holds at most the requested limit, newest first. */
+  total: number;
+  suggestions: TransferSuggestion[];
+  /** Where confirmed pairs go; null when no category is flagged as a transfer. */
+  transfer_category: string | null;
+  max_days_apart: number;
+}
+
+/** A recorded pair: "confirmed" moved both into a transfer category, "dismissed" is "not a transfer". */
+export interface TransferPairView {
+  id: number;
+  status: "confirmed" | "dismissed";
+  created_at: string;
+  debit: Transaction;
+  credit: Transaction;
+}
+
+/** Where a range's money came from and went -- see the money flow diagram. */
+export interface MoneyFlow {
+  /** False across accounts in more than one currency. */
+  applicable: boolean;
+  currency: string | null;
+  income: { category: string; total: number }[];
+  /** `group` is null for an ungrouped category. "Uncategorized" appears as a category. */
+  spending: { category: string; group: string | null; total: number }[];
+  totalIncome: number;
+  totalSpending: number;
+  /** At most one of saved and shortfall is non-zero. */
+  saved: number;
+  shortfall: number;
 }

@@ -12,6 +12,7 @@ import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.repository.TransferPairRepository;
 import com.spendinganalyzer.service.MerchantNormalizer;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -43,19 +44,22 @@ public class TransactionController {
     private final MerchantCategoryRepository merchantCategoryRepository;
     private final TagRepository tagRepository;
     private final TransactionReceiptRepository receiptRepository;
+    private final TransferPairRepository transferPairRepository;
 
     public TransactionController(
             TransactionRepository repository,
             CategoryRepository categoryRepository,
             MerchantCategoryRepository merchantCategoryRepository,
             TagRepository tagRepository,
-            TransactionReceiptRepository receiptRepository
+            TransactionReceiptRepository receiptRepository,
+            TransferPairRepository transferPairRepository
     ) {
         this.repository = repository;
         this.categoryRepository = categoryRepository;
         this.merchantCategoryRepository = merchantCategoryRepository;
         this.tagRepository = tagRepository;
         this.receiptRepository = receiptRepository;
+        this.transferPairRepository = transferPairRepository;
     }
 
     @GetMapping("/transactions")
@@ -284,6 +288,8 @@ public class TransactionController {
         // unlike an orphaned tag-join row, so this is worth cleaning up explicitly rather than
         // leaving it unreachable forever.
         receiptRepository.delete(id);
+        // A pair with one half gone pairs nothing; the surviving half keeps its transfer category.
+        transferPairRepository.deleteForTransactions(List.of(id));
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -356,6 +362,7 @@ public class TransactionController {
 
         int deleted = repository.deleteBulk(ids);
         receiptRepository.deleteBulk(ids);
+        transferPairRepository.deleteForTransactions(ids);
         return ResponseEntity.ok(Map.of("ok", true, "deleted", deleted));
     }
 
@@ -373,6 +380,7 @@ public class TransactionController {
     public Map<String, Object> reset() {
         repository.resetAll();
         receiptRepository.deleteAll();
+        transferPairRepository.deleteAll();
         return Map.of("ok", true);
     }
 

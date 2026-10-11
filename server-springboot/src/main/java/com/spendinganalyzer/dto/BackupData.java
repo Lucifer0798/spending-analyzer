@@ -15,6 +15,7 @@ import com.spendinganalyzer.model.Tag;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.model.TransactionReceipt;
 import com.spendinganalyzer.model.TransactionTag;
+import com.spendinganalyzer.model.TransferPair;
 
 import java.util.List;
 
@@ -44,9 +45,10 @@ public record BackupData(
         List<TransactionReceipt> transactionReceipts,
         /** Null when no target is set -- a singleton, not a list, since there is only ever one. */
         NetWorthTarget netWorthTarget,
-        List<KeywordRule> keywordRules
+        List<KeywordRule> keywordRules,
+        List<TransferPair> transferPairs
 ) {
-    // Bumped from 7: keywordRules is a new field a version-7 file has no value for, and there
+    // Bumped from 8: transferPairs is a new field a version-8 file has no value for, and there
     // is no migration path between backup versions -- see BackupController.
-    public static final int CURRENT_VERSION = 8;
+    public static final int CURRENT_VERSION = 9;
 }
