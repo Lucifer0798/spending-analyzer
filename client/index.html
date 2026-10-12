@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <!-- The installed app's title bar. Set to the header's color for the active theme below and by
+         src/theme.ts, so a manual light/dark override is followed too. -->
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-title" content="Spending" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spending Analyzer</title>
     <script>
@@ -15,6 +21,7 @@
           var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
           document.documentElement.classList.toggle("dark", dark);
           document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#0f172a" : "#ffffff");
         } catch (e) {}
       })();
     </script>

@@ -132,6 +132,14 @@ Open `https://YOUR-SITE-ADDRESS` and sign in. If the certificate step fails, it'
 ports (step A3 / the B2 security group) or a typo in `SITE_ADDRESS`. The first start on a
 t4g.micro takes a minute or so — Java is slow to start on a small machine.
 
+**On your phone**, open the same address and add it to the home screen — it then opens
+full-screen like an app, with its own icon:
+
+- **Android (Chrome)**: the **Install app** button in the header, or ⋮ → **Install app**.
+- **iPhone (Safari)**: Share → **Add to Home Screen**.
+
+Installing needs the HTTPS address Caddy sets up; a plain `http://IP:port` can't be installed.
+
 ## 6. Nightly backups to your PC
 
 On your Windows PC, from the repository's `deploy\backup` folder in PowerShell:

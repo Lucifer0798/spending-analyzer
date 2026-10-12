@@ -20,6 +20,7 @@ there's no hosted database and no account to sign up for.
 | **Transfers** | Spots money moved between your own accounts so it isn't counted as spending or income |
 | **Recurring charges** | Finds subscriptions and regular bills, with an annual cost and next expected date |
 | **Predictions** | Forecasts next month per category and suggests where to reduce spending |
+| **Installable** | Add it to a phone's home screen (or install it on a desktop) and it opens like an app |
 | **Private** | Everything runs on your machine — no external service, no API key, nothing sent anywhere |
 
 ---
@@ -164,6 +165,8 @@ client/                     React + Vite frontend
   src/components/           Upload, Dashboard, Transactions, Recurring, Year, Goals, Net Worth, Manage
   src/api.ts                Every backend call lives here
   src/types.ts              Shared TypeScript types
+  public/                   Icons, the app manifest and the service worker (sw.js)
+  scripts/generate-icons.mjs  Redraws the PNG icons
 
 server-springboot/          Spring Boot backend
   src/main/java/.../
@@ -173,7 +176,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V25)
-  src/test/                 592 tests
+  src/test/                 593 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -795,6 +798,17 @@ to exactly one of them. Correcting a transaction still writes a plain entry cove
 amount — correcting one charge says nothing about which amounts you meant. Ranges are set
 explicitly in **Manage → Merchant memory**, which is also where you can forget any entry.
 
+**It installs like an app, but keeps no data on the device.** A web app manifest, icons and a
+small service worker (`client/public/sw.js`) make it installable — from the header's **Install
+app** button where the browser offers one (Chrome, Edge), or Share → **Add to Home Screen** on an
+iPhone. The worker caches only the app shell: the page (fetched from the network first, so a new
+version shows up on the next load) and the content-hashed build files. It never touches `/api`, so
+nothing private sits in the browser's cache and there's no stale data to show; opened with the
+server out of reach, the app says so and offers **Try again** rather than a login screen that
+can't work. Installing needs HTTPS (or `localhost`), which the VM guide's Caddy provides. The
+icons are drawn by `client/scripts/generate-icons.mjs` — no image library — from the same
+geometry as `favicon.svg`.
+
 **Light/dark theme follows the OS by default, with a manual override saved per browser.** The
 header's theme picker (System / Light / Dark) writes to `localStorage`, and an inline script in
 `index.html` applies it before React ever loads, so there's no flash of the wrong theme on the
@@ -821,7 +835,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (592).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (593).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -898,6 +912,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Installable app~~ — a manifest, icons and a shell-only service worker: add it to a phone's
+  home screen (or install it on a desktop) and it opens like an app; offline or with the server
+  down it says so instead of showing a login screen
 - ~~Transfer matching~~ — money moved between your own accounts (same amount out of one, into
   another, within three days) is suggested on the Transactions page; confirming moves both halves
   to Transfer so neither counts as spending or income, with undo under Manage → Transfers

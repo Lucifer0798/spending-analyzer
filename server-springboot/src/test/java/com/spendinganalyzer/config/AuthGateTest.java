@@ -76,6 +76,17 @@ class AuthGateTest {
                 .andExpect(jsonPath("$.authenticated").value(false));
     }
 
+    @Test
+    @DisplayName("what makes the app installable loads signed out too; anything else static does not")
+    void installFilesAreReachableWhenSignedOut() throws Exception {
+        // The built client isn't on the test classpath, so a reachable file is a 404 here (not a
+        // 500 -- see GlobalExceptionHandler); what matters is that the gate let it through.
+        for (String path : new String[] {"/manifest.json", "/sw.js", "/icons/icon-192.png", "/apple-touch-icon.png"}) {
+            mockMvc.perform(get(path)).andExpect(status().isNotFound());
+        }
+        mockMvc.perform(get("/backup-copy.json")).andExpect(status().isUnauthorized());
+    }
+
     // --- signing in -------------------------------------------------------------
 
     @Test
