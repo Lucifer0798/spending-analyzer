@@ -24,8 +24,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
     }
 
+    /**
+     * Anything else is a server fault -- except Spring's own exceptions that already carry an HTTP
+     * status (a missing static file is a 404, a wrong method a 405, a missing parameter a 400).
+     * Catching {@code Exception} would otherwise turn every one of those into a 500.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
+        if (e instanceof org.springframework.web.ErrorResponse withStatus) {
+            String detail = withStatus.getBody().getDetail();
+            return ResponseEntity.status(withStatus.getStatusCode())
+                    .body(new ErrorResponse(detail != null ? detail : e.getMessage()));
+        }
         return ResponseEntity.status(500).body(new ErrorResponse("Unexpected error: " + e.getMessage()));
     }
 }

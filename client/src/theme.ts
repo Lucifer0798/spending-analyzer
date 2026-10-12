@@ -24,6 +24,8 @@ export function applyTheme(theme: Theme): void {
   root.classList.toggle("dark", dark);
   // Also affects native form controls and scrollbars, which the dark: class alone doesn't reach.
   root.style.colorScheme = dark ? "dark" : "light";
+  // The installed app's title bar -- matches the header (white, or slate-900 in dark mode).
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0f172a" : "#ffffff");
 
   try {
     if (theme === "system") localStorage.removeItem(STORAGE_KEY);

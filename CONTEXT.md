@@ -126,6 +126,28 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**The service worker caches the shell only, and is hand-written rather than a plugin.** No
+`vite-plugin-pwa`/Workbox: with no precache manifest to generate, the rules fit in one file.
+Navigations are network-first (cached copy stored under `/`, used only when the fetch throws);
+`/assets/*` are cache-first, since Vite hashes them; each fresh page load prunes cached assets the
+new `index.html` no longer references (a future lazy chunk would be pruned too and simply
+re-fetched). `/api` is never intercepted -- no private data in Cache Storage, nothing to clear on
+sign-out. It registers only in production builds (`import.meta.env.PROD`). The manifest is
+`manifest.json`, not `.webmanifest`: Spring Boot's MIME table has no `webmanifest` entry, so it would
+be served as a generic binary. `SecurityConfig.SHELL` permits the manifest, `sw.js`, `/icons/**`
+and the apple-touch icon -- browsers fetch them before any sign-in. `beforeinstallprompt` is
+captured in `main.tsx` before React mounts (it can fire first) and exposed via
+`useSyncExternalStore`; the Claude desktop browser pane never fires it, so the button was tested by
+dispatching a synthetic event. App's auth check now tells "server didn't answer" (`TypeError` from
+fetch, or a 5xx such as Caddy's 502 during a restart) apart from "not signed in", showing **Try
+again** instead of a login form that can't work; it re-runs when the browser comes back online.
+
+**`GlobalExceptionHandler`'s catch-all honours Spring's own status-carrying exceptions.** Anything
+implementing `org.springframework.web.ErrorResponse` (`NoResourceFoundException`, method not
+allowed, missing parameter) now gets its own status instead of a 500 -- before, a request for a
+missing static file came back as "Unexpected error" with a 500. Found because browsers probe for
+icon files.
+
 **Transfer matching pairs strictly and changes nothing until confirmed.** `TransferMatchingService`
 loads just id/account/currency/date/cents/is-transfer for every unsplit row, buckets credits by
 currency + amount in cents, and keeps debit-credit edges in different accounts at most

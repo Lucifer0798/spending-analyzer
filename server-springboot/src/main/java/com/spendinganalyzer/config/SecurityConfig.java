@@ -27,10 +27,13 @@ public class SecurityConfig {
     /**
      * The browser has to load these before it can draw a login box, so they cannot themselves
      * be behind the login. They are the static shell only — every byte of actual data is served
-     * from /api, which is not on this list.
+     * from /api, which is not on this list. The manifest, icons and service worker are what make
+     * the app installable; the browser fetches them without the session cookie's say-so, and the
+     * worker itself never caches anything under /api.
      */
     private static final String[] SHELL = {
-            "/", "/index.html", "/assets/**", "/favicon.svg", "/icons.svg", "/vite.svg"
+            "/", "/index.html", "/assets/**", "/favicon.svg", "/icons.svg", "/vite.svg",
+            "/manifest.json", "/sw.js", "/icons/**", "/apple-touch-icon.png"
     };
 
     /** The single account's username. Never typed by anyone; only the password is a secret. */

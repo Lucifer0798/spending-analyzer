@@ -11,6 +11,7 @@ import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { promptInstall, useCanInstall, useOnline } from "./pwa";
 import {
   fetchAccounts,
   fetchAuthStatus,
@@ -19,6 +20,7 @@ import {
   logout,
   resetAllData,
   setUnauthorizedHandler,
+  ApiError,
 } from "./api";
 import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
@@ -60,19 +62,38 @@ function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
 
   const signedIn = auth?.authenticated ?? false;
+  const online = useOnline();
+  const canInstall = useCanInstall();
+  // The device is online but the server didn't answer (down, restarting, or a proxy's 502) --
+  // distinct from a "no" to the auth check, which means show the login screen.
+  const [unreachable, setUnreachable] = useState(false);
 
   useEffect(() => {
     // A session can expire while the app is open; this sends the user back to the login screen
     // instead of leaving them looking at a page of failed requests.
     setUnauthorizedHandler(() => setAuth({ authRequired: true, authenticated: false }));
-
-    // Also what makes the server issue the CSRF cookie, which every later write needs.
-    fetchAuthStatus()
-      .then(setAuth)
-      .catch(() => setAuth({ authRequired: true, authenticated: false }));
-
     return () => setUnauthorizedHandler(null);
   }, []);
+
+  // Also what makes the server issue the CSRF cookie, which every later write needs.
+  const checkAuth = useCallback(() => {
+    fetchAuthStatus()
+      .then((status) => {
+        setUnreachable(false);
+        setAuth(status);
+      })
+      .catch((e) => {
+        // fetch rejects with a TypeError when nothing answered at all.
+        if (e instanceof TypeError || (e instanceof ApiError && e.status >= 500)) setUnreachable(true);
+        else setAuth({ authRequired: true, authenticated: false });
+      });
+  }, []);
+
+  useEffect(() => {
+    // Opened offline (the installed app can start without a connection), there's no server to ask
+    // yet; this runs again when the connection comes back.
+    if (online) checkAuth();
+  }, [online, checkAuth]);
 
   const loadAccounts = useCallback(() => {
     if (!signedIn) return;
@@ -149,20 +170,51 @@ function App() {
   // transaction-scoped at all -- they're measured from manually-logged amounts, not imports.
   const showFilters = tab !== "manage" && tab !== "upload" && tab !== "goals" && tab !== "net-worth";
 
+  // Nothing is stored on the device -- every figure comes from the server -- so offline there is
+  // nothing to show beyond saying so.
+  const offlineBanner = !online && (
+    <div role="status" className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+      You're offline. Your data lives on the server, so nothing can load until the connection is back.
+    </div>
+  );
+
   if (!auth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950">
-        Loading…
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        {offlineBanner}
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-sm text-slate-500">
+          {!online ? (
+            "Waiting for a connection…"
+          ) : unreachable ? (
+            <>
+              <p>Can't reach the Spending Analyzer server right now.</p>
+              <button
+                onClick={checkAuth}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              >
+                Try again
+              </button>
+            </>
+          ) : (
+            "Loading…"
+          )}
+        </div>
       </div>
     );
   }
 
   if (!auth.authenticated) {
-    return <LoginScreen onSignedIn={() => setAuth({ authRequired: true, authenticated: true })} />;
+    return (
+      <>
+        {offlineBanner}
+        <LoginScreen onSignedIn={() => setAuth({ authRequired: true, authenticated: true })} />
+      </>
+    );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      {offlineBanner}
       <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">Spending Analyzer</span>
@@ -218,6 +270,17 @@ function App() {
                 {t.label}
               </button>
             ))}
+
+            {/* Only where the browser offers installing (Chrome, Edge); Safari is Share → Add to Home Screen. */}
+            {canInstall && (
+              <button
+                onClick={() => promptInstall()}
+                title="Install Spending Analyzer as an app"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-slate-800"
+              >
+                Install app
+              </button>
+            )}
 
             <ThemeToggle />
 
