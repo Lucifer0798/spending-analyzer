@@ -8,6 +8,7 @@ import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.DuplicateDetectionService;
 import com.spendinganalyzer.service.FileParsingService;
+import com.spendinganalyzer.service.OfxParser;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,13 +19,20 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
 public class UploadController {
 
+    /** All OFX: .qfx is Quicken's name for it, .qbo QuickBooks Web Connect's. */
+    private static final List<String> OFX_EXTENSIONS = List.of(".ofx", ".qfx", ".qbo");
+
     private final FileParsingService fileParsingService;
+    private final OfxParser ofxParser;
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
     private final DuplicateDetectionService duplicateDetectionService;
@@ -33,9 +41,11 @@ public class UploadController {
             FileParsingService fileParsingService,
             TransactionRepository transactionRepository,
             AccountRepository accountRepository,
-            DuplicateDetectionService duplicateDetectionService
+            DuplicateDetectionService duplicateDetectionService,
+            OfxParser ofxParser
     ) {
         this.fileParsingService = fileParsingService;
+        this.ofxParser = ofxParser;
         this.transactionRepository = transactionRepository;
         this.accountRepository = accountRepository;
         this.duplicateDetectionService = duplicateDetectionService;
@@ -81,9 +91,21 @@ public class UploadController {
                 parsed = fileParsingService.parseCsv(file.getInputStream(), columnMapping);
             } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
                 parsed = fileParsingService.parseExcel(file.getInputStream(), columnMapping);
+            } else if (OFX_EXTENSIONS.stream().anyMatch(name::endsWith)) {
+                OfxParser.Statement statement = ofxParser.parse(file.getInputStream());
+                String accountCurrency = account.get().currency();
+                // A CSV can't say what currency it's in; an OFX statement can, so a mismatch is
+                // caught here rather than quietly mixing two currencies in one account's totals.
+                if (statement.currency() != null && !statement.currency().equalsIgnoreCase(accountCurrency)) {
+                    return ResponseEntity.badRequest().body(new ErrorResponse(
+                            "This statement is in " + statement.currency() + ", but " + account.get().name()
+                                    + " is a " + accountCurrency + " account. Import it into a "
+                                    + statement.currency() + " account instead."));
+                }
+                parsed = statement.transactions();
             } else {
                 return ResponseEntity.badRequest()
-                        .body(new ErrorResponse("Unsupported file type. Upload a .csv or .xlsx file."));
+                        .body(new ErrorResponse("Unsupported file type. Upload a .csv, .xlsx, .ofx or .qfx file."));
             }
         } catch (FileParsingService.ColumnDetectionException e) {
             // 422: the request itself was fine, but the file's columns need a human to confirm
@@ -104,13 +126,18 @@ public class UploadController {
         int skipped = 0;
 
         if (skipDuplicates) {
+            Set<String> fileIds = parsed.stream().map(ParsedTransaction::externalId)
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            // With bank IDs in the file, rows are matched on those first; the count-based check
+            // then only compares against stored rows that have no ID -- see filterDuplicates.
             Map<String, Integer> existing = transactionRepository.countExistingKeys(
                     targetAccountId,
                     duplicateDetectionService.minDate(parsed),
-                    duplicateDetectionService.maxDate(parsed));
+                    duplicateDetectionService.maxDate(parsed),
+                    !fileIds.isEmpty());
 
-            DuplicateDetectionService.Result result =
-                    duplicateDetectionService.filterDuplicates(parsed, existing);
+            DuplicateDetectionService.Result result = duplicateDetectionService.filterDuplicates(
+                    parsed, existing, transactionRepository.existingExternalIds(targetAccountId, fileIds));
             toInsert = result.toInsert();
             skipped = result.skipped();
         }

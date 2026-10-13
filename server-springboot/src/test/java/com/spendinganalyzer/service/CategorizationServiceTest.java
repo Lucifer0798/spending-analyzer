@@ -51,7 +51,7 @@ class CategorizationServiceTest {
 
     private static Transaction tx(long id, String description, String type) {
         return new Transaction(id, "2026-05-01", description, 10.0, type,
-                null, null, "batch", "2026-05-01", 1L, "Default", "USD", null, null);
+                null, null, "batch", "2026-05-01", 1L, "Default", "USD", null, null, null);
     }
 
     /** A catch-all rule, which is what memory held before amount bands existed. */

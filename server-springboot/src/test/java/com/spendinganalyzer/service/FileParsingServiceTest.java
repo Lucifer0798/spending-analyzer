@@ -244,9 +244,9 @@ class FileParsingServiceTest {
     private static byte[] exportedTransactions() {
         return new CsvExportService().transactions(List.of(
                 new Transaction(1L, "2026-05-01", "COFFEE SHOP", 4.50, "debit", "Dining", "ai", "batch",
-                        "2026-05-02", 1L, "Checking", "USD", null, null),
+                        "2026-05-02", 1L, "Checking", "USD", null, null, null),
                 new Transaction(2L, "2026-05-02", "SALARY", 2400.00, "credit", "Income", "ai", "batch",
-                        "2026-05-02", 1L, "Checking", "USD", null, null)));
+                        "2026-05-02", 1L, "Checking", "USD", null, null, null)));
     }
 
     @Test

@@ -27,7 +27,7 @@ class CsvExportServiceTest {
             String date, String description, double amount, String type, String category, String account) {
         return new Transaction(
                 1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD",
-                null, null);
+                null, null, null);
     }
 
     private static Transaction splitTransaction(
@@ -35,7 +35,7 @@ class CsvExportServiceTest {
             String account, Double splitShare, String splitNote) {
         return new Transaction(
                 1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD",
-                splitShare, splitNote);
+                splitShare, splitNote, null);
     }
 
     /** Reads an export back the way a spreadsheet would, so escaping is exercised rather than assumed. */
