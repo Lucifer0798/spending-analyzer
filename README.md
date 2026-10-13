@@ -13,7 +13,7 @@ there's no hosted database and no account to sign up for.
 
 | | |
 |---|---|
-| **Import** | Reads CSV and Excel statements, working out the date, description, amount, and direction columns for you |
+| **Import** | Reads CSV and Excel statements, working out the date, description, amount, and direction columns for you — or OFX/QFX downloads, which need no guessing at all |
 | **Skip duplicates** | Re-importing an overlapping statement adds only what's new |
 | **Categorize** | Sorts transactions into categories with built-in rules, and remembers every merchant you correct |
 | **Multiple accounts** | Keep a current account and a credit card separate, or view everything together |
@@ -175,8 +175,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V25)
-  src/test/                 593 tests
+    db/migration/           Versioned schema migrations (V1–V26)
+  src/test/                 606 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -208,7 +208,7 @@ Seventeen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
-| `transactions` | Every imported transaction |
+| `transactions` | Every imported transaction, with the bank's own ID for it when it came from an OFX/QFX file |
 | `accounts` | Your accounts; everything belongs to one, defaulting to "Default". Each has its own currency |
 | `categories` | The 16 built-in categories plus any you add |
 | `merchant_categories` | Merchant memory — how each merchant was last categorized |
@@ -227,7 +227,7 @@ Seventeen tables, all created automatically:
 | `transfer_pairs` | A debit and credit you matched as one transfer (with what each was before, for undo), or ruled out |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V26__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V27__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -260,7 +260,7 @@ All endpoints live under `/api`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/upload` | Import a statement (`?accountId=`, `?skipDuplicates=`); 422 with the file's headers if columns can't be auto-detected, taking an explicit mapping to retry |
+| `POST` | `/upload` | Import a statement — `.csv`, `.xlsx`, or `.ofx`/`.qfx`/`.qbo` (`?accountId=`, `?skipDuplicates=`); 422 with the file's headers if a spreadsheet's columns can't be auto-detected, taking an explicit mapping to retry |
 | `GET` | `/transactions` | List transactions (filter by category, month, account, tag, description search) |
 | `PATCH` | `/transactions/{id}` | Change a category (also teaches merchant memory), or set/clear a split |
 | `POST` `DELETE` | `/transactions/{id}/tags` `/transactions/{id}/tags/{name}` | Tag or untag a transaction, creating the tag if new |
@@ -332,6 +332,16 @@ the normal way. This is a one-off clarification for a single ambiguous file, not
 **Duplicate detection compares counts, not just matches.** Rejecting every exact match would
 throw away genuine repeat purchases. Counting means only the surplus over what's already stored
 gets imported, which makes re-importing an overlapping statement safe.
+
+**OFX/QFX files are matched on the bank's own transaction IDs.** The "Quicken" or "Money" download
+most banks offer (`.qfx`, `.ofx`, and QuickBooks' `.qbo`) states every transaction's date, signed
+amount and an ID the bank assigns it, so there are no columns to guess. Re-importing recognises a
+transaction by that ID even if the bank has since reworded it or moved its date (pending to
+posted), and two identical coffees with different IDs are two coffees. Rows the ID doesn't settle
+still go through the count check above, so an OFX download overlapping a CSV you imported earlier
+doesn't double up. A statement also says what currency it's in, so importing one into an account
+of another currency is refused rather than mixing the two; a file with several accounts' statements
+in it is refused too — import each into its own account.
 
 **Recurring detection needs a steady rhythm *and* a steady amount.** Cadence alone would flag your
 supermarket, since you shop there regularly — but for a different amount each time. Requiring both
@@ -835,7 +845,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (593).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (606).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -912,6 +922,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~OFX/QFX import~~ — the Quicken/Money/QuickBooks downloads banks offer import directly, and
+  re-imports are matched on the bank's own transaction IDs before falling back to the count check
 - ~~Installable app~~ — a manifest, icons and a shell-only service worker: add it to a phone's
   home screen (or install it on a desktop) and it opens like an app; offline or with the server
   down it says so instead of showing a login screen

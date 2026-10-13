@@ -265,9 +265,9 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Upload your spending</h1>
       <p className="mt-2 text-slate-600 dark:text-slate-400">
-        Upload a bank or credit card statement (CSV or Excel). We'll parse it, categorize each
-        transaction, and build spending forecasts and savings suggestions — all on this machine,
-        nothing is sent anywhere.
+        Upload a bank or credit card statement (CSV, Excel, or an OFX/QFX download). We'll parse
+        it, categorize each transaction, and build spending forecasts and savings suggestions — all
+        on this machine, nothing is sent anywhere.
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -328,12 +328,12 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
           </svg>
           <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-            Drag &amp; drop a .csv or .xlsx file here, or click to browse
+            Drag &amp; drop a .csv, .xlsx, .ofx or .qfx file here, or click to browse
           </p>
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.xlsx,.xls"
+            accept=".csv,.xlsx,.xls,.ofx,.qfx,.qbo"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];

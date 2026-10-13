@@ -8,10 +8,13 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public class TransactionRepository {
@@ -42,7 +45,8 @@ public class TransactionRepository {
             rs.getString("account_name"),
             rs.getString("account_currency"),
             nullableDouble(rs, "split_share"),
-            rs.getString("split_note")
+            rs.getString("split_note"),
+            rs.getString("external_id")
     );
 
     private static Double nullableDouble(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
@@ -52,8 +56,8 @@ public class TransactionRepository {
 
     public void insertBatch(List<ParsedTransaction> transactions, String batchId, long accountId) {
         String sql = """
-                INSERT INTO transactions (date, description, amount, type, category, category_source, upload_batch_id, account_id)
-                VALUES (:date, :description, :amount, :type, :category, :categorySource, :batchId, :accountId)
+                INSERT INTO transactions (date, description, amount, type, category, category_source, upload_batch_id, account_id, external_id)
+                VALUES (:date, :description, :amount, :type, :category, :categorySource, :batchId, :accountId, :externalId)
                 """;
 
         MapSqlParameterSource[] params = transactions.stream()
@@ -65,7 +69,8 @@ public class TransactionRepository {
                         .addValue("category", t.category())
                         .addValue("categorySource", t.category() != null ? "import" : null)
                         .addValue("batchId", batchId)
-                        .addValue("accountId", accountId))
+                        .addValue("accountId", accountId)
+                        .addValue("externalId", t.externalId()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate(sql, params);
@@ -77,11 +82,20 @@ public class TransactionRepository {
      * {@link ParsedTransaction#dedupeKey()} so the two can be compared directly.
      */
     public Map<String, Integer> countExistingKeys(long accountId, String minDate, String maxDate) {
+        return countExistingKeys(accountId, minDate, maxDate, false);
+    }
+
+    /**
+     * As above; {@code onlyWithoutExternalId} counts only rows with no bank ID. A file whose rows
+     * carry bank IDs is matched on those first, so a stored row that has a <em>different</em> ID is a
+     * different transaction, however alike it looks, and mustn't use up a match.
+     */
+    public Map<String, Integer> countExistingKeys(long accountId, String minDate, String maxDate, boolean onlyWithoutExternalId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 SELECT date, description, amount, type
                 FROM transactions
                 WHERE account_id = :accountId AND date >= :minDate AND date <= :maxDate
-                """,
+                """ + (onlyWithoutExternalId ? " AND external_id IS NULL" : ""),
                 new MapSqlParameterSource()
                         .addValue("accountId", accountId)
                         .addValue("minDate", minDate)
@@ -99,6 +113,15 @@ public class TransactionRepository {
             counts.merge(key, 1, Integer::sum);
         }
         return counts;
+    }
+
+    /** Which of these bank IDs the account already holds -- a re-imported OFX row is recognised by these. */
+    public Set<String> existingExternalIds(long accountId, Collection<String> externalIds) {
+        if (externalIds.isEmpty()) return Set.of();
+        return new HashSet<>(jdbc.queryForList(
+                "SELECT external_id FROM transactions WHERE account_id = :accountId AND external_id IN (:ids)",
+                new MapSqlParameterSource().addValue("accountId", accountId).addValue("ids", externalIds),
+                String.class));
     }
 
     /** Shared predicate builder so the list and its count can never drift apart. */
@@ -386,16 +409,17 @@ public class TransactionRepository {
                         .addValue("createdAt", t.createdAt())
                         .addValue("accountId", t.accountId())
                         .addValue("splitShare", t.splitShare())
-                        .addValue("splitNote", t.splitNote()))
+                        .addValue("splitNote", t.splitNote())
+                        .addValue("externalId", t.externalId()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
                 INSERT INTO transactions
                   (id, date, description, amount, type, category, category_source, upload_batch_id, created_at,
-                   account_id, split_share, split_note)
+                   account_id, split_share, split_note, external_id)
                 VALUES
                   (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt,
-                   :accountId, :splitShare, :splitNote)
+                   :accountId, :splitShare, :splitNote, :externalId)
                 """, params);
     }
 

@@ -6,6 +6,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param splitShare what you're responsible for, out of {@code amount} -- null means the
  *                    transaction isn't split, so the full amount is your share.
  * @param splitNote   who the rest belongs to; null whenever {@code splitShare} is.
+ * @param externalId  the bank's own ID for the transaction (an OFX FITID), when the file it came
+ *                    from had one -- what lets a re-import recognise it exactly. Null otherwise.
  */
 public record Transaction(
         long id,
@@ -21,5 +23,6 @@ public record Transaction(
         @JsonProperty("account_name") String accountName,
         @JsonProperty("account_currency") String accountCurrency,
         @JsonProperty("split_share") Double splitShare,
-        @JsonProperty("split_note") String splitNote
+        @JsonProperty("split_note") String splitNote,
+        @JsonProperty("external_id") String externalId
 ) {}

@@ -126,6 +126,33 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**OFX import stores the FITID and matches on it first; everything else is unchanged.**
+`OfxParser` (its own service, not more of `FileParsingService`) reads SGML 1.x and XML 2.x the same
+way: each `<STMTTRN>...</STMTTRN>` block, then every `<TAG>value` up to the next `<` -- aggregates
+are closed in both dialects, leaf values only in XML. Blocks are found by a forward scan
+(`transactionBlocks`), not a `<STMTTRN>(.*?)</STMTTRN>` regex: CodeQL flagged that as polynomial
+ReDoS -- many opening tags with no closing one rescan to the end from each -- and the scan also
+caches the next closing tag, since re-searching for it per block is just as quadratic. A block
+missing its closing tag ends at the next opening one; a test feeds 2 MB of unclosed tags under a
+5-second timeout on a separate thread (regex matching ignores interrupts). First occurrence wins, so a nested
+`<PAYEE><NAME>` can't override the row's own. The sign of TRNAMT decides debit/credit (TRNTYPE varies
+by bank); DTPOSTED (else DTUSER) keeps only the calendar date; a comma-only decimal is read as a
+decimal point. Description is NAME and MEMO joined with " - " unless one contains the other. Bytes
+decode as strict UTF-8, falling back to Windows-1252. More than one `STMTRS`/`CCSTMTRS` is refused,
+and a CURDEF that differs from the account's currency is refused in `UploadController`.
+
+> FITIDs go in `transactions.external_id` (V26, `ALTER TABLE ADD COLUMN`, partial index on
+> `(account_id, external_id)`; deliberately *not* unique, because "skip duplicates" can be switched
+> off). `ParsedTransaction` gained `externalId` with a 5-arg constructor kept for every CSV/Excel
+> caller; `Transaction` gained `external_id`. Dedupe: a row whose FITID the account holds, or which
+> repeats an earlier FITID in the same file, is skipped outright; the rest go through the count
+> check, but -- when the file has IDs -- counted only against stored rows with `external_id IS NULL`.
+> Otherwise a stored coffee with ID A would use up the count for a new identical coffee with ID B.
+> The backup version was *not* bumped: `external_id` is an optional field on `Transaction`, a
+> version-9 file without it restores with nulls, and bumping would have made every existing nightly
+> backup unrestorable for nothing. Any future rebuild of `transactions` (like V23) must carry
+> `external_id` across.
+
 **The service worker caches the shell only, and is hand-written rather than a plugin.** No
 `vite-plugin-pwa`/Workbox: with no precache manifest to generate, the rules fit in one file.
 Navigations are network-first (cached copy stored under `/`, used only when the fetch throws);

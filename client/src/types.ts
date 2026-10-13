@@ -17,6 +17,8 @@ export interface Transaction {
   split_share: number | null;
   /** Who the rest belongs to; null whenever split_share is. */
   split_note: string | null;
+  /** The bank's own ID for it (an OFX FITID) when it came from an OFX/QFX file; null otherwise. */
+  external_id: string | null;
 }
 
 /** A transaction as the list endpoint returns it, with its tags attached. */
