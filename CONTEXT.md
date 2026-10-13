@@ -129,7 +129,12 @@ disables both links until there's history.
 **OFX import stores the FITID and matches on it first; everything else is unchanged.**
 `OfxParser` (its own service, not more of `FileParsingService`) reads SGML 1.x and XML 2.x the same
 way: each `<STMTTRN>...</STMTTRN>` block, then every `<TAG>value` up to the next `<` -- aggregates
-are closed in both dialects, leaf values only in XML. First occurrence wins, so a nested
+are closed in both dialects, leaf values only in XML. Blocks are found by a forward scan
+(`transactionBlocks`), not a `<STMTTRN>(.*?)</STMTTRN>` regex: CodeQL flagged that as polynomial
+ReDoS -- many opening tags with no closing one rescan to the end from each -- and the scan also
+caches the next closing tag, since re-searching for it per block is just as quadratic. A block
+missing its closing tag ends at the next opening one; a test feeds 2 MB of unclosed tags under a
+5-second timeout on a separate thread (regex matching ignores interrupts). First occurrence wins, so a nested
 `<PAYEE><NAME>` can't override the row's own. The sign of TRNAMT decides debit/credit (TRNTYPE varies
 by bank); DTPOSTED (else DTUSER) keeps only the calendar date; a comma-only decimal is read as a
 decimal point. Description is NAME and MEMO joined with " - " unless one contains the other. Bytes

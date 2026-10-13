@@ -3,6 +3,7 @@ package com.spendinganalyzer.service;
 import com.spendinganalyzer.model.ParsedTransaction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -118,6 +119,30 @@ class OfxParserTest {
 
         assertThat(parse(text, StandardCharsets.US_ASCII).transactions())
                 .extracting(ParsedTransaction::externalId).containsExactly("2026090501");
+    }
+
+    @Test
+    @DisplayName("a transaction whose closing tag is missing ends at the next one")
+    void unclosedTransactionEndsAtTheNext() throws IOException {
+        String text = SGML.replace("<NAME>BLUE BOTTLE COFFEE<MEMO>POS PURCHASE</STMTTRN>", "<NAME>BLUE BOTTLE COFFEE");
+
+        assertThat(parse(text, StandardCharsets.US_ASCII).transactions())
+                .extracting(ParsedTransaction::description)
+                .containsExactly("BLUE BOTTLE COFFEE", "ACME CORP PAYROLL", "AT&T WIRELESS");
+    }
+
+    @Test
+    // A separate thread, so a regression fails here instead of hanging the build: regex matching
+    // never checks for interruption.
+    @Timeout(value = 5, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @DisplayName("stays linear on hostile input: many opening tags and no closing one")
+    void linearOnUnclosedTags() throws IOException {
+        // About 2 MB. A <STMTTRN>(.*?)</STMTTRN> regex rescans to the end from every opening tag,
+        // which is ~10^11 character steps here; the forward scan is a few million.
+        String hostile = "<OFX>" + "<STMTTRN>a".repeat(200_000);
+
+        assertThat(parse(hostile, StandardCharsets.US_ASCII).transactions()).isEmpty();
+        assertThat(OfxParser.transactionBlocks(hostile)).hasSize(199_999);
     }
 
     @Test

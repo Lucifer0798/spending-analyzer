@@ -38,8 +38,8 @@ public class OfxParser {
     /** What one statement holds, and the currency it states (null when it doesn't say). */
     public record Statement(List<ParsedTransaction> transactions, String currency) {}
 
-    private static final Pattern TRANSACTION = Pattern.compile("<STMTTRN>(.*?)</STMTTRN>",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final String OPEN = "<STMTTRN>";
+    private static final String CLOSE = "</STMTTRN>";
     private static final Pattern FIELD = Pattern.compile("<([A-Za-z0-9.]+)>([^<]*)");
     private static final Pattern STATEMENT_START = Pattern.compile("<(?:CC)?STMTRS>", Pattern.CASE_INSENSITIVE);
     private static final Pattern CURRENCY = Pattern.compile("<CURDEF>\\s*([A-Za-z]{3})", Pattern.CASE_INSENSITIVE);
@@ -66,12 +66,44 @@ public class OfxParser {
         String currencyCode = currency.find() ? currency.group(1).toUpperCase(Locale.ROOT) : null;
 
         List<ParsedTransaction> transactions = new ArrayList<>();
-        Matcher block = TRANSACTION.matcher(text);
-        while (block.find()) {
-            ParsedTransaction t = toTransaction(fields(block.group(1)));
+        for (String block : transactionBlocks(text)) {
+            ParsedTransaction t = toTransaction(fields(block));
             if (t != null) transactions.add(t);
         }
         return new Statement(transactions, currencyCode);
+    }
+
+    /**
+     * The text of each {@code <STMTTRN>} block. Found with a single forward scan rather than a
+     * {@code <STMTTRN>(.*?)</STMTTRN>} regex: on an upload with many opening tags and no closing one,
+     * that regex re-scans to the end of the file from every opening tag -- quadratic time on input
+     * anyone signed in can send. A block ends at its closing tag or, if a file leaves that out, at
+     * the next opening one; an opening tag with neither after it is the end of the list.
+     */
+    static List<String> transactionBlocks(String text) {
+        List<String> blocks = new ArrayList<>();
+        // The closing tag found last time is reused until the scan passes it, and once there is
+        // none left it's never searched for again -- so no stretch of text is scanned twice.
+        int close = 0;
+        int open = indexOfIgnoreCase(text, OPEN, 0);
+        while (open >= 0) {
+            int start = open + OPEN.length();
+            if (close >= 0 && close < start) close = indexOfIgnoreCase(text, CLOSE, start);
+            int next = indexOfIgnoreCase(text, OPEN, start);
+            if (close < 0 && next < 0) break;
+            int end = close < 0 ? next : next < 0 ? close : Math.min(close, next);
+            blocks.add(text.substring(start, end));
+            open = next;
+        }
+        return blocks;
+    }
+
+    /** Case-insensitive {@code indexOf} for an ASCII tag, without uppercasing a copy of the text. */
+    private static int indexOfIgnoreCase(String text, String tag, int from) {
+        for (int i = from, last = text.length() - tag.length(); i <= last; i++) {
+            if (text.charAt(i) == '<' && text.regionMatches(true, i, tag, 0, tag.length())) return i;
+        }
+        return -1;
     }
 
     /** First value of each tag in the block -- a nested {@code <PAYEE><NAME>} can't override the row's own. */
