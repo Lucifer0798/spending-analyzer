@@ -734,3 +734,48 @@ export interface MoneyFlow {
   saved: number;
   shortfall: number;
 }
+
+/** One projected transaction in a cash-flow forecast; `amount` is signed (negative leaves the account). */
+export interface CashFlowEvent {
+  date: string;
+  description: string;
+  amount: number;
+  cadence: string;
+  balanceAfter: number;
+  /** Was due by the newest data but hasn't appeared -- counted once, on the first projected day. */
+  overdue: boolean;
+  /** Flagged to cancel on the Recurring page; still counted until it stops. */
+  cancelling: boolean;
+}
+
+/** One account's balance projected forward from its latest logged balance. */
+export interface AccountCashFlow {
+  accountId: number;
+  accountName: string;
+  accountType: string;
+  currency: string;
+  balanceDate: string;
+  loggedBalance: number;
+  /** The starting balance is known through this date: the logged balance plus everything imported since. */
+  asOf: string;
+  importedSince: number;
+  startingBalance: number;
+  /** The newest data is old enough that the projection is mostly guesswork. */
+  stale: boolean;
+  events: CashFlowEvent[];
+  daily: { date: string; balance: number }[];
+  endingBalance: number;
+  lowestBalance: number;
+  lowestDate: string;
+  firstNegativeDate: string | null;
+  /** Goes below zero on an account where that's a problem (checking, savings, cash). */
+  warn: boolean;
+}
+
+export interface CashFlowForecast {
+  today: string;
+  horizonDays: number;
+  accounts: AccountCashFlow[];
+  /** Active accounts with no logged balance to start from. */
+  withoutBalance: string[];
+}

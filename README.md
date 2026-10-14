@@ -20,6 +20,7 @@ there's no hosted database and no account to sign up for.
 | **Transfers** | Spots money moved between your own accounts so it isn't counted as spending or income |
 | **Recurring charges** | Finds subscriptions and regular bills, with an annual cost and next expected date |
 | **Predictions** | Forecasts next month per category and suggests where to reduce spending |
+| **Cash-flow forecast** | Projects each account's balance two months ahead and warns before one goes below zero |
 | **Installable** | Add it to a phone's home screen (or install it on a desktop) and it opens like an app |
 | **Private** | Everything runs on your machine — no external service, no API key, nothing sent anywhere |
 
@@ -176,7 +177,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V26)
-  src/test/                 606 tests
+  src/test/                 611 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -273,6 +274,7 @@ All endpoints live under `/api`.
 | `GET` | `/category-detail` | One category for the active range and account — total, share, monthly trend, change vs. the period before, top merchants, latest transactions (`category`, required) |
 | `GET` | `/daily-spend` | Spend per day in range (only days with spend), for the Dashboard's calendar |
 | `GET` | `/money-flow` | Income per income category and spend per category (with its group) for the active range, and what was saved or overspent |
+| `GET` | `/cash-flow` | Each account's balance projected forward from its latest logged balance and its recurring money in and out (`horizonDays`, 7–120, default 60) |
 | `GET` | `/top-merchants` | Merchants ranked by spend in the active range, branches of a chain counted as one (`limit`, default 10) |
 | `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
@@ -759,6 +761,16 @@ flow into one hub, out to category groups and their categories, with whatever is
 Very small categories fold together so their labels stay readable; the table under it lists every
 one, and on a phone the table replaces the chart.
 
+**The cash-flow forecast only counts what repeats, and leans pessimistic.** On the Net Worth
+page, each account with a logged balance gets a two-month projection. It starts from that balance
+plus every transaction imported since, then adds the account's own recurring charges and
+deposits — rent, pay, subscriptions, and fixed transfers too, since those move the balance as surely
+as a bill does. Monthly ones land on the same day of the month each time. Everyday spending isn't
+guessed at, which makes the projection the optimistic case; the cautious choices go the other way —
+a charge that's one cycle late is counted straight away in case it's merely late, while a late
+paycheck isn't counted on until it arrives. A checking, savings or cash account heading below zero
+gets a warning with the date; a credit card below zero is just a balance owed.
+
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
 one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
@@ -845,7 +857,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (606).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (611).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -922,6 +934,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Cash-flow forecast~~ — each account's balance projected 60 days ahead on the Net Worth page,
+  from its latest logged balance and its recurring money in and out, with a warning before a
+  checking, savings or cash account goes below zero
 - ~~OFX/QFX import~~ — the Quicken/Money/QuickBooks downloads banks offer import directly, and
   re-imports are matched on the bank's own transaction IDs before falling back to the count check
 - ~~Installable app~~ — a manifest, icons and a shell-only service worker: add it to a phone's

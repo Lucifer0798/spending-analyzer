@@ -115,6 +115,29 @@ public class TransactionRepository {
         return counts;
     }
 
+    /** Every transaction in one account going one way, oldest first -- whatever its category. */
+    public List<Transaction> findByAccountAndType(long accountId, String type) {
+        return jdbc.query(SELECT_WITH_ACCOUNT + " WHERE t.account_id = :accountId AND t.type = :type ORDER BY t.date, t.id",
+                new MapSqlParameterSource().addValue("accountId", accountId).addValue("type", type), ROW_MAPPER);
+    }
+
+    /**
+     * What moved through an account after a date: credits minus debits at their full amounts (a
+     * split share is what you owe, not what left the account), how many rows, and the newest date.
+     */
+    public record NetChange(double net, int count, String latestDate) {}
+
+    public NetChange netChangeAfter(long accountId, String afterDate) {
+        return jdbc.queryForObject("""
+                SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE -amount END), 0) AS net,
+                       COUNT(*) AS n, MAX(date) AS latest
+                FROM transactions
+                WHERE account_id = :accountId AND date > :afterDate
+                """,
+                new MapSqlParameterSource().addValue("accountId", accountId).addValue("afterDate", afterDate),
+                (rs, rowNum) -> new NetChange(rs.getDouble("net"), rs.getInt("n"), rs.getString("latest")));
+    }
+
     /** Which of these bank IDs the account already holds -- a re-imported OFX row is recognised by these. */
     public Set<String> existingExternalIds(long accountId, Collection<String> externalIds) {
         if (externalIds.isEmpty()) return Set.of();
