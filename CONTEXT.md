@@ -126,6 +126,23 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**The cash-flow forecast is per account and reuses recurring detection on every transaction.**
+`CashFlowService` starts each active account with a logged balance from its newest balance plus
+`netChangeAfter` (credits minus debits at full `amount` -- not split shares, which are what you owe,
+not what left the account; any category, transfers included). `asOf` is the newest transaction
+after the balance date, else the balance date. It then runs `RecurringDetectionService.detect`
+separately on the account's debits and credits (`findByAccountAndType`, all categories -- the
+Recurring page's spending-only feed would miss a fixed transfer to savings). Monthly, quarterly
+and yearly series step with `plusMonths`/`plusYears` from the last real date (always from `last`,
+so Jan 31 gives Feb 28 then Mar 31, not Mar 28); weekly/biweekly step by the median interval. A
+series whose first expected date is on or before `asOf` is late: one cycle late, a debit is counted
+once on `asOf + 1` (`overdue`), a credit isn't; two cycles late, the series is ignored as stopped.
+"exclude" recurring overrides are skipped; "cancel" ones still count. Same-day events sort money in
+first. `warn` is only for checking/savings/cash; `stale` when `asOf` is over 45 days before today.
+The service takes a `Clock` (package-private constructor, `@Autowired` on the public one) so tests
+pin today. Irregular spending is deliberately not modelled -- a fitted "daily burn" would be a
+second forecast with its own failure modes; the UI says the result is the optimistic case instead.
+
 **OFX import stores the FITID and matches on it first; everything else is unchanged.**
 `OfxParser` (its own service, not more of `FileParsingService`) reads SGML 1.x and XML 2.x the same
 way: each `<STMTTRN>...</STMTTRN>` block, then every `<TAG>value` up to the next `<` -- aggregates

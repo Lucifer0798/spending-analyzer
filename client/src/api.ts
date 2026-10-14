@@ -8,6 +8,7 @@ import type {
   Budget,
   BudgetPeriod,
   BudgetSummary,
+  CashFlowForecast,
   CategorizeResult,
   CategoryDrilldown,
   DailySpend,
@@ -858,4 +859,9 @@ export function undoTransferPair(id: number) {
 /** Income sources against spending categories for the range -- see MoneyFlow. */
 export function fetchMoneyFlow(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<MoneyFlow>(`/money-flow${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/** Each account's balance projected forward from its latest logged balance. */
+export function fetchCashFlow(horizonDays = 60) {
+  return request<CashFlowForecast>(`/cash-flow${qs({ horizonDays })}`);
 }

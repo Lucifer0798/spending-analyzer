@@ -21,6 +21,7 @@ import type {
 } from "../types";
 import { accountTypeLabel, currency } from "../format";
 import { ExportLink } from "./ExportLink";
+import { CashFlowSection } from "./CashFlowSection";
 
 const BLUE = "#2a78d6";
 const MUTED = "#898781";
@@ -545,6 +546,9 @@ export function NetWorthPage() {
           ))}
         </div>
       )}
+
+      {/* netWorth is refetched whenever a balance is logged or removed, so the forecast follows. */}
+      <CashFlowSection refreshKey={netWorth} />
     </div>
   );
 }
