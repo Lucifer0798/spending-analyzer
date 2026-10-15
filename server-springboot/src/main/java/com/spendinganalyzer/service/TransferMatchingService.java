@@ -65,7 +65,8 @@ public class TransferMatchingService {
     }
 
     /** Just the columns matching needs, so suggesting doesn't load every description into memory. */
-    private record Candidate(long id, long accountId, String currency, LocalDate date, long cents, boolean inTransferCategory) {}
+    private record Candidate(long id, long accountId, String currency, LocalDate date, long cents, boolean inTransferCategory,
+                             String batchId) {}
 
     private record Edge(Candidate debit, Candidate credit, int daysApart) {}
 
@@ -94,7 +95,21 @@ public class TransferMatchingService {
      * several credits, the closest in date wins, then the lower ids, so the answer is stable.
      */
     public Suggestions suggest(int limit) {
+        return suggest(limit, null);
+    }
+
+    /**
+     * As above, keeping only pairs with at least one side from upload {@code batchId} -- what an
+     * import summary asks after. Pairing still runs over everything, so a pair is the same pair
+     * whichever way it's asked for.
+     */
+    public Suggestions suggest(int limit, String batchId) {
         List<Edge> chosen = matchAll();
+        if (batchId != null) {
+            chosen = chosen.stream()
+                    .filter(e -> batchId.equals(e.debit().batchId()) || batchId.equals(e.credit().batchId()))
+                    .toList();
+        }
         List<Edge> page = chosen.subList(0, Math.min(limit, chosen.size()));
 
         List<Long> ids = new ArrayList<>();
@@ -118,7 +133,7 @@ public class TransferMatchingService {
         Map<String, List<Candidate>> creditsByAmount = new HashMap<>();
         List<Candidate> debits = new ArrayList<>();
         jdbc.query("""
-                SELECT t.id, t.account_id, a.currency, t.date, t.amount, t.type,
+                SELECT t.id, t.account_id, a.currency, t.date, t.amount, t.type, t.upload_batch_id,
                        COALESCE(c.is_transfer, 0) AS is_transfer
                 FROM transactions t
                 LEFT JOIN accounts a ON a.id = t.account_id
@@ -130,7 +145,8 @@ public class TransferMatchingService {
             LocalDate date = parseDate(rs.getString("date"));
             if (date == null) return;
             Candidate c = new Candidate(id, rs.getLong("account_id"), rs.getString("currency"), date,
-                    Math.round(rs.getDouble("amount") * 100), rs.getInt("is_transfer") == 1);
+                    Math.round(rs.getDouble("amount") * 100), rs.getInt("is_transfer") == 1,
+                    rs.getString("upload_batch_id"));
             if ("debit".equals(rs.getString("type"))) {
                 debits.add(c);
             } else {

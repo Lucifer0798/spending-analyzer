@@ -613,8 +613,9 @@ export function reapplyRules(dryRun = true) {
   return request<ReapplyRulesResult>(`/categorize/reapply-rules${qs({ dryRun })}`, { method: "POST" });
 }
 
-export function runCategorization() {
-  return request<CategorizeResult>("/categorize", { method: "POST" });
+/** `batchId` (an upload's id) adds that upload's own counts, for an import summary. */
+export function runCategorization(batchId?: string) {
+  return request<CategorizeResult>(`/categorize${qs({ batchId })}`, { method: "POST" });
 }
 
 // --- merchant memory --------------------------------------------------------
@@ -825,8 +826,8 @@ export function importBackup(json: string) {
 // --- transfers ----------------------------------------------------------------
 
 /** Likely transfers between your own accounts, newest first. Spans every account and all time. */
-export function fetchTransferSuggestions(limit = 50) {
-  return request<TransferSuggestionsResponse>(`/transfers/suggestions${qs({ limit })}`);
+export function fetchTransferSuggestions(limit = 50, batchId?: string) {
+  return request<TransferSuggestionsResponse>(`/transfers/suggestions${qs({ limit, batchId })}`);
 }
 
 export function fetchTransferPairs() {

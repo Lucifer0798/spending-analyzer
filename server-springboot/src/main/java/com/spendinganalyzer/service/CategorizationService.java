@@ -96,20 +96,34 @@ public class CategorizationService {
     }
 
     public CategorizeResponse categorizeAll() {
+        return categorizeAll(null);
+    }
+
+    /**
+     * Categorizes everything uncategorized -- older rows too, since a rule added since may now
+     * recognise them -- and, when {@code batchId} names an upload, also counts that upload's rows on
+     * their own. An import summary uses those, so its numbers add up to what the file brought in
+     * rather than including rows from earlier statements that happened to be categorized alongside.
+     */
+    public CategorizeResponse categorizeAll(String batchId) {
         List<Transaction> uncategorized = transactionRepository.findUncategorized();
         if (uncategorized.isEmpty()) {
-            return CategorizeResponse.noneFound();
+            return CategorizeResponse.noneFound(batchId != null);
         }
 
         Decider decider = new Decider();
         int fromMemory = 0;
         int fromKeywordRules = 0;
         int fromRules = 0;
+        // This upload's own rows: [total, memory, keyword, built-in].
+        int[] batch = new int[4];
         // Keyed by rule id, not merchant: a merchant with several bands should only credit the
         // band that actually answered.
         Map<Long, Integer> memoryHits = new HashMap<>();
 
         for (Transaction t : uncategorized) {
+            boolean inBatch = batchId != null && batchId.equals(t.uploadBatchId());
+            if (inBatch) batch[0]++;
             Optional<Decision> decision = decider.decide(t);
             if (decision.isEmpty()) continue;
 
@@ -119,14 +133,27 @@ public class CategorizationService {
                 case MEMORY -> {
                     memoryHits.merge(d.memoryRuleId(), 1, Integer::sum);
                     fromMemory++;
+                    if (inBatch) batch[1]++;
                 }
-                case KEYWORD -> fromKeywordRules++;
-                case BUILT_IN -> fromRules++;
+                case KEYWORD -> {
+                    fromKeywordRules++;
+                    if (inBatch) batch[2]++;
+                }
+                case BUILT_IN -> {
+                    fromRules++;
+                    if (inBatch) batch[3]++;
+                }
             }
         }
         merchantCategoryRepository.recordHits(memoryHits);
 
-        return CategorizeResponse.of(fromMemory, fromKeywordRules, fromRules, uncategorized.size());
+        if (batchId == null) {
+            return CategorizeResponse.of(fromMemory, fromKeywordRules, fromRules, uncategorized.size());
+        }
+        int batchCategorized = batch[1] + batch[2] + batch[3];
+        return CategorizeResponse.of(fromMemory, fromKeywordRules, fromRules, uncategorized.size(),
+                new CategorizeResponse.Batch(batch[0], batch[1], batch[2], batch[3], batch[0] - batchCategorized),
+                fromMemory + fromKeywordRules + fromRules - batchCategorized);
     }
 
     /**

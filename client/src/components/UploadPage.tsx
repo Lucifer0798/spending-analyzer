@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ApiError, runCategorization, uploadFile } from "../api";
+import { ApiError, fetchTransferSuggestions, runCategorization, uploadFile } from "../api";
 import type { Account, CategorizeResult, ColumnDetectionResult, UploadResult } from "../types";
 import { accountTypeLabel } from "../format";
 
@@ -9,6 +9,8 @@ interface Props {
   onDone: () => void;
   /** Opens Transactions with the uncategorized review expanded. */
   onReviewUncategorized: () => void;
+  /** Opens Transactions with the transfer review expanded. */
+  onReviewTransfers: () => void;
 }
 
 type Stage = "idle" | "uploading" | "categorizing" | "done" | "error";
@@ -176,12 +178,14 @@ function ColumnMappingForm({
   );
 }
 
-export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncategorized }: Props) {
+export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncategorized, onReviewTransfers }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [categorization, setCategorization] = useState<CategorizeResult | null>(null);
+  // Likely transfers with at least one side from this upload; null until checked.
+  const [transferCount, setTransferCount] = useState<number | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [targetAccountId, setTargetAccountId] = useState<number>(
     selectedAccountId ?? accounts[0]?.id ?? 1
@@ -205,6 +209,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
       setError(null);
       setResult(null);
       setCategorization(null);
+      setTransferCount(null);
       setColumnsNeeded(null);
       setStage("uploading");
       try {
@@ -220,7 +225,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
 
         setStage("categorizing");
         try {
-          setCategorization(await runCategorization());
+          setCategorization(await runCategorization(uploaded.batchId));
         } catch (categorizeError) {
           // The import succeeded; surface the categorization failure without discarding it.
           setError(
@@ -228,6 +233,12 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
               ? `Imported, but categorization failed: ${categorizeError.message}`
               : "Imported, but categorization failed."
           );
+        }
+        // Only a nicety on top of the summary -- if it fails, the summary just doesn't mention it.
+        try {
+          setTransferCount((await fetchTransferSuggestions(1, uploaded.batchId)).total);
+        } catch {
+          setTransferCount(null);
         }
         setStage("done");
       } catch (err) {
@@ -260,6 +271,8 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
   };
 
   const busy = stage === "uploading" || stage === "categorizing";
+  // This upload's own counts -- present whenever categorization ran for it.
+  const fileCounts = categorization?.batch ?? null;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
@@ -360,50 +373,74 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
       {stage === "done" && result && (
         <div className="mt-6 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
           <p>
-            Read <strong>{result.parsed}</strong> transactions from the file into{" "}
+            Read <strong>{result.parsed}</strong> transaction{result.parsed === 1 ? "" : "s"} from the file into{" "}
             <strong>{result.accountName}</strong>.
           </p>
           <ul className="mt-2 space-y-1">
             <li>
               Imported: <strong>{result.inserted}</strong>
-              {result.preCategorized > 0 && ` (${result.preCategorized} already had categories)`}
             </li>
             {result.skippedDuplicates > 0 && (
               <li>
                 Skipped as already imported: <strong>{result.skippedDuplicates}</strong>
               </li>
             )}
-            {categorization && (
-              <>
-                {categorization.fromMemory > 0 && (
-                  <li>
-                    Categorized from merchant memory: <strong>{categorization.fromMemory}</strong>
-                  </li>
-                )}
-                {categorization.fromKeywordRules > 0 && (
-                  <li>
-                    Categorized by your keyword rules: <strong>{categorization.fromKeywordRules}</strong>
-                  </li>
-                )}
-                {categorization.fromRules > 0 && (
-                  <li>
-                    Categorized by the built-in rules: <strong>{categorization.fromRules}</strong>
-                  </li>
-                )}
-                {categorization.unmatched > 0 && (
-                  <li>
-                    Left for you to categorize: <strong>{categorization.unmatched}</strong>
-                  </li>
-                )}
-              </>
-            )}
           </ul>
 
-          {categorization && categorization.unmatched > 0 && (
+          {/* Every count below is about this file's rows -- together they add up to Imported. */}
+          {result.inserted > 0 && (fileCounts || result.preCategorized > 0) && (
+            <>
+              <p className="mt-3 font-medium">Categories for the {result.inserted} imported:</p>
+              <ul className="mt-1 space-y-1">
+                {result.preCategorized > 0 && (
+                  <li>
+                    Already in the file: <strong>{result.preCategorized}</strong>
+                  </li>
+                )}
+                {fileCounts && fileCounts.fromMemory > 0 && (
+                  <li>
+                    From merchant memory: <strong>{fileCounts.fromMemory}</strong>
+                  </li>
+                )}
+                {fileCounts && fileCounts.fromKeywordRules > 0 && (
+                  <li>
+                    From your keyword rules: <strong>{fileCounts.fromKeywordRules}</strong>
+                  </li>
+                )}
+                {fileCounts && fileCounts.fromRules > 0 && (
+                  <li>
+                    From the built-in rules: <strong>{fileCounts.fromRules}</strong>
+                  </li>
+                )}
+                {fileCounts && fileCounts.unmatched > 0 && (
+                  <li>
+                    Still need one: <strong>{fileCounts.unmatched}</strong>
+                  </li>
+                )}
+              </ul>
+            </>
+          )}
+
+          {fileCounts && fileCounts.unmatched > 0 && (
             <p className="mt-2">
               They're grouped by merchant, so one choice covers every transaction from the same
               place — and it's remembered, so the next statement from there is categorized
               automatically.
+            </p>
+          )}
+
+          {(categorization?.earlier ?? 0) > 0 && (
+            <p className="mt-2">
+              Also categorized {categorization!.earlier} earlier transaction{categorization!.earlier === 1 ? "" : "s"}{" "}
+              that {categorization!.earlier === 1 ? "was" : "were"} still waiting for one.
+            </p>
+          )}
+
+          {(transferCount ?? 0) > 0 && (
+            <p className="mt-2">
+              <strong>{transferCount}</strong> look{transferCount === 1 ? "s" : ""} like{" "}
+              {transferCount === 1 ? "a transfer" : "transfers"} between your accounts — counted as
+              spending until you confirm {transferCount === 1 ? "it" : "them"}.
             </p>
           )}
 
@@ -414,12 +451,20 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {categorization && categorization.unmatched > 0 && (
+            {fileCounts && fileCounts.unmatched > 0 && (
               <button
                 onClick={onReviewUncategorized}
                 className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
               >
-                Review {categorization.unmatched} uncategorized →
+                Review uncategorized →
+              </button>
+            )}
+            {(transferCount ?? 0) > 0 && (
+              <button
+                onClick={onReviewTransfers}
+                className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+              >
+                Review transfers →
               </button>
             )}
             <button

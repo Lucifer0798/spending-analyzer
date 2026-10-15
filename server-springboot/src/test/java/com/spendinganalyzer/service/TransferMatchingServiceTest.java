@@ -99,6 +99,23 @@ class TransferMatchingServiceTest {
     }
 
     @Test
+    @DisplayName("asked about one upload, only pairs with a side from that upload are returned")
+    void filtersByUpload() {
+        long out = add(checking, "2026-05-01", "TO SAVINGS", 500, "debit", null);   // batch "transfer-test"
+        add(savings, "2026-05-02", "FROM CHECKING", 500, "credit", null);
+        transactions.insertBatch(List.of(
+                new ParsedTransaction("2026-06-01", "TO SAVINGS", 300, "debit", null)), "june-upload", checking);
+        add(savings, "2026-06-01", "FROM CHECKING", 300, "credit", null);
+
+        assertThat(service.suggest(100).total()).isEqualTo(2);
+        assertThat(service.suggest(100, "june-upload").suggestions())
+                .singleElement().extracting(s -> s.debit().amount()).isEqualTo(300.0);
+        assertThat(service.suggest(100, "transfer-test").total()).isEqualTo(2);   // both have a side in it
+        assertThat(service.suggest(100, "no-such-upload").total()).isZero();
+        assertThat(out).isPositive();
+    }
+
+    @Test
     @DisplayName("ignores the same account, a different amount or currency, too many days apart, and split rows")
     void ignoresNearMisses() {
         add(checking, "2026-05-01", "A", 100, "debit", null);
@@ -293,7 +310,7 @@ class TransferMatchingServiceTest {
                 .extracting(v -> v.debit().id()).containsExactly(out, older);
         assertThat((List<?>) listed.get("dismissed")).hasSize(1);
         assertThat(controller.confirm(Map.of("pairs", List.of())).getStatusCode().value()).isEqualTo(400);
-        assertThat(controller.suggestions(0).getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.suggestions(0, null).getStatusCode().value()).isEqualTo(400);
         assertThat(controller.undo(99999).getStatusCode().value()).isEqualTo(404);
     }
 }

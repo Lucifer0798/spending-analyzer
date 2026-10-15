@@ -91,6 +91,17 @@ export interface CategorizeResult {
   fromRules: number;
   /** Left uncategorized: neither memory nor a rule recognised them. */
   unmatched: number;
+  /** The same counts for just the upload named in the request; absent when none was. */
+  batch?: {
+    /** How many of the upload's rows were still uncategorized going in. */
+    total: number;
+    fromMemory: number;
+    fromKeywordRules: number;
+    fromRules: number;
+    unmatched: number;
+  };
+  /** With an upload named: rows from earlier uploads that got categorized in passing. */
+  earlier?: number;
 }
 
 export interface MerchantMemory {

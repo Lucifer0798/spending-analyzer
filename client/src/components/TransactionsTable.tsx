@@ -37,6 +37,8 @@ interface Props {
   initialSearch?: string;
   /** Opens the uncategorized review panel expanded -- read once at mount, like initialSearch. */
   initialReviewOpen?: boolean;
+  /** Opens the transfer review panel expanded -- read once at mount, like initialSearch. */
+  initialTransfersOpen?: boolean;
   /** Pre-selects the category filter -- read once at mount, like initialSearch. */
   initialCategory?: string;
 }
@@ -65,6 +67,7 @@ export function TransactionsTable({
   onRangeChange,
   initialSearch = "",
   initialReviewOpen = false,
+  initialTransfersOpen = false,
   initialCategory = "",
 }: Props) {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
@@ -476,7 +479,7 @@ export function TransactionsTable({
         refreshKey={transactions}
       />
       {/* Same: nothing once every likely transfer is matched or dismissed. */}
-      <TransferReview onChanged={load} refreshKey={transactions} />
+      <TransferReview onChanged={load} refreshKey={transactions} initiallyOpen={initialTransfersOpen} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {presets.map((p) => (
