@@ -126,6 +126,19 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**The import summary counts one upload, not the whole categorization run.** `/categorize` always
+works through every uncategorized row -- an older row a new rule now recognises should benefit --
+which is why the upload page's counts used to add up to more than the file imported. With
+`batchId` (the upload's id, from `UploadResponse`), `categorizeAll(batchId)` also tallies that
+upload's rows on their own (`CategorizeResponse.batch`) and reports the rest as `earlier`. The page
+shows "already in the file" (`preCategorized`) plus the batch's memory/keyword/built-in/unmatched,
+which together equal Imported. Transfer suggestions take the same `batchId`; pairing still runs
+over everything (so the pair is the same pair either way) and only then keeps those with a side from
+that upload. A pair whose halves the rules already filed under Transfer isn't suggested, so it isn't
+counted -- correct, there's nothing left to fix. "Review transfers" uses the same mount-time
+hand-off as "Review uncategorized" (`reviewTransfers` in App -> `initialTransfersOpen` ->
+`TransferReview initiallyOpen`).
+
 **The cash-flow forecast is per account and reuses recurring detection on every transaction.**
 `CashFlowService` starts each active account with a logged balance from its newest balance plus
 `netChangeAfter` (credits minus debits at full `amount` -- not split shares, which are what you owe,

@@ -55,6 +55,8 @@ function App() {
   const [transactionCategory, setTransactionCategory] = useState("");
   // Same hand-off as transactionSearch: read once when Transactions mounts, cleared by the nav.
   const [reviewUncategorized, setReviewUncategorized] = useState(false);
+  // Same again, for the transfer review an import summary links to.
+  const [reviewTransfers, setReviewTransfers] = useState(false);
   const [bounds, setBounds] = useState<DateBounds | null>(null);
   const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -259,6 +261,7 @@ function App() {
                   setTransactionSearch("");
                   setTransactionCategory("");
                   setReviewUncategorized(false);
+                  setReviewTransfers(false);
                   setTab(t.id);
                 }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -321,6 +324,15 @@ function App() {
               setRefreshKey((k) => k + 1);
               setTransactionSearch("");
               setReviewUncategorized(true);
+              setReviewTransfers(false);
+              setTab("transactions");
+            }}
+            onReviewTransfers={() => {
+              loadAccounts();
+              setRefreshKey((k) => k + 1);
+              setTransactionSearch("");
+              setReviewUncategorized(false);
+              setReviewTransfers(true);
               setTab("transactions");
             }}
           />
@@ -353,6 +365,7 @@ function App() {
             initialSearch={transactionSearch}
             initialCategory={transactionCategory}
             initialReviewOpen={reviewUncategorized}
+            initialTransfersOpen={reviewTransfers}
           />
         )}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}

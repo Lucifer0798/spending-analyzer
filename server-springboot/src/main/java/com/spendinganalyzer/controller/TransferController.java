@@ -36,11 +36,12 @@ public class TransferController {
     }
 
     @GetMapping("/suggestions")
-    public ResponseEntity<?> suggestions(@RequestParam(defaultValue = "50") int limit) {
+    public ResponseEntity<?> suggestions(@RequestParam(defaultValue = "50") int limit,
+                                         @RequestParam(required = false) String batchId) {
         if (limit < 1 || limit > 500) {
             return ResponseEntity.badRequest().body(new ErrorResponse("limit must be between 1 and 500."));
         }
-        TransferMatchingService.Suggestions found = service.suggest(limit);
+        TransferMatchingService.Suggestions found = service.suggest(limit, batchId);
         Map<String, Object> body = new HashMap<>();
         body.put("total", found.total());
         body.put("suggestions", found.suggestions());

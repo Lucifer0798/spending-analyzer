@@ -8,6 +8,8 @@ interface Props {
   onChanged: () => void;
   /** Any value that changes whenever the page's transactions change, so suggestions re-fetch. */
   refreshKey?: unknown;
+  /** Start expanded -- when arriving from an import summary's "Review transfers". */
+  initiallyOpen?: boolean;
 }
 
 const pairKey = (s: TransferSuggestion) => `${s.debit.id}:${s.credit.id}`;
@@ -19,9 +21,9 @@ const ref = (s: TransferSuggestion) => ({ debit_id: s.debit.id, credit_id: s.cre
  * stops the pair being suggested. Renders nothing when there's nothing to review. Spans every
  * account on purpose -- the account filter would hide the other half.
  */
-export function TransferReview({ onChanged, refreshKey }: Props) {
+export function TransferReview({ onChanged, refreshKey, initiallyOpen = false }: Props) {
   const [data, setData] = useState<TransferSuggestionsResponse | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastDone, setLastDone] = useState<string | null>(null);

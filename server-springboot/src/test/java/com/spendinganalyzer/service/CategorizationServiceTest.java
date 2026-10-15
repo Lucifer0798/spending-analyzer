@@ -118,6 +118,24 @@ class CategorizationServiceTest {
     }
 
     @Test
+    @DisplayName("naming an upload counts its rows on their own, and older rows categorized alongside as 'earlier'")
+    void countsOneUploadSeparately() {
+        Transaction older = new Transaction(9, "2026-04-01", "SUPERMARKET 12", 10.0, "debit",
+                null, null, "older-upload", "2026-04-01", 1L, "Default", "USD", null, null, null);
+        when(transactions.findUncategorized()).thenReturn(List.of(
+                tx(1, "NEW CORNER CAFE 123"),
+                tx(2, "ZQX HOLDINGS 4471"),
+                older));
+
+        CategorizeResponse response = service.categorizeAll("batch");
+
+        assertThat(response.categorized()).isEqualTo(2);           // the whole run
+        assertThat(response.batch()).isEqualTo(new CategorizeResponse.Batch(2, 0, 0, 1, 1));
+        assertThat(response.earlier()).isEqualTo(1);
+        assertThat(service.categorizeAll().batch()).isNull();      // no upload named, no breakdown
+    }
+
+    @Test
     @DisplayName("a debit nothing recognises stays uncategorized rather than being filed under Other")
     void unknownDebitIsLeftBlank() {
         when(transactions.findUncategorized()).thenReturn(List.of(

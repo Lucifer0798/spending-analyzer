@@ -20,10 +20,11 @@ public class CategorizeController {
         this.categorizationService = categorizationService;
     }
 
+    /** {@code batchId}, an upload's id, adds that upload's own counts -- see {@link CategorizationService#categorizeAll(String)}. */
     @PostMapping("/categorize")
-    public ResponseEntity<?> categorize() {
+    public ResponseEntity<?> categorize(@RequestParam(required = false) String batchId) {
         try {
-            CategorizeResponse response = categorizationService.categorizeAll();
+            CategorizeResponse response = categorizationService.categorizeAll(batchId);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(502)

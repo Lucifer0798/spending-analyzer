@@ -177,7 +177,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V26)
-  src/test/                 611 tests
+  src/test/                 613 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -269,7 +269,7 @@ All endpoints live under `/api`.
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
 | `GET` | `/transactions/uncategorized-merchants` | Uncategorized transactions grouped by merchant (and currency), most first, with the ids to answer each group via `bulk-category` |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
-| `POST` | `/categorize` | Categorize anything uncategorized |
+| `POST` | `/categorize` | Categorize anything uncategorized; `batchId` (an upload's id) also reports that upload's own counts, and how many earlier rows were categorized in passing |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
 | `GET` | `/category-detail` | One category for the active range and account — total, share, monthly trend, change vs. the period before, top merchants, latest transactions (`category`, required) |
 | `GET` | `/daily-spend` | Spend per day in range (only days with spend), for the Dashboard's calendar |
@@ -308,7 +308,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/merchants` | View merchant memory, add an amount-range rule, or forget an entry |
 | `POST` | `/categorize/reapply-rules` | Re-decide transactions a rule categorized, after rules change; `dryRun=true` (default) only reports. Categories you set are never touched |
 | `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
-| `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50) |
+| `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50; `batchId` keeps only pairs with a side from that upload) |
 | `GET` `POST` `DELETE` | `/transfers` | Matched and dismissed pairs; `/transfers/confirm` and `/transfers/dismiss` take `{"pairs": [{"debit_id", "credit_id"}]}`; `DELETE /transfers/{id}` undoes one |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
@@ -857,7 +857,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (611).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (613).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -934,6 +934,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Clearer import summary~~ — after an upload the category counts cover just that file's rows
+  (earlier rows categorized in passing are mentioned separately), and likely transfers involving
+  the file are pointed out with a button that opens the transfer review
 - ~~Cash-flow forecast~~ — each account's balance projected 60 days ahead on the Net Worth page,
   from its latest logged balance and its recurring money in and out, with a warning before a
   checking, savings or cash account goes below zero
