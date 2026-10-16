@@ -16,13 +16,14 @@ import {
   fetchAccounts,
   fetchAuthStatus,
   fetchBudgets,
+  fetchCashFlow,
   fetchDateBounds,
   logout,
   resetAllData,
   setUnauthorizedHandler,
   ApiError,
 } from "./api";
-import type { Account, AuthStatus, BudgetSummary, DateBounds, DateRangeValue } from "./types";
+import type { Account, AuthStatus, BudgetSummary, CashFlowForecast, DateBounds, DateRangeValue } from "./types";
 import { ALL_TIME } from "./types";
 
 // "category" is reached by drilling into a Dashboard bar, so it has no button in TABS.
@@ -38,6 +39,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "net-worth", label: "Net Worth" },
   { id: "manage", label: "Manage" },
 ];
+
+function shortDate(iso: string) {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+}
 
 function App() {
   const [tab, setTab] = useState<Tab>("upload");
@@ -59,6 +64,9 @@ function App() {
   const [reviewTransfers, setReviewTransfers] = useState(false);
   const [bounds, setBounds] = useState<DateBounds | null>(null);
   const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
+  const [cashFlow, setCashFlow] = useState<CashFlowForecast | null>(null);
+  // Same hand-off as transactionSearch, for the low-balance alert: read once when Net Worth mounts.
+  const [showCashFlow, setShowCashFlow] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // null while we are still asking the server whether there is a password at all.
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -121,6 +129,16 @@ function App() {
   }, [accountId, refreshKey, signedIn]);
 
   const overBudget = budgets?.budgets.filter((b) => b.status === "over") ?? [];
+
+  // Drives the header's low-balance badge, like the over-budget one. Not account-filtered: a
+  // checking account about to run dry matters whichever account is selected. Re-checked on every
+  // tab change, so logging a balance on Net Worth updates it by the time you look elsewhere.
+  useEffect(() => {
+    if (!signedIn) return;
+    fetchCashFlow().then(setCashFlow).catch(() => setCashFlow(null));
+  }, [refreshKey, signedIn, tab]);
+
+  const lowBalance = cashFlow?.accounts.filter((a) => a.warn && a.firstNegativeDate) ?? [];
 
   const openMerchant = (merchant: string) => {
     setTransactionSearch(merchant);
@@ -254,6 +272,21 @@ function App() {
               </button>
             )}
 
+            {lowBalance.length > 0 && (
+              <button
+                onClick={() => {
+                  setShowCashFlow(true);
+                  setTab("net-worth");
+                }}
+                title={lowBalance
+                  .map((a) => `${a.accountName}: projected below zero on ${shortDate(a.firstNegativeDate!)}`)
+                  .join("\n")}
+                className="mr-1 rounded-md bg-red-100 px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+              >
+                ⚠ {lowBalance.length === 1 ? `${lowBalance[0].accountName} running low` : `${lowBalance.length} accounts running low`}
+              </button>
+            )}
+
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -262,6 +295,7 @@ function App() {
                   setTransactionCategory("");
                   setReviewUncategorized(false);
                   setReviewTransfers(false);
+                  setShowCashFlow(false);
                   setTab(t.id);
                 }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -371,7 +405,7 @@ function App() {
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}
         {tab === "year" && <YearReviewPage accountId={accountId} onOpenMerchant={openMerchant} />}
         {tab === "goals" && <GoalsPage />}
-        {tab === "net-worth" && <NetWorthPage />}
+        {tab === "net-worth" && <NetWorthPage showCashFlow={showCashFlow} />}
         {tab === "manage" && <ManagePage onAccountsChanged={loadAccounts} />}
       </main>
     </div>

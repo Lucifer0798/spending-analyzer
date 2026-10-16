@@ -126,6 +126,14 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**The low-balance badge reuses `/cash-flow` as-is.** App fetches it alongside budgets and shows a
+badge for accounts with `warn` (and a `firstNegativeDate`). Unlike the budget fetch it isn't
+account-filtered -- a checking account about to run dry matters whichever account is selected --
+and it re-fetches on every tab change, because balances are logged on the Net Worth page and
+App's `refreshKey` doesn't hear about that. Clicking sets `showCashFlow`, the usual read-once
+hand-off (nav buttons clear it); `CashFlowSection` scrolls itself into view the first time its
+forecast loads, guarded by a ref so a later reload (logging another balance) doesn't scroll again.
+
 **The import summary counts one upload, not the whole categorization run.** `/categorize` always
 works through every uncategorized row -- an older row a new rule now recognises should benefit --
 which is why the upload page's counts used to add up to more than the file imported. With
