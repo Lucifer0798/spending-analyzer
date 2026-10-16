@@ -447,7 +447,8 @@ function CurrencySection({ data, onChanged }: { data: CurrencyNetWorth; onChange
   );
 }
 
-export function NetWorthPage() {
+/** `showCashFlow` scrolls to the forecast once it loads -- read once at mount, like the other page hand-offs. */
+export function NetWorthPage({ showCashFlow = false }: { showCashFlow?: boolean }) {
   const [netWorth, setNetWorth] = useState<NetWorthResponse | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -548,7 +549,7 @@ export function NetWorthPage() {
       )}
 
       {/* netWorth is refetched whenever a balance is logged or removed, so the forecast follows. */}
-      <CashFlowSection refreshKey={netWorth} />
+      <CashFlowSection refreshKey={netWorth} scrollIntoView={showCashFlow} />
     </div>
   );
 }

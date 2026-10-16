@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchCashFlow } from "../api";
 import type { AccountCashFlow, CashFlowForecast } from "../types";
@@ -161,11 +161,21 @@ function AccountForecastCard({ f, today }: { f: AccountCashFlow; today: string }
 /**
  * Where each account's balance is heading over the next two months, from its latest logged
  * balance plus the money that repeats on a schedule. `refreshKey` changes whenever a balance is
- * logged or removed on this page, so the forecast follows.
+ * logged or removed on this page, so the forecast follows. `scrollIntoView` brings the section on
+ * screen once it has loaded -- for arriving from the header's low-balance alert.
  */
-export function CashFlowSection({ refreshKey }: { refreshKey: unknown }) {
+export function CashFlowSection({ refreshKey, scrollIntoView = false }: { refreshKey: unknown; scrollIntoView?: boolean }) {
   const [forecast, setForecast] = useState<CashFlowForecast | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  // Once only: the forecast reloads whenever a balance is logged, and that mustn't yank the page.
+  const scrolled = useRef(false);
+
+  useEffect(() => {
+    if (!scrollIntoView || !forecast || scrolled.current) return;
+    scrolled.current = true;
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [scrollIntoView, forecast]);
 
   useEffect(() => {
     fetchCashFlow()
@@ -182,7 +192,7 @@ export function CashFlowSection({ refreshKey }: { refreshKey: unknown }) {
   if (!forecast) return null;
 
   return (
-    <section className="mt-10">
+    <section ref={sectionRef} className="mt-10 scroll-mt-4">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Cash-flow forecast</h2>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
         The next {forecast.horizonDays} days for each account with a logged balance, from the charges and deposits

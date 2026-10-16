@@ -769,7 +769,8 @@ as a bill does. Monthly ones land on the same day of the month each time. Everyd
 guessed at, which makes the projection the optimistic case; the cautious choices go the other way —
 a charge that's one cycle late is counted straight away in case it's merely late, while a late
 paycheck isn't counted on until it arrives. A checking, savings or cash account heading below zero
-gets a warning with the date; a credit card below zero is just a balance owed.
+gets a warning with the date; a credit card below zero is just a balance owed. The same warning
+shows in the header from any page — "⚠ Checking running low" — and clicking it opens the forecast.
 
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
@@ -934,6 +935,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Low-balance header alert~~ — a header badge, like the over-budget one, when the cash-flow
+  forecast has a checking, savings or cash account going below zero; it opens the forecast
 - ~~Clearer import summary~~ — after an upload the category counts cover just that file's rows
   (earlier rows categorized in passing are mentioned separately), and likely transfers involving
   the file are pointed out with a button that opens the transfer review
