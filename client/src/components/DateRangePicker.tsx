@@ -61,8 +61,11 @@ export function DateRangePicker({ value, bounds, onChange }: Props) {
   // derived from `value`, so a range set from elsewhere -- clicking a day on the Dashboard's
   // calendar, say -- shows here as what it is instead of the picker still claiming "All time".
   const [customOpen, setCustomOpen] = useState(false);
+  // Today, read once rather than on every render -- it's only the anchor until the data's own
+  // latest date arrives, and a render has to give the same answer each time it runs.
+  const [today] = useState(() => iso(new Date()));
 
-  const anchor = bounds?.latest ?? iso(new Date());
+  const anchor = bounds?.latest ?? today;
 
   const matchingPreset = PRESETS.find((p) => p.id !== "custom" && sameRange(rangeForPreset(p.id, anchor), value))?.id;
   const preset: PresetId = customOpen || !matchingPreset ? "custom" : matchingPreset;
