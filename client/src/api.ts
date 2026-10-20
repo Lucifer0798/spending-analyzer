@@ -16,6 +16,7 @@ import type {
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
+  FreshnessResponse,
   EscalationType,
   FilterPreset,
   Goal,
@@ -865,4 +866,9 @@ export function fetchMoneyFlow(accountId: number | null, range: DateRangeValue =
 /** Each account's balance projected forward from its latest logged balance. */
 export function fetchCashFlow(horizonDays = 60) {
   return request<CashFlowForecast>(`/cash-flow${qs({ horizonDays })}`);
+}
+
+/** How current each active account's statements and balances are. */
+export function fetchAccountFreshness() {
+  return request<FreshnessResponse>("/accounts/freshness");
 }

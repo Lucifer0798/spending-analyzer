@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
-import { ApiError, fetchTransferSuggestions, runCategorization, uploadFile } from "../api";
-import type { Account, CategorizeResult, ColumnDetectionResult, UploadResult } from "../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError, fetchAccountFreshness, fetchTransferSuggestions, runCategorization, uploadFile } from "../api";
+import type { Account, CategorizeResult, ColumnDetectionResult, FreshnessResponse, UploadResult } from "../types";
+import { AccountFreshnessList } from "./AccountFreshnessList";
 import { accountTypeLabel } from "../format";
 
 interface Props {
@@ -191,6 +192,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
     selectedAccountId ?? accounts[0]?.id ?? 1
   );
   const [columnsNeeded, setColumnsNeeded] = useState<ColumnDetectionResult | null>(null);
+  const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -271,6 +273,11 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
   };
 
   const busy = stage === "uploading" || stage === "categorizing";
+
+  // Re-read after each import, so the account just caught up drops its "Statement due".
+  useEffect(() => {
+    fetchAccountFreshness().then(setFreshness).catch(() => setFreshness(null));
+  }, [result]);
   // This upload's own counts -- present whenever categorization ran for it.
   const fileCounts = categorization?.batch ?? null;
 
@@ -282,6 +289,16 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
         it, categorize each transaction, and build spending forecasts and savings suggestions — all
         on this machine, nothing is sent anywhere.
       </p>
+
+      {freshness && (
+        <AccountFreshnessList
+          accounts={freshness.accounts}
+          dueAfterDays={freshness.dueAfterDays}
+          targetAccountId={targetAccountId}
+          onPick={setTargetAccountId}
+          disabled={busy}
+        />
+      )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <label className="block">

@@ -16,6 +16,7 @@ import {
   fetchAccounts,
   fetchAuthStatus,
   fetchBudgets,
+  fetchAccountFreshness,
   fetchCashFlow,
   fetchDateBounds,
   logout,
@@ -23,7 +24,15 @@ import {
   setUnauthorizedHandler,
   ApiError,
 } from "./api";
-import type { Account, AuthStatus, BudgetSummary, CashFlowForecast, DateBounds, DateRangeValue } from "./types";
+import type {
+  Account,
+  AuthStatus,
+  BudgetSummary,
+  CashFlowForecast,
+  DateBounds,
+  DateRangeValue,
+  FreshnessResponse,
+} from "./types";
 import { ALL_TIME } from "./types";
 
 // "category" is reached by drilling into a Dashboard bar, so it has no button in TABS.
@@ -67,6 +76,9 @@ function App() {
   const [cashFlow, setCashFlow] = useState<CashFlowForecast | null>(null);
   // Same hand-off as transactionSearch, for the low-balance alert: read once when Net Worth mounts.
   const [showCashFlow, setShowCashFlow] = useState(false);
+  const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
+  // The account the "statement due" badge pointed at, preselected when Upload mounts.
+  const [uploadAccountId, setUploadAccountId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // null while we are still asking the server whether there is a password at all.
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -139,6 +151,15 @@ function App() {
   }, [refreshKey, signedIn, tab]);
 
   const lowBalance = cashFlow?.accounts.filter((a) => a.warn && a.firstNegativeDate) ?? [];
+
+  // Drives the "statement due" badge. Same cadence as the low-balance check: an import on the
+  // Upload page or a balance on Net Worth shows up by the next tab change.
+  useEffect(() => {
+    if (!signedIn) return;
+    fetchAccountFreshness().then(setFreshness).catch(() => setFreshness(null));
+  }, [refreshKey, signedIn, tab]);
+
+  const statementsDue = freshness?.accounts.filter((a) => a.statementDue) ?? [];
 
   const openMerchant = (merchant: string) => {
     setTransactionSearch(merchant);
@@ -287,6 +308,23 @@ function App() {
               </button>
             )}
 
+            {statementsDue.length > 0 && tab !== "upload" && (
+              <button
+                onClick={() => {
+                  setUploadAccountId(statementsDue[0].accountId);
+                  setTab("upload");
+                }}
+                title={statementsDue
+                  .map((a) => `${a.accountName}: newest transaction ${a.daysSinceTransaction} days ago`)
+                  .join("\n")}
+                className="mr-1 rounded-md bg-amber-100 px-2.5 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-950"
+              >
+                {statementsDue.length === 1
+                  ? `${statementsDue[0].accountName} statement due`
+                  : `${statementsDue.length} statements due`}
+              </button>
+            )}
+
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -296,6 +334,7 @@ function App() {
                   setReviewUncategorized(false);
                   setReviewTransfers(false);
                   setShowCashFlow(false);
+                  setUploadAccountId(null);
                   setTab(t.id);
                 }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -347,7 +386,7 @@ function App() {
         {tab === "upload" && (
           <UploadPage
             accounts={accounts}
-            selectedAccountId={accountId}
+            selectedAccountId={uploadAccountId ?? accountId}
             onDone={() => {
               loadAccounts();
               setRefreshKey((k) => k + 1);
