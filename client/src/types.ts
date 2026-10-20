@@ -790,3 +790,26 @@ export interface CashFlowForecast {
   /** Active accounts with no logged balance to start from. */
   withoutBalance: string[];
 }
+
+/** How current one account's imported statements and logged balances are. */
+export interface AccountFreshness {
+  accountId: number;
+  accountName: string;
+  accountType: string;
+  transactionCount: number;
+  latestTransactionDate: string | null;
+  /** Null when nothing has been imported. */
+  daysSinceTransaction: number | null;
+  latestBalanceDate: string | null;
+  daysSinceBalance: number | null;
+  /** Imported into before, but nothing newer than `dueAfterDays`. */
+  statementDue: boolean;
+  /** A balance was logged before, but none newer than `dueAfterDays`. */
+  balanceDue: boolean;
+}
+
+export interface FreshnessResponse {
+  today: string;
+  dueAfterDays: number;
+  accounts: AccountFreshness[];
+}

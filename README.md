@@ -177,7 +177,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V26)
-  src/test/                 613 tests
+  src/test/                 616 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -274,6 +274,7 @@ All endpoints live under `/api`.
 | `GET` | `/category-detail` | One category for the active range and account — total, share, monthly trend, change vs. the period before, top merchants, latest transactions (`category`, required) |
 | `GET` | `/daily-spend` | Spend per day in range (only days with spend), for the Dashboard's calendar |
 | `GET` | `/money-flow` | Income per income category and spend per category (with its group) for the active range, and what was saved or overspent |
+| `GET` | `/accounts/freshness` | Per active account: newest imported transaction and logged balance, and whether a statement or balance is due (nothing newer than 35 days) |
 | `GET` | `/cash-flow` | Each account's balance projected forward from its latest logged balance and its recurring money in and out (`horizonDays`, 7–120, default 60) |
 | `GET` | `/top-merchants` | Merchants ranked by spend in the active range, branches of a chain counted as one (`limit`, default 10) |
 | `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
@@ -772,6 +773,14 @@ paycheck isn't counted on until it arrives. A checking, savings or cash account 
 gets a warning with the date; a credit card below zero is just a balance owed. The same warning
 shows in the header from any page — "⚠ Checking running low" — and clicking it opens the forecast.
 
+**It reminds you when an account's statements fall behind.** Budgets, forecasts and the
+low-balance alert are only as current as the newest statement you imported, and statements don't
+arrive on their own. The Upload page lists each account with its newest transaction and logged
+balance; an account you import into with nothing newer than 35 days is marked **Statement due**,
+with **Import into this** to pick it in the form. The same shows in the header from any page —
+"Store card statement due" — and opens the Upload page with that account selected. Accounts you've
+never imported into aren't nagged, and a logged balance that's gone stale is pointed out too.
+
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
 one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
@@ -858,7 +867,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (613).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (616).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -935,6 +944,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Statement reminders~~ — the Upload page shows how current each account is, marks a statement
+  due after 35 days with nothing newer, and a header badge points at the account that's behind
 - ~~Low-balance header alert~~ — a header badge, like the over-budget one, when the cash-flow
   forecast has a checking, savings or cash account going below zero; it opens the forecast
 - ~~Clearer import summary~~ — after an upload the category counts cover just that file's rows

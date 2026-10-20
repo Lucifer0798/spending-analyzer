@@ -126,6 +126,18 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**Statement reminders are derived, with nothing stored.** `AccountFreshnessService` is two grouped
+queries -- `MAX(date)`/`COUNT(*)` over `transactions` and over `account_balances` per account -- joined
+to active accounts. `statementDue` needs at least one transaction (an account only ever logged by
+balance, like a brokerage, has no statements to nag about) and a newest one more than
+`DUE_AFTER_DAYS` (35: monthly statements plus grace) before today; `balanceDue` likewise needs a
+logged balance. A future-dated row clamps to 0 days. The service takes a `Clock` like
+`CashFlowService`. The header badge is amber (a nudge), next to the red over-budget and low-balance
+ones, and hidden on the Upload page itself where the list already says it; App fetches freshness on
+the same every-tab-change cadence as the cash flow. Clicking sets `uploadAccountId`, read once when
+Upload mounts as its `selectedAccountId` and cleared by the nav. The Upload page re-fetches after
+each import (keyed on the result), so the account just caught up drops its badge at once.
+
 **The low-balance badge reuses `/cash-flow` as-is.** App fetches it alongside budgets and shows a
 badge for accounts with `warn` (and a `firstNegativeDate`). Unlike the budget fetch it isn't
 account-filtered -- a checking account about to run dry matters whichever account is selected --
