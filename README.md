@@ -771,13 +771,13 @@ guessed at, which makes the projection the optimistic case; the cautious choices
 a charge that's one cycle late is counted straight away in case it's merely late, while a late
 paycheck isn't counted on until it arrives. A checking, savings or cash account heading below zero
 gets a warning with the date; a credit card below zero is just a balance owed. The same warning
-shows in the header from any page — "⚠ Checking running low" — and clicking it opens the forecast.
+is in the header's alerts menu on every page — "Checking running low" — and opens the forecast.
 
 **It reminds you when an account's statements fall behind.** Budgets, forecasts and the
 low-balance alert are only as current as the newest statement you imported, and statements don't
 arrive on their own. The Upload page lists each account with its newest transaction and logged
 balance; an account you import into with nothing newer than 35 days is marked **Statement due**,
-with **Import into this** to pick it in the form. The same shows in the header from any page —
+with **Import into this** to pick it in the form. The same is in the header's alerts menu —
 "Store card statement due" — and opens the Upload page with that account selected. Accounts you've
 never imported into aren't nagged, and a logged balance that's gone stale is pointed out too.
 
@@ -944,6 +944,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Combined header alerts~~ — over budget, running low and statements due share one "⚠ N alerts"
+  button with a dropdown, red when anything is serious, instead of a badge each
 - ~~Statement reminders~~ — the Upload page shows how current each account is, marks a statement
   due after 35 days with nothing newer, and a header badge points at the account that's behind
 - ~~Low-balance header alert~~ — a header badge, like the over-budget one, when the cash-flow

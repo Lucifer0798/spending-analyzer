@@ -11,6 +11,7 @@ import { ManagePage } from "./components/ManagePage";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { AlertsMenu, type AlertItem } from "./components/AlertsMenu";
 import { promptInstall, useCanInstall, useOnline } from "./pwa";
 import {
   fetchAccounts,
@@ -77,7 +78,7 @@ function App() {
   // Same hand-off as transactionSearch, for the low-balance alert: read once when Net Worth mounts.
   const [showCashFlow, setShowCashFlow] = useState(false);
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
-  // The account the "statement due" badge pointed at, preselected when Upload mounts.
+  // The account a "statement due" alert pointed at, preselected when Upload mounts.
   const [uploadAccountId, setUploadAccountId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // null while we are still asking the server whether there is a password at all.
@@ -132,7 +133,7 @@ function App() {
     fetchDateBounds(accountId).then(setBounds).catch(() => setBounds(null));
   }, [accountId, refreshKey, signedIn]);
 
-  // Drives the header's over-budget badge, so a blown budget is visible from any tab rather
+  // Drives the header's over-budget alert, so a blown budget is visible from any tab rather
   // than only when the Dashboard happens to be open. No month is passed — same as the newest-
   // month default the Dashboard's own budget card uses — so this always answers "right now".
   useEffect(() => {
@@ -142,7 +143,7 @@ function App() {
 
   const overBudget = budgets?.budgets.filter((b) => b.status === "over") ?? [];
 
-  // Drives the header's low-balance badge, like the over-budget one. Not account-filtered: a
+  // Drives the header's low-balance alerts, like the over-budget one. Not account-filtered: a
   // checking account about to run dry matters whichever account is selected. Re-checked on every
   // tab change, so logging a balance on Net Worth updates it by the time you look elsewhere.
   useEffect(() => {
@@ -152,7 +153,7 @@ function App() {
 
   const lowBalance = cashFlow?.accounts.filter((a) => a.warn && a.firstNegativeDate) ?? [];
 
-  // Drives the "statement due" badge. Same cadence as the low-balance check: an import on the
+  // Drives the "statement due" alerts. Same cadence as the low-balance check: an import on the
   // Upload page or a balance on Net Worth shows up by the next tab change.
   useEffect(() => {
     if (!signedIn) return;
@@ -160,6 +161,41 @@ function App() {
   }, [refreshKey, signedIn, tab]);
 
   const statementsDue = freshness?.accounts.filter((a) => a.statementDue) ?? [];
+
+  // Serious first: money already overspent or about to run out, then statements to import.
+  const alerts: AlertItem[] = [
+    ...(overBudget.length > 0
+      ? [
+          {
+            key: "over-budget",
+            tone: "serious" as const,
+            title: overBudget.length === 1 ? "1 budget overspent" : `${overBudget.length} budgets overspent`,
+            detail: overBudget.map((b) => b.category).join(", "),
+            onSelect: () => setTab("dashboard"),
+          },
+        ]
+      : []),
+    ...lowBalance.map((a) => ({
+      key: `low-${a.accountId}`,
+      tone: "serious" as const,
+      title: `${a.accountName} running low`,
+      detail: `Projected below zero on ${shortDate(a.firstNegativeDate!)}`,
+      onSelect: () => {
+        setShowCashFlow(true);
+        setTab("net-worth");
+      },
+    })),
+    ...statementsDue.map((a) => ({
+      key: `statement-${a.accountId}`,
+      tone: "nudge" as const,
+      title: `${a.accountName} statement due`,
+      detail: `Newest transaction ${a.daysSinceTransaction} days ago`,
+      onSelect: () => {
+        setUploadAccountId(a.accountId);
+        setTab("upload");
+      },
+    })),
+  ];
 
   const openMerchant = (merchant: string) => {
     setTransactionSearch(merchant);
@@ -283,47 +319,7 @@ function App() {
               </>
             )}
 
-            {overBudget.length > 0 && (
-              <button
-                onClick={() => setTab("dashboard")}
-                title={`Over budget: ${overBudget.map((b) => b.category).join(", ")}`}
-                className="mr-1 rounded-md bg-red-100 px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-              >
-                ⚠ {overBudget.length} over budget
-              </button>
-            )}
-
-            {lowBalance.length > 0 && (
-              <button
-                onClick={() => {
-                  setShowCashFlow(true);
-                  setTab("net-worth");
-                }}
-                title={lowBalance
-                  .map((a) => `${a.accountName}: projected below zero on ${shortDate(a.firstNegativeDate!)}`)
-                  .join("\n")}
-                className="mr-1 rounded-md bg-red-100 px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-              >
-                ⚠ {lowBalance.length === 1 ? `${lowBalance[0].accountName} running low` : `${lowBalance.length} accounts running low`}
-              </button>
-            )}
-
-            {statementsDue.length > 0 && tab !== "upload" && (
-              <button
-                onClick={() => {
-                  setUploadAccountId(statementsDue[0].accountId);
-                  setTab("upload");
-                }}
-                title={statementsDue
-                  .map((a) => `${a.accountName}: newest transaction ${a.daysSinceTransaction} days ago`)
-                  .join("\n")}
-                className="mr-1 rounded-md bg-amber-100 px-2.5 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-950"
-              >
-                {statementsDue.length === 1
-                  ? `${statementsDue[0].accountName} statement due`
-                  : `${statementsDue.length} statements due`}
-              </button>
-            )}
+            <AlertsMenu items={alerts} />
 
             {TABS.map((t) => (
               <button
@@ -385,6 +381,9 @@ function App() {
       <main key={refreshKey}>
         {tab === "upload" && (
           <UploadPage
+            // An alert can pick an account while Upload is already open; remounting is what makes
+            // the page re-read that hand-off, the same way switching to the tab would.
+            key={uploadAccountId ?? "no-pick"}
             accounts={accounts}
             selectedAccountId={uploadAccountId ?? accountId}
             onDone={() => {

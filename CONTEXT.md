@@ -126,6 +126,17 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**Header alerts are one menu, not a badge each.** Over-budget, low-balance and statement-due
+badges plus eight tabs wrapped onto several lines on a phone, so App builds one `AlertItem[]`
+(serious first: overspent budgets as a single item, then each low account; then each statement due
+as a "nudge") and `AlertsMenu` renders a "⚠ N alerts" button (just the count below `sm`, the word kept
+for screen readers via `sr-only sm:not-sr-only`) that's red if any item is serious, amber otherwise.
+The dropdown closes on an outside `pointerdown`, Escape, or picking an item. Items keep the old
+badges' hand-offs. The statement item is no longer hidden on the Upload page, so picking it there
+must still take effect: `UploadPage` is keyed on `uploadAccountId`, remounting it to re-read
+`selectedAccountId`. In a hidden browser pane the cash-flow `scrollIntoView({behavior: "smooth"})`
+doesn't move (no animation frames) -- an instant call does; check scrolling with the pane visible.
+
 **Statement reminders are derived, with nothing stored.** `AccountFreshnessService` is two grouped
 queries -- `MAX(date)`/`COUNT(*)` over `transactions` and over `account_balances` per account -- joined
 to active accounts. `statementDue` needs at least one transaction (an account only ever logged by
