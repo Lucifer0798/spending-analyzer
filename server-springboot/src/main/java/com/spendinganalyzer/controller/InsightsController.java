@@ -21,6 +21,7 @@ import com.spendinganalyzer.service.InsightsService;
 import com.spendinganalyzer.service.MoneyFlowService;
 import com.spendinganalyzer.service.RecurringDetectionService;
 import com.spendinganalyzer.service.StatsService;
+import com.spendinganalyzer.service.SubscriptionAuditService;
 import com.spendinganalyzer.service.YearReviewService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,6 +50,7 @@ public class InsightsController {
     private final CategoryDetailService categoryDetailService;
     private final CategoryRepository categoryRepository;
     private final MoneyFlowService moneyFlowService;
+    private final SubscriptionAuditService subscriptionAuditService;
 
     public InsightsController(
             StatsService statsService,
@@ -60,7 +62,8 @@ public class InsightsController {
             YearReviewService yearReviewService,
             CategoryDetailService categoryDetailService,
             CategoryRepository categoryRepository,
-            MoneyFlowService moneyFlowService
+            MoneyFlowService moneyFlowService,
+            SubscriptionAuditService subscriptionAuditService
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
@@ -72,6 +75,7 @@ public class InsightsController {
         this.categoryDetailService = categoryDetailService;
         this.categoryRepository = categoryRepository;
         this.moneyFlowService = moneyFlowService;
+        this.subscriptionAuditService = subscriptionAuditService;
     }
 
     @GetMapping("/summary")
@@ -258,21 +262,8 @@ public class InsightsController {
             );
         }
 
-        DateRange range = DateRange.of(from, to);
-        Map<String, RecurringOverride> overrides = recurringOverrideRepository.loadAll();
-
-        List<RecurringSeries> series = recurringDetectionService.detect(
-                        transactionRepository.findSpendingTransactions(accountId, range))
-                .stream()
-                // Excluded merchants are dropped outright -- never really a subscription, so
-                // there's nothing here for them to contribute to the totals below either.
-                .filter(s -> !isExcluded(overrides.get(s.merchant())))
-                .map(s -> {
-                    RecurringOverride o = overrides.get(s.merchant());
-                    boolean cancelling = o != null && RecurringOverride.ACTION_CANCEL.equals(o.action());
-                    return s.withOverride(cancelling, cancelling ? o.id() : null);
-                })
-                .toList();
+        List<RecurringSeries> series = recurringSeries(accountId, DateRange.of(from, to),
+                recurringOverrideRepository.loadAll());
 
         double totalAnnualized = series.stream().mapToDouble(RecurringSeries::annualizedCost).sum();
 
@@ -283,6 +274,42 @@ public class InsightsController {
                 "currency", currency,
                 "mixedCurrencies", false
         );
+    }
+
+    /** What {@code /recurring} lists: detected spending series, excluded merchants dropped, cancel flags applied. */
+    private List<RecurringSeries> recurringSeries(Long accountId, DateRange range, Map<String, RecurringOverride> overrides) {
+        return recurringDetectionService.detect(transactionRepository.findSpendingTransactions(accountId, range))
+                .stream()
+                // Excluded merchants are dropped outright -- never really a subscription, so
+                // there's nothing here for them to contribute to the totals either.
+                .filter(s -> !isExcluded(overrides.get(s.merchant())))
+                .map(s -> {
+                    RecurringOverride o = overrides.get(s.merchant());
+                    boolean cancelling = o != null && RecurringOverride.ACTION_CANCEL.equals(o.action());
+                    return s.withOverride(cancelling, cancelling ? o.id() : null);
+                })
+                .toList();
+    }
+
+    /**
+     * Price rises, charges that kept coming after a cancel flag, and piles of small same-category
+     * plans, over exactly the series {@code /recurring} lists -- see {@link SubscriptionAuditService}.
+     * Not applicable across mixed currencies, for the same reason {@code /recurring} isn't.
+     */
+    @GetMapping("/recurring/audit")
+    public Map<String, Object> recurringAudit(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to
+    ) {
+        String currency = statsService.resolveCurrency(accountId);
+        if (currency == null) {
+            return Map.of("applicable", false, "findings", List.of());
+        }
+        Map<String, RecurringOverride> overrides = recurringOverrideRepository.loadAll();
+        List<SubscriptionAuditService.Finding> findings = subscriptionAuditService.audit(
+                recurringSeries(accountId, DateRange.of(from, to), overrides), overrides);
+        return Map.of("applicable", true, "currency", currency, "findings", findings);
     }
 
     /**

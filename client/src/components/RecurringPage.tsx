@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { clearRecurringOverride, fetchRecurring, fetchRecurringIncome, saveRecurringOverride } from "../api";
 import type { DateRangeValue, RecurringIncomeResponse, RecurringResponse, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
+import { SubscriptionAudit } from "./SubscriptionAudit";
 
 interface Props {
   accountId: number | null;
@@ -288,6 +289,9 @@ function RecurringChargesSection({ accountId, range }: Props) {
         </p>
       ) : (
         <>
+          {/* Nothing when there's nothing to flag. Keyed to the list, so flagging either updates both. */}
+          <SubscriptionAudit accountId={accountId} range={range} refreshKey={data} onChanged={load} />
+
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Per month</p>

@@ -126,6 +126,21 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**The subscription audit is a pure function over `/recurring`'s own series.** `/recurring` and
+`/recurring/audit` share `InsightsController.recurringSeries` (detection over spending, "exclude"
+merchants dropped, "cancel" flags applied), and `SubscriptionAuditService.audit(series, overrides)`
+needs no repositories, so it's unit-tested without Spring. Findings are numbers (`fromAmount`,
+`toAmount`, `chargedOn`, `flaggedOn`, `yearlyAmount`), not sentences -- the client words them and
+formats the currency. Rules: `still_charging` when the latest charge's date is *after* the date part
+of the cancel override's `created_at` (same day is ambiguous, so not counted), costed as a year at
+the latest price; `price_increase` when `priceChanged` and the latest is above `previousAmount` and
+the series isn't flagged to cancel (flagged, the rise is moot), costed as the difference times
+charges per year by cadence (52/26/12/4/1); `overlap` when two or more unflagged series share
+category and cadence with each latest charge under `SMALL_CHARGE` ($50, which keeps rent, insurance
+and most utility bills out) -- worded as "worth checking", since it's a heuristic. Sorted
+still-charging first, then by yearly amount. The card is keyed to the charges list's data, so
+flagging from either updates both.
+
 **Header alerts are one menu, not a badge each.** Over-budget, low-balance and statement-due
 badges plus eight tabs wrapped onto several lines on a phone, so App builds one `AlertItem[]`
 (serious first: overspent budgets as a single item, then each low account; then each statement due

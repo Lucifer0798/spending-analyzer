@@ -37,6 +37,7 @@ import type {
   RecurringIncomeResponse,
   RecurringOverride,
   RecurringResponse,
+  SubscriptionAuditResponse,
   SummaryResponse,
   Tag,
   TopMerchantsResponse,
@@ -707,6 +708,11 @@ export function fetchComparison(
 
 export function fetchRecurring(accountId: number | null, range: DateRangeValue = ALL_TIME) {
   return request<RecurringResponse>(`/recurring${qs({ accountId, from: range.from, to: range.to })}`);
+}
+
+/** Price rises, charges continuing after a cancel flag, and piles of small same-category plans. */
+export function fetchRecurringAudit(accountId: number | null, range: DateRangeValue = ALL_TIME) {
+  return request<SubscriptionAuditResponse>(`/recurring/audit${qs({ accountId, from: range.from, to: range.to })}`);
 }
 
 /**
