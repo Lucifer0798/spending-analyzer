@@ -177,7 +177,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V26)
-  src/test/                 616 tests
+  src/test/                 621 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -280,6 +280,7 @@ All endpoints live under `/api`.
 | `GET` | `/year-review` | One calendar year summarised — income, spend, savings rate, months, top categories and merchants, change vs. the year before (`year`, default newest) |
 | `GET` | `/summary/comparison` | The active date range vs. the equal-length period before it (or an explicit `compareFrom`/`compareTo` range), per category |
 | `GET` | `/recurring` | Detected recurring charges |
+| `GET` | `/recurring/audit` | Price rises, charges continuing after a cancel flag, and several small plans in one category, each with what's at stake a year |
 | `GET` | `/recurring-income` | Detected recurring income, plus actual income received in a given month |
 | `GET` | `/anomalies` | Transactions well above their category's typical amount |
 | `GET` `POST` `DELETE` | `/recurring/overrides` | Flag a merchant "cancel" or "exclude", list flags, or clear one |
@@ -781,6 +782,14 @@ with **Import into this** to pick it in the form. The same is in the header's al
 "Store card statement due" — and opens the Upload page with that account selected. Accounts you've
 never imported into aren't nagged, and a logged balance that's gone stale is pointed out too.
 
+**The Recurring page audits your subscriptions.** Above the list, a "Worth a look" card picks out
+three things from the same charges it lists: a **price that went up** (with what the rise costs a
+year, and a button to flag it to cancel), anything **still charging after you flagged it to
+cancel** (worth checking the cancellation went through), and **several small plans in one
+category** on the same schedule — two or three streaming services, say — with what they add up to.
+The last is a prompt to check you use them all, not a claim they're duplicates; bills of $50 or more
+are left out of it, so rent and utilities don't count.
+
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
 one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
@@ -867,7 +876,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (616).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (621).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -944,6 +953,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Subscription audit~~ — the Recurring page flags price rises, charges still coming after a
+  cancel flag, and several small plans in one category, each with what's at stake a year
 - ~~Combined header alerts~~ — over budget, running low and statements due share one "⚠ N alerts"
   button with a dropdown, red when anything is serious, instead of a badge each
 - ~~Statement reminders~~ — the Upload page shows how current each account is, marks a statement

@@ -813,3 +813,29 @@ export interface FreshnessResponse {
   dueAfterDays: number;
   accounts: AccountFreshness[];
 }
+
+/** One thing about the recurring charges worth acting on -- see the Recurring page's audit. */
+export interface SubscriptionFinding {
+  kind: "price_increase" | "still_charging" | "overlap";
+  /** One merchant, except for an overlap, which lists the group. */
+  merchants: string[];
+  category: string | null;
+  cadence: string;
+  /** What's at stake over a year: the extra from a rise, a year more of a charge that should have
+   *  stopped, or what an overlapping group adds up to. */
+  yearlyAmount: number;
+  /** price_increase: the average before the change. */
+  fromAmount: number | null;
+  /** price_increase and still_charging: the latest charge. */
+  toAmount: number | null;
+  /** still_charging: the latest charge's date, and when it was flagged to cancel. */
+  chargedOn: string | null;
+  flaggedOn: string | null;
+}
+
+export interface SubscriptionAuditResponse {
+  /** False across accounts in more than one currency. */
+  applicable: boolean;
+  currency?: string;
+  findings: SubscriptionFinding[];
+}
