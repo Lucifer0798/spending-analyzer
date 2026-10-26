@@ -1,14 +1,6 @@
 import type { Transaction } from "../types";
 import { currencyPrecise } from "../format";
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
+import { dayMonthYear } from "../dates";
 
 function Side({ t, direction }: { t: Transaction; direction: "out" | "in" }) {
   return (
@@ -17,7 +9,7 @@ function Side({ t, direction }: { t: Transaction; direction: "out" | "in" }) {
         {direction === "out" ? "Out of" : "Into"}{" "}
         <span className="font-medium text-slate-700 dark:text-slate-300">{t.account_name ?? `Account ${t.account_id}`}</span>
         {" · "}
-        {shortDate(t.date)}
+        {dayMonthYear(t.date)}
         {t.category && <> · {t.category}</>}
       </p>
       <p className="truncate text-sm text-slate-900 dark:text-slate-100" title={t.description}>

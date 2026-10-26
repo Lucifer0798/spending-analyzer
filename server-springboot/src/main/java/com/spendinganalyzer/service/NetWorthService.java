@@ -90,21 +90,21 @@ public class NetWorthService {
             // A new date means every account's balance is now known as of the previous date --
             // that's a point on the history chart before this row starts updating the running total.
             if (currentDate != null && !row.date().equals(currentDate)) {
-                history.add(new NetWorthPoint(currentDate, round2(sum(latestBalance.values()))));
+                history.add(new NetWorthPoint(currentDate, Money.round2(sum(latestBalance.values()))));
             }
             accountNames.put(row.accountId(), row.accountName());
             latestBalance.put(row.accountId(), row.balance());
             latestDate.put(row.accountId(), row.date());
             currentDate = row.date();
         }
-        history.add(new NetWorthPoint(currentDate, round2(sum(latestBalance.values()))));
+        history.add(new NetWorthPoint(currentDate, Money.round2(sum(latestBalance.values()))));
 
         List<NetWorthAccount> accounts = latestBalance.keySet().stream()
-                .map(id -> new NetWorthAccount(id, accountNames.get(id), round2(latestBalance.get(id)), latestDate.get(id)))
+                .map(id -> new NetWorthAccount(id, accountNames.get(id), Money.round2(latestBalance.get(id)), latestDate.get(id)))
                 .toList();
 
         String currency = rows.get(0).currency();
-        double currentTotal = round2(sum(latestBalance.values()));
+        double currentTotal = Money.round2(sum(latestBalance.values()));
         Optional<LinearFit> fit = fit(history);
 
         return new CurrencyNetWorth(
@@ -156,13 +156,13 @@ public class NetWorthService {
      */
     private NetWorthForecast forecast(LinearFit fit, List<NetWorthPoint> history) {
         LocalDate today = LocalDate.now(clock);
-        double in1Month = round2(fit.intercept() + fit.slope() * today.plusMonths(1).toEpochDay());
-        double in3Months = round2(fit.intercept() + fit.slope() * today.plusMonths(3).toEpochDay());
-        double in6Months = round2(fit.intercept() + fit.slope() * today.plusMonths(6).toEpochDay());
+        double in1Month = Money.round2(fit.intercept() + fit.slope() * today.plusMonths(1).toEpochDay());
+        double in3Months = Money.round2(fit.intercept() + fit.slope() * today.plusMonths(3).toEpochDay());
+        double in6Months = Money.round2(fit.intercept() + fit.slope() * today.plusMonths(6).toEpochDay());
 
         int n = history.size();
         int from = Math.max(0, n - 3);
-        double movingAverage = round2(history.subList(from, n).stream()
+        double movingAverage = Money.round2(history.subList(from, n).stream()
                 .mapToDouble(NetWorthPoint::total).average().orElse(0));
 
         double currentTotal = history.get(n - 1).total();
@@ -212,7 +212,4 @@ public class NetWorthService {
         return values.stream().mapToDouble(Double::doubleValue).sum();
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

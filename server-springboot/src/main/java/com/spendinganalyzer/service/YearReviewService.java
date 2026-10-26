@@ -61,23 +61,23 @@ public class YearReviewService {
             String key = String.format("%d-%02d", year, m);
             double in = incomeByMonth.getOrDefault(key, 0.0);
             double out = spendByMonth.getOrDefault(key, 0.0);
-            months.add(new YearReview.Month(key, round2(in), round2(out)));
+            months.add(new YearReview.Month(key, Money.round2(in), Money.round2(out)));
             income += in;
             spend += out;
             if (out > 0 && (biggest == null || out > biggest.total())) {
-                biggest = new MonthlyTotal(key, round2(out));
+                biggest = new MonthlyTotal(key, Money.round2(out));
             }
         }
 
         double saved = income - spend;
-        Double savingsRate = income > 0 ? round2(saved / income * 100) : null;
+        Double savingsRate = income > 0 ? Money.round2(saved / income * 100) : null;
 
         List<CategoryTotal> categories = stats.computeCategoryTotals(accountId, range);
         double spendTotal = spend;
         List<YearReview.CategoryShare> topCategories = categories.stream()
                 .limit(TOP_N)
                 .map(c -> new YearReview.CategoryShare(c.category(), c.total(), c.count(),
-                        spendTotal > 0 ? round2(c.total() / spendTotal * 100) : 0))
+                        spendTotal > 0 ? Money.round2(c.total() / spendTotal * 100) : 0))
                 .toList();
 
         List<MerchantTotal> merchants = stats.computeMerchantTotals(accountId, range, null);
@@ -96,7 +96,7 @@ public class YearReviewService {
 
         return new YearReview(
                 true, year, available, currency,
-                round2(income), round2(spend), round2(saved), savingsRate,
+                Money.round2(income), Money.round2(spend), Money.round2(saved), savingsRate,
                 monthsWithData(incomeByMonth, spendByMonth),
                 months, biggest, topCategories, List.copyOf(topMerchants),
                 previousYear, previousMonthsWithData, changes);
@@ -125,7 +125,4 @@ public class YearReviewService {
         return byMonth;
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

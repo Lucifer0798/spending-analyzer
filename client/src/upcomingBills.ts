@@ -1,4 +1,5 @@
 import type { RecurringSeries } from "./types";
+import { addDays } from "./dates";
 
 /** One expected charge on one date -- a recurring series projected forward. */
 export interface UpcomingBill {
@@ -11,12 +12,6 @@ export interface UpcomingBill {
   overdue: boolean;
   /** You've flagged it to cancel on the Recurring page -- shown, but marked. */
   cancelling: boolean;
-}
-
-function addDays(iso: string, days: number) {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 /**

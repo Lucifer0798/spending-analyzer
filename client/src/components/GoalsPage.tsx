@@ -13,19 +13,7 @@ import {
 } from "../api";
 import type { GoalContribution, GoalFundingPlan, GoalProgress } from "../types";
 import { currency, currencyPrecise } from "../format";
-
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dateLabel(iso: string) {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { dayMonthYear, todayIso } from "../dates";
 
 const PACE_TONE_CLASS: Record<"positive" | "warning" | "neutral", string> = {
   positive: "text-emerald-600 dark:text-emerald-400",
@@ -46,7 +34,7 @@ function paceMessage(goal: GoalProgress): { text: string; tone: "positive" | "wa
 
   const paceText = `${currency(goal.monthlyPace, 0, goal.currency)}/month`;
   if (!goal.projectedCompletionDate) return null;
-  const projected = dateLabel(goal.projectedCompletionDate);
+  const projected = dayMonthYear(goal.projectedCompletionDate);
 
   if (goal.targetDate) {
     const onTrack = goal.projectedCompletionDate <= goal.targetDate;
@@ -85,7 +73,7 @@ function ContributionHistory({
       {history.map((c) => (
         <li key={c.id} className="flex items-center justify-between gap-2 text-xs">
           <span className="text-slate-600 dark:text-slate-400">
-            {dateLabel(c.date)}
+            {dayMonthYear(c.date)}
             {c.note && <span className="text-slate-400"> · {c.note}</span>}
           </span>
           <span className="flex items-center gap-2">
@@ -116,7 +104,7 @@ function GoalCard({ goal, onChanged }: { goal: GoalProgress; onChanged: () => vo
   const [showHistory, setShowHistory] = useState(false);
   const [showContributeForm, setShowContributeForm] = useState(false);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(todayIsoDate());
+  const [date, setDate] = useState(todayIso());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +170,7 @@ function GoalCard({ goal, onChanged }: { goal: GoalProgress; onChanged: () => vo
           {goal.targetDate && (
             <p className="text-xs text-slate-500">
               {goal.achieved ? "Reached before " : "Target: "}
-              {dateLabel(goal.targetDate)}
+              {dayMonthYear(goal.targetDate)}
             </p>
           )}
         </div>
@@ -316,7 +304,7 @@ function SplitContributionForm({
 }) {
   const [open, setOpen] = useState(prefill !== undefined);
   const [mode, setMode] = useState<SplitMode>("fixed");
-  const [date, setDate] = useState(todayIsoDate());
+  const [date, setDate] = useState(todayIso());
   const [note, setNote] = useState(prefill?.note ?? "");
   const [total, setTotal] = useState("");
   const [values, setValues] = useState<Record<number, string>>(prefill?.values ?? {});
@@ -567,8 +555,8 @@ function FundingPlanCard({ plan, onApply }: { plan: GoalFundingPlan; onApply: (p
                 <span className="font-medium text-slate-900 dark:text-slate-100">{money(g.suggestedMonthly)}/month</span>
               )}
               <span className="ml-2 text-xs text-slate-500">
-                {g.basis === "deadline" && g.targetDate && `to finish by ${dateLabel(g.targetDate)}`}
-                {g.basis === "surplus" && g.projectedCompletionDate && `even share of leftover — done around ${dateLabel(g.projectedCompletionDate)}`}
+                {g.basis === "deadline" && g.targetDate && `to finish by ${dayMonthYear(g.targetDate)}`}
+                {g.basis === "surplus" && g.projectedCompletionDate && `even share of leftover — done around ${dayMonthYear(g.projectedCompletionDate)}`}
                 {g.monthlyPace > 0 && ` · currently ${money(g.monthlyPace)}/month`}
               </span>
             </span>

@@ -80,18 +80,18 @@ public class BudgetService {
             rows.add(new BudgetProgress(
                     budget.id(),
                     budget.category(),
-                    round2(limit),
+                    Money.round2(limit),
                     budget.monthlyLimit(),
-                    round2(used),
-                    round2(limit - used),
-                    round2(percent),
+                    Money.round2(used),
+                    Money.round2(limit - used),
+                    Money.round2(percent),
                     status(percent),
                     budget.escalationType(),
                     budget.escalationValue(),
                     budget.escalationFrequencyMonths(),
                     budget.escalationStartMonth(),
                     budget.rolloverStartMonth(),
-                    round2(carryIn),
+                    Money.round2(carryIn),
                     budget.period(),
                     periodRange.from(),
                     periodRange.to()
@@ -109,7 +109,7 @@ public class BudgetService {
             }
         }
 
-        return new BudgetSummary(month, rows, round2(totalLimit), round2(totalSpent), currency, false);
+        return new BudgetSummary(month, rows, Money.round2(totalLimit), Money.round2(totalSpent), currency, false);
     }
 
     /**
@@ -228,7 +228,4 @@ public class BudgetService {
         return new DateRange(ym.atDay(1).toString(), ym.atEndOfMonth().toString());
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

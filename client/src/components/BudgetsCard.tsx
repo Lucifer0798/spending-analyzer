@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchBudgets } from "../api";
 import type { BudgetProgress, BudgetStatus, BudgetSummary, DateRangeValue } from "../types";
 import { currency } from "../format";
+import { dayMonth, monthYear } from "../dates";
 
 interface Props {
   accountId: number | null;
@@ -16,21 +17,11 @@ const STATUS_COLOR: Record<BudgetStatus, string> = {
   over: "#d03b3b",
 };
 
-function monthLabel(month: string) {
-  const [year, m] = month.split("-");
-  const date = new Date(Number(year), Number(m) - 1, 1);
-  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
 /** "" for a monthly budget, since the card's own heading already names the measured month --
  *  a weekly or quarterly one gets its own dates, since those don't line up with that heading. */
 function periodNote(budget: BudgetProgress) {
   if (budget.period === "monthly") return "";
-  return ` · ${shortDate(budget.periodStart)}–${shortDate(budget.periodEnd)}`;
+  return ` · ${dayMonth(budget.periodStart)}–${dayMonth(budget.periodEnd)}`;
 }
 
 function BudgetRow({
@@ -124,7 +115,7 @@ export function BudgetsCard({ accountId, range, colorByCategory = {} }: Props) {
     <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          Budgets · {monthLabel(summary.month)}
+          Budgets · {monthYear(summary.month)}
         </h2>
         <span className="text-xs text-slate-500">
           {currency(summary.totalSpent, 0, cur)} of {currency(summary.totalLimit, 0, cur)} · {Math.round(overall)}% used

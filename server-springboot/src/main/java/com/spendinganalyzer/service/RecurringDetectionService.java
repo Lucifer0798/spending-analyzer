@@ -133,19 +133,19 @@ public class RecurringDetectionService {
                 merchant,
                 category,
                 cadence,
-                round2(mean),
-                round2(last.amount()),
+                Money.round2(mean),
+                Money.round2(last.amount()),
                 last.date(),
                 nextExpected.format(ISO),
                 occurrences.size(),
                 (int) Math.round(medianInterval),
-                round2(mean * (365.0 / medianInterval)),
+                Money.round2(mean * (365.0 / medianInterval)),
                 confidenceOf(occurrences.size(), coefficientOfVariation),
                 false,
                 null,
                 dueInDays,
                 priceChanged,
-                priceChanged ? round2(priorAverage) : null
+                priceChanged ? Money.round2(priorAverage) : null
         ));
     }
 
@@ -173,7 +173,4 @@ public class RecurringDetectionService {
         return (sorted.get(size / 2 - 1) + sorted.get(size / 2)) / 2.0;
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

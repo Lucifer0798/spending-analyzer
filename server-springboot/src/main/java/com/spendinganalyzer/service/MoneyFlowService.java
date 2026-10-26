@@ -47,15 +47,12 @@ public class MoneyFlowService {
                 .map(t -> new MoneyFlow.Sink(t.category(), groupByCategory.get(t.category()), t.total()))
                 .toList();
 
-        double totalIncome = round(income.stream().mapToDouble(MoneyFlow.Source::total).sum());
-        double totalSpending = round(spending.stream().mapToDouble(MoneyFlow.Sink::total).sum());
-        double difference = round(totalIncome - totalSpending);
+        double totalIncome = Money.round2(income.stream().mapToDouble(MoneyFlow.Source::total).sum());
+        double totalSpending = Money.round2(spending.stream().mapToDouble(MoneyFlow.Sink::total).sum());
+        double difference = Money.round2(totalIncome - totalSpending);
 
         return new MoneyFlow(true, currency, income, spending, totalIncome, totalSpending,
                 Math.max(0, difference), Math.max(0, -difference));
     }
 
-    private static double round(double value) {
-        return Math.round(value * 100) / 100.0;
-    }
 }

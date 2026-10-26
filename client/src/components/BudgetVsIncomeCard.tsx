@@ -2,16 +2,11 @@ import { useEffect, useState } from "react";
 import { fetchBudgets, fetchRecurringIncome } from "../api";
 import type { BudgetSummary, DateRangeValue, RecurringIncomeResponse } from "../types";
 import { currency } from "../format";
+import { monthYear } from "../dates";
 
 interface Props {
   accountId: number | null;
   range: DateRangeValue;
-}
-
-function monthLabel(month: string) {
-  const [year, m] = month.split("-");
-  const date = new Date(Number(year), Number(m) - 1, 1);
-  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
 /**
@@ -63,7 +58,7 @@ export function BudgetVsIncomeCard({ accountId, range }: Props) {
   return (
     <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
-        Budget vs. income · {monthLabel(budgets.month)}
+        Budget vs. income · {monthYear(budgets.month)}
       </h2>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -3,6 +3,7 @@ import { fetchDailySpend, fetchRecurring } from "../api";
 import type { DailySpend, DateRangeValue, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
 import { upcomingBills, type UpcomingBill } from "../upcomingBills";
+import { addDays } from "../dates";
 
 interface Props {
   accountId: number | null;
@@ -21,12 +22,6 @@ const LIST_DAYS = 30;
 function todayIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDaysIso(iso: string, days: number) {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 function monthKey(date: string) {
@@ -111,7 +106,7 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
   const byDate = new Map(data.days.map((d) => [d.date, d]));
   const billsByDate = new Map<string, UpcomingBill[]>();
   for (const b of bills) billsByDate.set(b.date, [...(billsByDate.get(b.date) ?? []), b]);
-  const soon = bills.filter((b) => b.overdue || b.date <= addDaysIso(today, LIST_DAYS));
+  const soon = bills.filter((b) => b.overdue || b.date <= addDays(today, LIST_DAYS));
 
   // From the first month with spend to the last month with spend or an expected bill, so the
   // arrows also reach the coming weeks.

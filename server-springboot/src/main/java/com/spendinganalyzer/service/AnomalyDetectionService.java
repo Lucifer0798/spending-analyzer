@@ -47,9 +47,9 @@ public class AnomalyDetectionService {
                             t.date(),
                             t.description(),
                             t.category(),
-                            round2(t.amount()),
-                            round2(typical),
-                            round2(t.amount() / typical)
+                            Money.round2(t.amount()),
+                            Money.round2(typical),
+                            Money.round2(t.amount() / typical)
                     ));
                 }
             }
@@ -67,7 +67,4 @@ public class AnomalyDetectionService {
         return (sorted.get(size / 2 - 1) + sorted.get(size / 2)) / 2.0;
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

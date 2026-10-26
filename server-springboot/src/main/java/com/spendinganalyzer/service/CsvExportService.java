@@ -116,7 +116,7 @@ public class CsvExportService {
             for (CategoryTotal c : totals) {
                 double share = grandTotal == 0 ? 0 : (c.total() / grandTotal) * 100;
                 String group = groupByCategory.getOrDefault(c.category(), c.category());
-                printer.printRecord(c.category(), group, c.total(), currency, c.count(), round2(share));
+                printer.printRecord(c.category(), group, c.total(), currency, c.count(), Money.round2(share));
             }
         });
     }
@@ -225,7 +225,4 @@ public class CsvExportService {
         });
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

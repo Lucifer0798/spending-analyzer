@@ -70,13 +70,13 @@ public class SubscriptionAuditService {
             // flag didn't stop it -- the same day is ambiguous, so it isn't counted.
             if (flaggedOn != null && s.lastDate().compareTo(flaggedOn) > 0) {
                 findings.add(new Finding(Finding.STILL_CHARGING, List.of(s.merchant()), s.category(), s.cadence(),
-                        round(s.lastAmount() * perYear(s)), null, s.lastAmount(), s.lastDate(), flaggedOn));
+                        Money.round2(s.lastAmount() * perYear(s)), null, s.lastAmount(), s.lastDate(), flaggedOn));
             }
 
             // Already being cancelled, a rise is moot -- and if it keeps charging, that's the finding above.
             if (flaggedOn == null && s.priceChanged() && s.previousAmount() != null && s.lastAmount() > s.previousAmount()) {
                 findings.add(new Finding(Finding.PRICE_INCREASE, List.of(s.merchant()), s.category(), s.cadence(),
-                        round((s.lastAmount() - s.previousAmount()) * perYear(s)),
+                        Money.round2((s.lastAmount() - s.previousAmount()) * perYear(s)),
                         s.previousAmount(), s.lastAmount(), null, null));
             }
 
@@ -91,7 +91,7 @@ public class SubscriptionAuditService {
             RecurringSeries first = group.get(0);
             findings.add(new Finding(Finding.OVERLAP,
                     group.stream().map(RecurringSeries::merchant).toList(), first.category(), first.cadence(),
-                    round(group.stream().mapToDouble(s -> s.lastAmount() * perYear(s)).sum()),
+                    Money.round2(group.stream().mapToDouble(s -> s.lastAmount() * perYear(s)).sum()),
                     null, null, null, null));
         }
 
@@ -119,7 +119,4 @@ public class SubscriptionAuditService {
         };
     }
 
-    private static double round(double value) {
-        return Math.round(value * 100) / 100.0;
-    }
 }

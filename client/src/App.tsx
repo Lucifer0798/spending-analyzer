@@ -35,6 +35,30 @@ import type {
   FreshnessResponse,
 } from "./types";
 import { ALL_TIME } from "./types";
+import { dayMonth } from "./dates";
+
+/**
+ * What a page is handed when another page opens it -- a merchant to search for, a review panel to
+ * start open, an account to preselect. The page reads it once, when it mounts. Every navigation goes
+ * through `go`, which replaces the whole thing, so nothing handed to one visit leaks into the next
+ * and opening a tab from the nav (no hand-off) starts it plain.
+ */
+interface Handoff {
+  /** Transactions: pre-filled description search (a merchant link). */
+  search?: string;
+  /** Transactions: pre-selected category filter (from a category's page). */
+  category?: string;
+  /** Transactions: open the uncategorized review (an import summary's "Review uncategorized"). */
+  reviewUncategorized?: boolean;
+  /** Transactions: open the transfer review (an import summary's "Review transfers"). */
+  reviewTransfers?: boolean;
+  /** Category tab: which category a Dashboard bar drilled into. */
+  openedCategory?: string;
+  /** Net Worth: scroll to the cash-flow forecast (a low-balance alert). */
+  showCashFlow?: boolean;
+  /** Upload: preselect this account (a statement-due alert). */
+  uploadAccountId?: number;
+}
 
 // "category" is reached by drilling into a Dashboard bar, so it has no button in TABS.
 type Tab = "upload" | "dashboard" | "transactions" | "recurring" | "year" | "goals" | "net-worth" | "manage" | "category";
@@ -50,41 +74,28 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "manage", label: "Manage" },
 ];
 
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
 function App() {
   const [tab, setTab] = useState<Tab>("upload");
   const [accounts, setAccounts] = useState<Account[]>([]);
   // null means "all accounts" — the filter is omitted from requests entirely.
   const [accountId, setAccountId] = useState<number | null>(null);
   const [range, setRange] = useState<DateRangeValue>(ALL_TIME);
-  // A search handed to the Transactions page by a merchant link elsewhere. TransactionsTable reads
-  // it only when it mounts, and switching tabs remounts it, so this needs no clearing in step --
-  // the nav buttons just reset it so opening Transactions directly starts unfiltered.
-  const [transactionSearch, setTransactionSearch] = useState("");
-  // The category a Dashboard bar drilled into, for the "category" tab.
-  const [openedCategory, setOpenedCategory] = useState<string | null>(null);
-  // Same hand-off as transactionSearch, for the category filter.
-  const [transactionCategory, setTransactionCategory] = useState("");
-  // Same hand-off as transactionSearch: read once when Transactions mounts, cleared by the nav.
-  const [reviewUncategorized, setReviewUncategorized] = useState(false);
-  // Same again, for the transfer review an import summary links to.
-  const [reviewTransfers, setReviewTransfers] = useState(false);
+  const [handoff, setHandoff] = useState<Handoff>({});
   const [bounds, setBounds] = useState<DateBounds | null>(null);
   const [budgets, setBudgets] = useState<BudgetSummary | null>(null);
   const [cashFlow, setCashFlow] = useState<CashFlowForecast | null>(null);
-  // Same hand-off as transactionSearch, for the low-balance alert: read once when Net Worth mounts.
-  const [showCashFlow, setShowCashFlow] = useState(false);
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
-  // The account a "statement due" alert pointed at, preselected when Upload mounts.
-  const [uploadAccountId, setUploadAccountId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // null while we are still asking the server whether there is a password at all.
   const [auth, setAuth] = useState<AuthStatus | null>(null);
 
   const signedIn = auth?.authenticated ?? false;
+
+  /** Opens a tab, handing it `handed` (or nothing) -- see {@link Handoff}. */
+  const go = (to: Tab, handed: Handoff = {}) => {
+    setHandoff(handed);
+    setTab(to);
+  };
   const online = useOnline();
   const canInstall = useCanInstall();
   // The device is online but the server didn't answer (down, restarting, or a proxy's 502) --
@@ -171,7 +182,7 @@ function App() {
             tone: "serious" as const,
             title: overBudget.length === 1 ? "1 budget overspent" : `${overBudget.length} budgets overspent`,
             detail: overBudget.map((b) => b.category).join(", "),
-            onSelect: () => setTab("dashboard"),
+            onSelect: () => go("dashboard"),
           },
         ]
       : []),
@@ -179,48 +190,27 @@ function App() {
       key: `low-${a.accountId}`,
       tone: "serious" as const,
       title: `${a.accountName} running low`,
-      detail: `Projected below zero on ${shortDate(a.firstNegativeDate!)}`,
-      onSelect: () => {
-        setShowCashFlow(true);
-        setTab("net-worth");
-      },
+      detail: `Projected below zero on ${dayMonth(a.firstNegativeDate!)}`,
+      onSelect: () => go("net-worth", { showCashFlow: true }),
     })),
     ...statementsDue.map((a) => ({
       key: `statement-${a.accountId}`,
       tone: "nudge" as const,
       title: `${a.accountName} statement due`,
       detail: `Newest transaction ${a.daysSinceTransaction} days ago`,
-      onSelect: () => {
-        setUploadAccountId(a.accountId);
-        setTab("upload");
-      },
+      onSelect: () => go("upload", { uploadAccountId: a.accountId }),
     })),
   ];
 
-  const openMerchant = (merchant: string) => {
-    setTransactionSearch(merchant);
-    setTransactionCategory("");
-    setTab("transactions");
-  };
-
-  const openCategory = (category: string) => {
-    setOpenedCategory(category);
-    setTab("category");
-  };
-
-  const openCategoryTransactions = (category: string) => {
-    setTransactionSearch("");
-    setTransactionCategory(category);
-    setTab("transactions");
-  };
+  const openMerchant = (merchant: string) => go("transactions", { search: merchant });
+  const openCategory = (category: string) => go("category", { openedCategory: category });
+  const openCategoryTransactions = (category: string) => go("transactions", { category });
 
   // A calendar day click: narrow the shared date filter to that day and show its transactions.
   // The filter stays set afterwards, visible in the picker, so getting back is one click on it.
   const openDay = (date: string) => {
-    setTransactionSearch("");
-    setTransactionCategory("");
     setRange({ from: date, to: date });
-    setTab("transactions");
+    go("transactions");
   };
 
   const handleReset = async () => {
@@ -231,7 +221,7 @@ function App() {
     loadAccounts();
     setRange(ALL_TIME);
     setRefreshKey((k) => k + 1);
-    setTab("upload");
+    go("upload");
   };
 
   const handleSignOut = async () => {
@@ -324,15 +314,7 @@ function App() {
             {TABS.map((t) => (
               <button
                 key={t.id}
-                onClick={() => {
-                  setTransactionSearch("");
-                  setTransactionCategory("");
-                  setReviewUncategorized(false);
-                  setReviewTransfers(false);
-                  setShowCashFlow(false);
-                  setUploadAccountId(null);
-                  setTab(t.id);
-                }}
+                onClick={() => go(t.id)}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.id
                     ? "bg-indigo-600 text-white"
@@ -383,29 +365,23 @@ function App() {
           <UploadPage
             // An alert can pick an account while Upload is already open; remounting is what makes
             // the page re-read that hand-off, the same way switching to the tab would.
-            key={uploadAccountId ?? "no-pick"}
+            key={handoff.uploadAccountId ?? "no-pick"}
             accounts={accounts}
-            selectedAccountId={uploadAccountId ?? accountId}
+            selectedAccountId={handoff.uploadAccountId ?? accountId}
             onDone={() => {
               loadAccounts();
               setRefreshKey((k) => k + 1);
-              setTab("dashboard");
+              go("dashboard");
             }}
             onReviewUncategorized={() => {
               loadAccounts();
               setRefreshKey((k) => k + 1);
-              setTransactionSearch("");
-              setReviewUncategorized(true);
-              setReviewTransfers(false);
-              setTab("transactions");
+              go("transactions", { reviewUncategorized: true });
             }}
             onReviewTransfers={() => {
               loadAccounts();
               setRefreshKey((k) => k + 1);
-              setTransactionSearch("");
-              setReviewUncategorized(false);
-              setReviewTransfers(true);
-              setTab("transactions");
+              go("transactions", { reviewTransfers: true });
             }}
           />
         )}
@@ -418,12 +394,12 @@ function App() {
             onOpenCategory={openCategory}
           />
         )}
-        {tab === "category" && openedCategory && (
+        {tab === "category" && handoff.openedCategory && (
           <CategoryDetailPage
-            category={openedCategory}
+            category={handoff.openedCategory}
             accountId={accountId}
             range={range}
-            onBack={() => setTab("dashboard")}
+            onBack={() => go("dashboard")}
             onOpenMerchant={openMerchant}
             onOpenTransactions={openCategoryTransactions}
           />
@@ -434,16 +410,16 @@ function App() {
             range={range}
             onAccountIdChange={setAccountId}
             onRangeChange={setRange}
-            initialSearch={transactionSearch}
-            initialCategory={transactionCategory}
-            initialReviewOpen={reviewUncategorized}
-            initialTransfersOpen={reviewTransfers}
+            initialSearch={handoff.search}
+            initialCategory={handoff.category}
+            initialReviewOpen={handoff.reviewUncategorized}
+            initialTransfersOpen={handoff.reviewTransfers}
           />
         )}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}
         {tab === "year" && <YearReviewPage accountId={accountId} onOpenMerchant={openMerchant} />}
         {tab === "goals" && <GoalsPage />}
-        {tab === "net-worth" && <NetWorthPage showCashFlow={showCashFlow} />}
+        {tab === "net-worth" && <NetWorthPage showCashFlow={handoff.showCashFlow} />}
         {tab === "manage" && <ManagePage onAccountsChanged={loadAccounts} />}
       </main>
     </div>

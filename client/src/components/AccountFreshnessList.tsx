@@ -1,14 +1,6 @@
 import type { AccountFreshness } from "../types";
 import { accountTypeLabel } from "../format";
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
+import { dayMonthYear } from "../dates";
 
 function ago(days: number) {
   return days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
@@ -59,11 +51,11 @@ export function AccountFreshnessList({
               </p>
               <p className="text-xs text-slate-500">
                 {a.latestTransactionDate && a.daysSinceTransaction !== null
-                  ? `Newest transaction ${shortDate(a.latestTransactionDate)} (${ago(a.daysSinceTransaction)})`
+                  ? `Newest transaction ${dayMonthYear(a.latestTransactionDate)} (${ago(a.daysSinceTransaction)})`
                   : "Nothing imported yet"}
                 {a.latestBalanceDate && a.daysSinceBalance !== null && (
                   <span className={a.balanceDue ? "text-amber-700 dark:text-amber-400" : undefined}>
-                    {" · "}balance logged {shortDate(a.latestBalanceDate)}
+                    {" · "}balance logged {dayMonthYear(a.latestBalanceDate)}
                     {a.balanceDue && ` (${ago(a.daysSinceBalance)} — log a fresh one on Net Worth)`}
                   </span>
                 )}

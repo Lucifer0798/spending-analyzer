@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchRecurringAudit, saveRecurringOverride } from "../api";
 import type { DateRangeValue, SubscriptionFinding, SubscriptionAuditResponse } from "../types";
 import { currency, currencyPrecise } from "../format";
+import { dayMonthYear } from "../dates";
 
 const CADENCE_WORD: Record<string, string> = {
   weekly: "a week",
@@ -11,22 +12,13 @@ const CADENCE_WORD: Record<string, string> = {
   yearly: "a year",
 };
 
-function longDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
 function describe(f: SubscriptionFinding, cur: string): { title: string; detail: string; stake: string } {
   const per = CADENCE_WORD[f.cadence] ?? f.cadence;
   switch (f.kind) {
     case "still_charging":
       return {
         title: `${f.merchants[0]} is still charging`,
-        detail: `Charged ${currencyPrecise(f.toAmount!, cur)} on ${longDate(f.chargedOn!)}, after you flagged it to cancel on ${longDate(f.flaggedOn!)}. Worth checking the cancellation went through.`,
+        detail: `Charged ${currencyPrecise(f.toAmount!, cur)} on ${dayMonthYear(f.chargedOn!)}, after you flagged it to cancel on ${dayMonthYear(f.flaggedOn!)}. Worth checking the cancellation went through.`,
         stake: `${currency(f.yearlyAmount, 0, cur)} a year if it carries on`,
       };
     case "price_increase":
