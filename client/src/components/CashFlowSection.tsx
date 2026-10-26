@@ -3,23 +3,11 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import { fetchCashFlow } from "../api";
 import type { AccountCashFlow, CashFlowForecast } from "../types";
 import { accountTypeLabel, currency, currencyPrecise } from "../format";
+import { dayMonth, dayMonthYear } from "../dates";
 
 /** Events shown before "Show all". */
 const PREVIEW = 6;
 const AXIS = "#94a3b8";
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-function longDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 function BalanceTooltip({
   active,
@@ -35,7 +23,7 @@ function BalanceTooltip({
   if (!active || !payload?.length || !label) return null;
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md dark:border-slate-700 dark:bg-slate-900">
-      <p className="font-medium text-slate-700 dark:text-slate-200">{longDate(label)}</p>
+      <p className="font-medium text-slate-700 dark:text-slate-200">{dayMonthYear(label)}</p>
       <p className="tabular-nums text-slate-600 dark:text-slate-400">{currencyPrecise(payload[0].value, currencyCode)}</p>
     </div>
   );
@@ -55,7 +43,7 @@ function AccountForecastCard({ f, today }: { f: AccountCashFlow; today: string }
           {f.accountName} <span className="font-normal text-slate-500">· {accountTypeLabel(f.accountType)}</span>
         </h3>
         <span className="text-xs text-slate-500">
-          Lowest {currency(f.lowestBalance, 0, cur)} on {shortDate(f.lowestDate)} · ends at{" "}
+          Lowest {currency(f.lowestBalance, 0, cur)} on {dayMonth(f.lowestDate)} · ends at{" "}
           {currency(f.endingBalance, 0, cur)}
         </span>
       </div>
@@ -66,13 +54,13 @@ function AccountForecastCard({ f, today }: { f: AccountCashFlow; today: string }
           className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-300"
         >
           <span aria-hidden>⚠ </span>
-          <strong>Projected to go below zero on {longDate(f.firstNegativeDate)}</strong>, reaching{" "}
-          {currency(f.lowestBalance, 0, cur)} by {shortDate(f.lowestDate)}.
+          <strong>Projected to go below zero on {dayMonthYear(f.firstNegativeDate)}</strong>, reaching{" "}
+          {currency(f.lowestBalance, 0, cur)} by {dayMonth(f.lowestDate)}.
         </p>
       )}
       {f.stale && (
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          The newest data for this account is from {longDate(f.asOf)} — import a newer statement or log a fresh
+          The newest data for this account is from {dayMonthYear(f.asOf)} — import a newer statement or log a fresh
           balance for a forecast worth trusting.
         </p>
       )}
@@ -83,7 +71,7 @@ function AccountForecastCard({ f, today }: { f: AccountCashFlow; today: string }
             <CartesianGrid stroke={AXIS} strokeOpacity={0.25} vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={shortDate}
+              tickFormatter={dayMonth}
               stroke={AXIS}
               fontSize={11}
               tickLine={false}
@@ -117,7 +105,7 @@ function AccountForecastCard({ f, today }: { f: AccountCashFlow; today: string }
             {events.map((e, i) => (
               <li key={`${e.date}|${e.description}|${i}`} className="flex items-baseline justify-between gap-3 py-1.5">
                 <span className="min-w-0 truncate">
-                  <span className="mr-2 tabular-nums text-slate-500">{shortDate(e.date)}</span>
+                  <span className="mr-2 tabular-nums text-slate-500">{dayMonth(e.date)}</span>
                   <span className="text-slate-800 dark:text-slate-200">{e.description}</span>
                   {e.overdue && (
                     <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
@@ -149,9 +137,9 @@ function AccountForecastCard({ f, today }: { f: AccountCashFlow; today: string }
       )}
 
       <p className="mt-3 text-xs text-slate-500">
-        Starts from the {currencyPrecise(f.loggedBalance, cur)} you logged on {longDate(f.balanceDate)}
+        Starts from the {currencyPrecise(f.loggedBalance, cur)} you logged on {dayMonthYear(f.balanceDate)}
         {f.importedSince > 0 &&
-          `, plus ${f.importedSince} transaction${f.importedSince === 1 ? "" : "s"} imported since (through ${longDate(f.asOf)}): ${currencyPrecise(f.startingBalance, cur)}`}
+          `, plus ${f.importedSince} transaction${f.importedSince === 1 ? "" : "s"} imported since (through ${dayMonthYear(f.asOf)}): ${currencyPrecise(f.startingBalance, cur)}`}
         .
       </p>
     </div>

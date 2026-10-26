@@ -126,6 +126,18 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**Shared helpers instead of copies: `dates.ts`, `Money.round2`, App's `Handoff`.** Every client
+date helper lives in `client/src/dates.ts` -- `dayMonth` ("Oct 14"), `dayMonthYear` ("Oct 14, 2026"),
+`monthYear` ("October 2026" from "2026-10"), `addDays`, `isoDate`, `todayIso` -- all parsing and
+formatting in UTC so an ISO date can't slide a day in another timezone. A dozen components had
+their own copies (some parsing in local time, which gives the same calendar date). Two
+deliberately different formats stay local: CategoryDetailPage's "Oct 26" chart tick and
+YearReviewPage's month names. Server-side, `Money.round2` replaced thirteen identical private
+`round`/`round2` helpers. In App, the hand-offs between pages (merchant search, category filter,
+review panels, opened category, cash-flow scroll, upload account) are one `Handoff` object set only
+through `go(tab, handed)`; every navigation replaces it whole, which is what used to take a
+six-setter reset in the nav buttons -- and a new hand-off can't now be forgotten in that reset.
+
 **The subscription audit is a pure function over `/recurring`'s own series.** `/recurring` and
 `/recurring/audit` share `InsightsController.recurringSeries` (detection over spending, "exclude"
 merchants dropped, "cancel" flags applied), and `SubscriptionAuditService.audit(series, overrides)`

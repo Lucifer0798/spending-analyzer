@@ -79,7 +79,7 @@ public class ForecastService {
 
             Stats stats = stats(values);
             statsByCategory.put(s.category(), stats);
-            predictions.add(new Prediction(s.category(), round2(stats.projection()), stats.trend(),
+            predictions.add(new Prediction(s.category(), Money.round2(stats.projection()), stats.trend(),
                     stats.confidence(), rationale(stats, money)));
         }
         predictions.sort(Comparator.comparingDouble(Prediction::predictedNextMonth).reversed());
@@ -166,7 +166,7 @@ public class ForecastService {
             candidates.add(new Recommendation(FEES,
                     "You've paid about " + money.format(fees.recentAverage()) + " a month in fees and charges recently.",
                     "Check what triggered them — overdraft, late-payment and account fees can often be avoided, or waived if you ask.",
-                    round2(fees.recentAverage())));
+                    Money.round2(fees.recentAverage())));
         }
 
         for (var entry : statsByCategory.entrySet()) {
@@ -180,7 +180,7 @@ public class ForecastService {
                                 + money.format(s.recentAverage()) + " a month over the last " + s.months() + " months.",
                         "Set a " + category + " budget near your earlier level of " + money.format(s.earlierAverage())
                                 + " a month to stop the climb.",
-                        round2(rise)));
+                        Money.round2(rise)));
             }
         }
 
@@ -195,7 +195,7 @@ public class ForecastService {
                             + Math.round(share) + "% of your categorized spending.",
                     CUT_ACTIONS.get(category) + " Trimming it by " + Math.round(DISCRETIONARY_CUT * 100)
                             + "% would save about " + money.format(cut) + " a month.",
-                    round2(cut)));
+                    Money.round2(cut)));
         }
 
         // Biggest saving first, one suggestion per category (the stronger one wins).
@@ -256,7 +256,4 @@ public class ForecastService {
         return format;
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

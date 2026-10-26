@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { bulkCategorize, fetchUncategorizedMerchants } from "../api";
 import type { UncategorizedMerchant } from "../types";
 import { currencyPrecise } from "../format";
+import { dayMonthYear } from "../dates";
 
 interface Props {
   accountId: number | null;
@@ -14,15 +15,6 @@ interface Props {
   /** Any value that changes whenever the page's transactions change -- a category set on a row,
    *  a delete, an import -- so the queue re-fetches instead of showing stale counts. */
   refreshKey?: unknown;
-}
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
 }
 
 /**
@@ -113,7 +105,7 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
                           ? " · money in"
                           : ""}
                       {" · "}
-                      {g.first_date === g.last_date ? shortDate(g.first_date) : `${shortDate(g.first_date)} – ${shortDate(g.last_date)}`}
+                      {g.first_date === g.last_date ? dayMonthYear(g.first_date) : `${dayMonthYear(g.first_date)} – ${dayMonthYear(g.last_date)}`}
                     </p>
                     {g.examples.some((e) => e.toUpperCase() !== g.merchant) && (
                       <p className="truncate text-[11px] text-slate-500" title={g.examples.join("\n")}>

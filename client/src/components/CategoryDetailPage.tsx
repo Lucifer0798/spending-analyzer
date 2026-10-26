@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Toolt
 import { fetchBudgets, fetchCategories, fetchCategoryDetail } from "../api";
 import type { CategoryDrilldown, DateRangeValue } from "../types";
 import { currency, currencyPrecise } from "../format";
+import { dayMonthYear } from "../dates";
 
 interface Props {
   category: string;
@@ -20,10 +21,6 @@ const GRID = "#e1e0d9";
 function monthLabel(key: string) {
   const [y, m] = key.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "short", year: "2-digit", timeZone: "UTC" });
-}
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -211,7 +208,7 @@ export function CategoryDetailPage({ category, accountId, range, onBack, onOpenM
                 <li key={t.id} className="flex items-baseline justify-between gap-3 py-1.5 text-sm">
                   <span className="min-w-0">
                     <span className="block truncate text-slate-800 dark:text-slate-200">{t.description}</span>
-                    <span className="text-xs text-slate-500">{shortDate(t.date)}</span>
+                    <span className="text-xs text-slate-500">{dayMonthYear(t.date)}</span>
                   </span>
                   <span className="shrink-0 font-medium text-slate-900 dark:text-slate-100">
                     {currencyPrecise(t.split_share ?? t.amount, cur)}

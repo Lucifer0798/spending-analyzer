@@ -176,7 +176,7 @@ public class StatsService {
             double currentTotal = current.getOrDefault(category, 0.0);
             double previousTotal = previous.getOrDefault(category, 0.0);
             categories.add(new CategoryComparison(category, currentTotal, previousTotal,
-                    round2(currentTotal - previousTotal), changePercent(currentTotal, previousTotal)));
+                    Money.round2(currentTotal - previousTotal), changePercent(currentTotal, previousTotal)));
         }
         // Biggest increase first, biggest decrease last -- the two ends of the list are what a
         // "what changed" view exists to show.
@@ -187,8 +187,8 @@ public class StatsService {
 
         return Optional.of(new PeriodComparison(
                 range, previousRange,
-                round2(currentTotal), round2(previousTotal),
-                round2(currentTotal - previousTotal),
+                Money.round2(currentTotal), Money.round2(previousTotal),
+                Money.round2(currentTotal - previousTotal),
                 changePercent(currentTotal, previousTotal),
                 categories,
                 explicitPreviousRange != null));
@@ -205,7 +205,7 @@ public class StatsService {
     /** Null rather than an infinite or made-up percentage when there was nothing to grow from. */
     private static Double changePercent(double current, double previous) {
         if (previous == 0) return null;
-        return round2(((current - previous) / previous) * 100.0);
+        return Money.round2(((current - previous) / previous) * 100.0);
     }
 
     public List<MonthlyTotal> computeMonthlyTotals(Long accountId, DateRange range) {
@@ -254,7 +254,7 @@ public class StatsService {
             List<MonthlyTotal> months = new ArrayList<>();
             List<Double> totals = new ArrayList<>();
             for (var monthEntry : monthMap.entrySet()) {
-                double rounded = round2(monthEntry.getValue());
+                double rounded = Money.round2(monthEntry.getValue());
                 months.add(new MonthlyTotal(monthEntry.getKey(), rounded));
                 totals.add(rounded);
             }
@@ -267,9 +267,9 @@ public class StatsService {
             series.add(new CategoryMonthlySeries(
                     entry.getKey(),
                     months,
-                    round2(linearRegressionNext(totals)),
-                    round2(movingAverage3mo),
-                    round2(overallTotal),
+                    Money.round2(linearRegressionNext(totals)),
+                    Money.round2(movingAverage3mo),
+                    Money.round2(overallTotal),
                     lastMonthTotal
             ));
         }
@@ -360,8 +360,8 @@ public class StatsService {
                     .max(Map.Entry.<String, Double>comparingByValue().thenComparing(Map.Entry.comparingByKey()))
                     .map(Map.Entry::getKey)
                     .orElse("Uncategorized");
-            totals.add(new MerchantTotal(entry.getKey(), round2(acc.total), acc.count,
-                    round2(acc.total / acc.count), acc.first, acc.last, topCategory));
+            totals.add(new MerchantTotal(entry.getKey(), Money.round2(acc.total), acc.count,
+                    Money.round2(acc.total / acc.count), acc.first, acc.last, topCategory));
         }
         totals.sort(Comparator.comparingDouble(MerchantTotal::total).reversed()
                 .thenComparing(MerchantTotal::merchant));
@@ -429,7 +429,4 @@ public class StatsService {
         return Math.max(0, intercept + slope * n);
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

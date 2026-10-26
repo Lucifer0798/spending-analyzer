@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { DateBounds, DateRangeValue } from "../types";
 import { ALL_TIME } from "../types";
+import { isoDate } from "../dates";
 
 interface Props {
   value: DateRangeValue;
@@ -19,10 +20,6 @@ const PRESETS: { id: PresetId; label: string }[] = [
   { id: "custom", label: "Custom…" },
 ];
 
-function iso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * Presets are anchored to the most recent transaction rather than today's date.
  * Statements are usually imported after the fact, so "last 3 months" measured from
@@ -35,7 +32,7 @@ function rangeForPreset(preset: PresetId, anchorDate: string): DateRangeValue {
     const start = new Date(anchor);
     start.setUTCMonth(start.getUTCMonth() - months + 1);
     start.setUTCDate(1);
-    return { from: iso(start), to: anchorDate };
+    return { from: isoDate(start), to: anchorDate };
   };
 
   switch (preset) {
@@ -63,7 +60,7 @@ export function DateRangePicker({ value, bounds, onChange }: Props) {
   const [customOpen, setCustomOpen] = useState(false);
   // Today, read once rather than on every render -- it's only the anchor until the data's own
   // latest date arrives, and a render has to give the same answer each time it runs.
-  const [today] = useState(() => iso(new Date()));
+  const [today] = useState(() => isoDate(new Date()));
 
   const anchor = bounds?.latest ?? today;
 

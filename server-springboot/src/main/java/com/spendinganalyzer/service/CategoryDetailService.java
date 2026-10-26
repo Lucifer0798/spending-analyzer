@@ -63,16 +63,13 @@ public class CategoryDetailService {
 
         return new CategoryDetail(
                 true, category, currency,
-                round2(mine.total()), mine.count(),
-                allSpend > 0 ? round2(mine.total() / allSpend * 100) : 0,
-                round2(averagePerMonth),
+                Money.round2(mine.total()), mine.count(),
+                allSpend > 0 ? Money.round2(mine.total() / allSpend * 100) : 0,
+                Money.round2(averagePerMonth),
                 months, change,
                 List.copyOf(merchants.subList(0, Math.min(TOP_MERCHANTS, merchants.size()))),
                 merchants.size(),
                 transactions.find(category, null, accountId, range, RECENT, 0));
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

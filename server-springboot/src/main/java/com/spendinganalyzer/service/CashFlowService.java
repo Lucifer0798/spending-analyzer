@@ -100,7 +100,7 @@ public class CashFlowService {
                                             Map<String, RecurringOverride> flags) {
         TransactionRepository.NetChange since = transactions.netChangeAfter(account.id(), logged.date());
         LocalDate asOf = LocalDate.parse(since.latestDate() != null ? since.latestDate() : logged.date());
-        double starting = round(logged.balance() + since.net());
+        double starting = Money.round2(logged.balance() + since.net());
 
         List<Event> events = new ArrayList<>();
         for (RecurringSeries s : recurring.detect(transactions.findByAccountAndType(account.id(), "debit"))) {
@@ -126,7 +126,7 @@ public class CashFlowService {
         for (LocalDate day = asOf; !day.isAfter(end); day = day.plusDays(1)) {
             while (next < events.size() && events.get(next).date().equals(day.toString())) {
                 Event e = events.get(next++);
-                balance = round(balance + e.amount());
+                balance = Money.round2(balance + e.amount());
                 withBalances.add(new Event(e.date(), e.description(), e.amount(), e.cadence(), balance, e.overdue(), e.cancelling()));
             }
             daily.add(new Point(day.toString(), balance));
@@ -148,7 +148,7 @@ public class CashFlowService {
 
     /** What a series usually costs: its latest amount when the price changed, otherwise the average. */
     private static double amountOf(RecurringSeries s) {
-        return round(s.priceChanged() ? s.lastAmount() : s.averageAmount());
+        return Money.round2(s.priceChanged() ? s.lastAmount() : s.averageAmount());
     }
 
     /**
@@ -185,7 +185,4 @@ public class CashFlowService {
         };
     }
 
-    private static double round(double value) {
-        return Math.round(value * 100) / 100.0;
-    }
 }

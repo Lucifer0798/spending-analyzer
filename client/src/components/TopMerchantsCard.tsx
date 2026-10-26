@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchTopMerchants } from "../api";
 import type { DateRangeValue, TopMerchantsResponse } from "../types";
 import { currency, currencyPrecise } from "../format";
+import { dayMonthYear } from "../dates";
 
 interface Props {
   accountId: number | null;
@@ -12,15 +13,6 @@ interface Props {
 
 const COLLAPSED = 5;
 const EXPANDED = 25;
-
-function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 /**
  * Where the money goes, by place rather than by category. Renders nothing without spend, or when
@@ -69,7 +61,7 @@ export function TopMerchantsCard({ accountId, range, onOpenMerchant }: Props) {
             <p className="mt-1 text-xs text-slate-500">
               {m.count} visit{m.count === 1 ? "" : "s"} · avg {currencyPrecise(m.averageAmount, cur)} · {m.topCategory}
               {" · last "}
-              {shortDate(m.lastDate)}
+              {dayMonthYear(m.lastDate)}
             </p>
           </li>
         ))}

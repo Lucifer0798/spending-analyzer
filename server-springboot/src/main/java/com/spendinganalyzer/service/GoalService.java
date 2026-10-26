@@ -77,9 +77,9 @@ public class GoalService {
                     goal.targetAmount(),
                     goal.targetDate(),
                     goal.currency(),
-                    round2(t.sum()),
-                    round2(Math.max(0, goal.targetAmount() - t.sum())),
-                    round2(percent),
+                    Money.round2(t.sum()),
+                    Money.round2(Math.max(0, goal.targetAmount() - t.sum())),
+                    Money.round2(percent),
                     achieved,
                     t.count(),
                     monthlyPace,
@@ -152,10 +152,10 @@ public class GoalService {
             String basis;
             String projected = null;
             if (goal.targetDate() != null) {
-                suggested = round2(required.get(goal.id()));
+                suggested = Money.round2(required.get(goal.id()));
                 basis = "deadline";
             } else if (undatedShare != null) {
-                suggested = round2(undatedShare);
+                suggested = Money.round2(undatedShare);
                 basis = "surplus";
                 projected = today.plusDays(Math.round((remaining / undatedShare) * AVG_DAYS_PER_MONTH)).toString();
             } else {
@@ -164,17 +164,17 @@ public class GoalService {
             }
 
             suggestions.add(new GoalFundingSuggestion(
-                    goal.id(), goal.name(), round2(remaining), goal.targetDate(),
+                    goal.id(), goal.name(), Money.round2(remaining), goal.targetDate(),
                     suggested, basis, monthlyPace(t, today), projected));
         }
 
         return new GoalFundingPlan(
                 currency,
-                surplus == null ? null : round2(surplus.average()),
+                surplus == null ? null : Money.round2(surplus.average()),
                 surplus == null ? 0 : surplus.months(),
-                round2(totalRequired),
+                Money.round2(totalRequired),
                 leftover == null ? null : leftover >= 0,
-                leftover == null ? null : round2(leftover),
+                leftover == null ? null : Money.round2(leftover),
                 suggestions);
     }
 
@@ -240,10 +240,7 @@ public class GoalService {
         if (t.firstContributionDate() == null) return 0;
         double daysElapsed = Math.max(AVG_DAYS_PER_MONTH,
                 ChronoUnit.DAYS.between(LocalDate.parse(t.firstContributionDate()), today));
-        return round2((t.sum() / daysElapsed) * AVG_DAYS_PER_MONTH);
+        return Money.round2((t.sum() / daysElapsed) * AVG_DAYS_PER_MONTH);
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 }

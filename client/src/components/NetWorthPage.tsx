@@ -22,6 +22,7 @@ import type {
 import { accountTypeLabel, currency } from "../format";
 import { ExportLink } from "./ExportLink";
 import { CashFlowSection } from "./CashFlowSection";
+import { dayMonthYear, todayIso } from "../dates";
 
 const BLUE = "#2a78d6";
 const MUTED = "#898781";
@@ -34,19 +35,6 @@ const TONE_CLASS: Record<"positive" | "warning" | "neutral", string> = {
   warning: "text-amber-600 dark:text-amber-400",
   neutral: "text-slate-500",
 };
-
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dateLabel(iso: string) {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function ChartTooltip({
   active,
@@ -62,7 +50,7 @@ function ChartTooltip({
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md dark:border-slate-700 dark:bg-slate-900">
-      <p className="font-medium text-slate-700 dark:text-slate-200">{label && dateLabel(label)}</p>
+      <p className="font-medium text-slate-700 dark:text-slate-200">{label && dayMonthYear(label)}</p>
       <p className="text-slate-600 dark:text-slate-400">{currency(payload[0].value, 0, currencyCode)}</p>
     </div>
   );
@@ -75,7 +63,7 @@ function NetWorthChart({ data, currencyCode }: { data: { date: string; total: nu
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data}>
           <CartesianGrid stroke={GRID} vertical={false} />
-          <XAxis dataKey="date" stroke={MUTED} fontSize={12} tickFormatter={dateLabel} tickLine={false} axisLine={{ stroke: GRID }} />
+          <XAxis dataKey="date" stroke={MUTED} fontSize={12} tickFormatter={dayMonthYear} tickLine={false} axisLine={{ stroke: GRID }} />
           <YAxis stroke={MUTED} fontSize={12} tickLine={false} axisLine={false} />
           <Tooltip content={<ChartTooltip currencyCode={currencyCode} />} />
           <Line type="monotone" dataKey="total" stroke={BLUE} strokeWidth={2} dot={{ r: 3, fill: BLUE }} />
@@ -143,7 +131,7 @@ function targetMessage(target: NetWorthTargetProgress): { text: string; tone: "p
     return { text: "The current trend isn't heading toward this target.", tone: "warning" };
   }
 
-  const projected = dateLabel(target.projected_date);
+  const projected = dayMonthYear(target.projected_date);
   if (target.target_date) {
     const onTrack = target.projected_date <= target.target_date;
     return onTrack
@@ -248,7 +236,7 @@ function NetWorthTargetCard({
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Target: {currency(target.target_amount, 0, currencyCode)}
-                {target.target_date && ` by ${dateLabel(target.target_date)}`}
+                {target.target_date && ` by ${dayMonthYear(target.target_date)}`}
               </p>
               {target.achieved && (
                 <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
@@ -294,7 +282,7 @@ function BalanceHistory({
     <ul className="mt-2 space-y-1">
       {history.map((b) => (
         <li key={b.id} className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-600 dark:text-slate-400">{dateLabel(b.date)}</span>
+          <span className="text-slate-600 dark:text-slate-400">{dayMonthYear(b.date)}</span>
           <span className="flex items-center gap-2">
             <span className="text-slate-800 dark:text-slate-200">{currency(b.balance, 0, currencyCode)}</span>
             <button
@@ -328,7 +316,7 @@ function AccountBalanceCard({
   const [showForm, setShowForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(todayIsoDate());
+  const [date, setDate] = useState(todayIso());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -367,7 +355,7 @@ function AccountBalanceCard({
             <p className="font-semibold text-slate-800 dark:text-slate-200">
               {currency(netWorthAccount.balance, 0, account.currency)}
             </p>
-            <p className="text-xs text-slate-500">as of {dateLabel(netWorthAccount.asOfDate)}</p>
+            <p className="text-xs text-slate-500">as of {dayMonthYear(netWorthAccount.asOfDate)}</p>
           </div>
         ) : (
           <p className="text-xs text-slate-500">No balance logged</p>

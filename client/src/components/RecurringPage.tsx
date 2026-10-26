@@ -3,6 +3,7 @@ import { clearRecurringOverride, fetchRecurring, fetchRecurringIncome, saveRecur
 import type { DateRangeValue, RecurringIncomeResponse, RecurringResponse, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
 import { SubscriptionAudit } from "./SubscriptionAudit";
+import { monthYear } from "../dates";
 
 interface Props {
   accountId: number | null;
@@ -112,12 +113,6 @@ function RecurringActions({
   );
 }
 
-function monthLabel(month: string) {
-  const [year, m] = month.split("-");
-  const date = new Date(Number(year), Number(m) - 1, 1);
-  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
 /**
  * Regular deposits, detected the exact same way the charges above are -- a separate section
  * rather than one merged list, since "cadence + steady amount" means something different on the
@@ -175,7 +170,7 @@ function RecurringIncomeSection({ accountId, range }: Props) {
             </div>
             <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Received in {monthLabel(data!.month)}
+                Received in {monthYear(data!.month)}
               </p>
               <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                 {currency(data!.actualThisMonth, 0, cur)}
