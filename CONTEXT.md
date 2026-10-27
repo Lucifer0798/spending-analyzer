@@ -126,6 +126,14 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+**Excel parsing has its own tests, run as .xlsx and as .xls.** `ExcelParsingTest` builds workbooks
+with Apache POI in memory -- date cells in two formats, a text date, negative and `#,##0.00`
+amounts, a formula, a missing row, debit/credit columns, a blank trailing header -- and runs each
+case through `XSSFWorkbook` and `HSSFWorkbook`, which are different halves of POI. Nothing tested
+Excel before, so a POI upgrade (5.5.1 -> 6.0.0) had no evidence either way; these passed on both
+versions. Disabling the date-cell branch in `cellToString` fails the two cases where only the
+cell type gives the right date (an ISO-formatted date cell still parses as text).
+
 **Shared helpers instead of copies: `dates.ts`, `Money.round2`, App's `Handoff`.** Every client
 date helper lives in `client/src/dates.ts` -- `dayMonth` ("Oct 14"), `dayMonthYear` ("Oct 14, 2026"),
 `monthYear` ("October 2026" from "2026-10"), `addDays`, `isoDate`, `todayIso` -- all parsing and
