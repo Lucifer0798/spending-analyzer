@@ -164,6 +164,7 @@ startup log. Set `APP_PASSWORD` if you want to exercise the login screen.
 ```
 client/                     React + Vite frontend
   src/components/           Upload, Dashboard, Transactions, Recurring, Year, Goals, Net Worth, Manage
+  src/components/manage/    One component per Manage page section
   src/api.ts                Every backend call lives here
   src/dates.ts              Formatting and arithmetic for the app's ISO date strings
   src/types.ts              Shared TypeScript types

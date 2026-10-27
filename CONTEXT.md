@@ -126,6 +126,16 @@ ever sees per-currency series. Several currencies come out as separate series in
 never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither takes the date or
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
+
+**The Manage page is one component per section, sharing data, `run` and one banner.**
+`ManagePage` still loads everything the sections display together (`reload`), owns `run` (do the
+write, reload, call `onAccountsChanged`, set the notice or error) and the single error/notice banner,
+and passes those down; each section in `components/manage/` keeps its own form drafts (the budget
+drafts, the new account/category fields, the merchant rule form, file-import progress). The two
+file imports don't fit `run` -- a rejected merchant file lists per-row errors in its own section --
+so they get `reload` and a `Banner` (`setError`/`setNotice`) instead. The split was checked by
+rendering the page before and after it: identical `innerHTML`, 57,840 characters.
+
 **Excel parsing has its own tests, run as .xlsx and as .xls.** `ExcelParsingTest` builds workbooks
 with Apache POI in memory -- date cells in two formats, a text date, negative and `#,##0.00`
 amounts, a formula, a missing row, debit/credit columns, a blank trailing header -- and runs each
