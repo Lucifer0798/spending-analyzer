@@ -26,6 +26,7 @@ import { currencyPrecise } from "../format";
 import { ExportLink } from "./ExportLink";
 import { UncategorizedReview } from "./UncategorizedReview";
 import { TransferReview } from "./TransferReview";
+import { DuplicateReview } from "./DuplicateReview";
 
 interface Props {
   accountId: number | null;
@@ -480,6 +481,15 @@ export function TransactionsTable({
       />
       {/* Same: nothing once every likely transfer is matched or dismissed. */}
       <TransferReview onChanged={load} refreshKey={transactions} initiallyOpen={initialTransfersOpen} />
+      {/* And again: nothing unless something looks charged twice. */}
+      <DuplicateReview
+        accountId={accountId}
+        refreshKey={transactions}
+        onShow={(merchant) => {
+          setSearchInput(merchant);
+          setSearchFilter(merchant);
+        }}
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {presets.map((p) => (

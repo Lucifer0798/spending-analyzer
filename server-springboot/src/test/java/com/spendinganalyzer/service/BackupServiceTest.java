@@ -229,7 +229,7 @@ class BackupServiceTest {
     void restoringEmptyBackupWipesEverything() {
         BackupData empty = new BackupData(BackupData.CURRENT_VERSION, "2026-01-01T00:00:00Z",
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of(), List.of(), List.of());
 
         backupService.restore(empty);
 

@@ -8,6 +8,7 @@ import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.model.TransactionReceipt;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.DuplicateDismissalRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
@@ -45,6 +46,7 @@ public class TransactionController {
     private final TagRepository tagRepository;
     private final TransactionReceiptRepository receiptRepository;
     private final TransferPairRepository transferPairRepository;
+    private final DuplicateDismissalRepository duplicateDismissalRepository;
 
     public TransactionController(
             TransactionRepository repository,
@@ -52,7 +54,8 @@ public class TransactionController {
             MerchantCategoryRepository merchantCategoryRepository,
             TagRepository tagRepository,
             TransactionReceiptRepository receiptRepository,
-            TransferPairRepository transferPairRepository
+            TransferPairRepository transferPairRepository,
+            DuplicateDismissalRepository duplicateDismissalRepository
     ) {
         this.repository = repository;
         this.categoryRepository = categoryRepository;
@@ -60,6 +63,7 @@ public class TransactionController {
         this.tagRepository = tagRepository;
         this.receiptRepository = receiptRepository;
         this.transferPairRepository = transferPairRepository;
+        this.duplicateDismissalRepository = duplicateDismissalRepository;
     }
 
     @GetMapping("/transactions")
@@ -381,6 +385,7 @@ public class TransactionController {
         repository.resetAll();
         receiptRepository.deleteAll();
         transferPairRepository.deleteAll();
+        duplicateDismissalRepository.deleteAll();
         return Map.of("ok", true);
     }
 

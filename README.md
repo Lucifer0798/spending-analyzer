@@ -178,8 +178,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V26)
-  src/test/                 625 tests
+    db/migration/           Versioned schema migrations (V1–V27)
+  src/test/                 632 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -207,7 +207,7 @@ forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
 
 ## The database
 
-Seventeen tables, all created automatically:
+Eighteen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -228,9 +228,10 @@ Seventeen tables, all created automatically:
 | `net_worth_target` | A single target net worth to compare the forecast against, optionally by a date |
 | `keyword_rules` | Your own "description contains this word → this category" rules |
 | `transfer_pairs` | A debit and credit you matched as one transfer (with what each was before, for undo), or ruled out |
+| `duplicate_dismissals` | Groups of look-alike charges you said aren't double charges, so they aren't flagged again |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V27__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V28__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -270,6 +271,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/transactions/{id}/receipt` | View, attach, or remove a transaction's receipt image or PDF |
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
 | `GET` | `/transactions/uncategorized-merchants` | Uncategorized transactions grouped by merchant (and currency), most first, with the ids to answer each group via `bulk-category` |
+| `GET` `POST` | `/transactions/duplicates` | Likely double charges (`accountId`); `/transactions/duplicates/dismiss` with `{"transaction_ids": [...]}` marks a group "not a duplicate" |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized; `batchId` (an upload's id) also reports that upload's own counts, and how many earlier rows were categorized in passing |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
@@ -792,6 +794,13 @@ category** on the same schedule — two or three streaming services, say — wit
 The last is a prompt to check you use them all, not a claim they're duplicates; bills of $50 or more
 are left out of it, so rent and utilities don't count.
 
+**Possible double charges are pointed out, not removed.** The Transactions page flags debits that
+look like one purchase taken twice: the same amount at the same merchant in the same account, a
+day or two apart. Places you buy the same thing from all the time — the morning coffee — are left
+out, so it's the unusual repeat that stands out. **Show these** lists the charges side by side;
+**Not a duplicate** stops that group being flagged again. Nothing is deleted: a real double charge
+is one to raise with the merchant or your bank.
+
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
 one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
@@ -878,7 +887,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (625).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (632).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -955,6 +964,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Double-charge detector~~ — likely duplicate charges (same merchant and amount, a day or two
+  apart, not a habit) are flagged on the Transactions page, with "Not a duplicate" to dismiss
 - ~~Subscription audit~~ — the Recurring page flags price rises, charges still coming after a
   cancel flag, and several small plans in one category, each with what's at stake a year
 - ~~Combined header alerts~~ — over budget, running low and statements due share one "⚠ N alerts"
