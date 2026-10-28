@@ -849,3 +849,16 @@ export interface DuplicateChargeGroup {
   /** Oldest first. */
   transactions: Transaction[];
 }
+
+/** One recent change to transactions, as the Manage page's History lists it. */
+export interface HistoryEntry {
+  id: number;
+  /** UTC, "YYYY-MM-DD HH:MM:SS". */
+  createdAt: string;
+  action: "edit" | "category" | "delete" | "reapply-rules" | "import";
+  summary: string;
+  rowCount: number;
+  undoneAt: string | null;
+  /** Receipts deleted along with the transactions -- undo can't bring those back. */
+  receiptsLost: number;
+}

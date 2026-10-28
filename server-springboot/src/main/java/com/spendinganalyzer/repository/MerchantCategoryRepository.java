@@ -48,6 +48,32 @@ public class MerchantCategoryRepository {
                 new MapSqlParameterSource("key", merchantKey), ROW_MAPPER);
     }
 
+    /** A merchant's catch-all rule -- the one a category correction writes -- if it has one. */
+    public Optional<MerchantCategory> findCatchAll(String merchantKey) {
+        return jdbc.query("SELECT * FROM merchant_categories WHERE merchant_key = :key AND min_amount = 0 AND max_amount = :max",
+                        new MapSqlParameterSource().addValue("key", merchantKey).addValue("max", MerchantCategory.UNBOUNDED),
+                        ROW_MAPPER)
+                .stream().findFirst();
+    }
+
+    /** Puts a catch-all rule back to a category and source exactly -- undoing a correction that changed it. */
+    public void setCatchAll(String merchantKey, String category, String source) {
+        jdbc.update("""
+                INSERT INTO merchant_categories
+                  (merchant_key, category, min_amount, max_amount, source, hit_count, updated_at)
+                VALUES (:key, :category, 0, :max, :source, 0, datetime('now'))
+                ON CONFLICT(merchant_key, min_amount, max_amount) DO UPDATE SET
+                  category = excluded.category, source = excluded.source, updated_at = datetime('now')
+                """, new MapSqlParameterSource().addValue("key", merchantKey).addValue("category", category)
+                .addValue("source", source).addValue("max", MerchantCategory.UNBOUNDED));
+    }
+
+    /** Removes a catch-all rule -- undoing a correction that created it. */
+    public void deleteCatchAll(String merchantKey) {
+        jdbc.update("DELETE FROM merchant_categories WHERE merchant_key = :key AND min_amount = 0 AND max_amount = :max",
+                new MapSqlParameterSource().addValue("key", merchantKey).addValue("max", MerchantCategory.UNBOUNDED));
+    }
+
     public Optional<MerchantCategory> findById(long id) {
         return jdbc.query("SELECT * FROM merchant_categories WHERE id = :id",
                         new MapSqlParameterSource("id", id), ROW_MAPPER)
