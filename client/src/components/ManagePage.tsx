@@ -22,6 +22,7 @@ import { AccountsSection } from "./manage/AccountsSection";
 import { BackupSection } from "./manage/BackupSection";
 import { BudgetsSection } from "./manage/BudgetsSection";
 import { CategoriesSection } from "./manage/CategoriesSection";
+import { HistorySection } from "./manage/HistorySection";
 import { MerchantMemorySection } from "./manage/MerchantMemorySection";
 import { RecurringOverridesSection } from "./manage/RecurringOverridesSection";
 import { TagsSection } from "./manage/TagsSection";
@@ -131,6 +132,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
       <RecurringOverridesSection recurringOverrides={recurringOverrides} run={run} />
 
       <TagsSection tags={tags} run={run} />
+
+      {/* `categories` is a fresh array after every reload, so History re-fetches whenever the page does. */}
+      <HistorySection run={run} banner={banner} refreshKey={categories} />
 
       <BackupSection reload={reload} onAccountsChanged={onAccountsChanged} banner={banner} />
     </div>

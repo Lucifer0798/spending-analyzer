@@ -411,6 +411,54 @@ public class TransactionRepository {
     }
 
     /**
+     * Puts a transaction back exactly as it was, original id included -- undoing a delete. The id
+     * is free: AUTOINCREMENT never hands a deleted one out again.
+     */
+    public void insertWithId(Transaction t) {
+        jdbc.update("""
+                INSERT INTO transactions
+                  (id, date, description, amount, type, category, category_source, upload_batch_id, created_at,
+                   account_id, split_share, split_note, external_id)
+                VALUES
+                  (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt,
+                   :accountId, :splitShare, :splitNote, :externalId)
+                """, storedColumns(t));
+    }
+
+    /** Sets every editable column of a transaction to `t`'s values -- undoing an edit. */
+    public void overwrite(Transaction t) {
+        jdbc.update("""
+                UPDATE transactions SET date = :date, description = :description, amount = :amount, type = :type,
+                  category = :category, category_source = :categorySource, account_id = :accountId,
+                  split_share = :splitShare, split_note = :splitNote
+                WHERE id = :id
+                """, storedColumns(t));
+    }
+
+    /** Ids of every row an upload added -- what undoing that import removes. */
+    public List<Long> idsInBatch(String batchId) {
+        return jdbc.queryForList("SELECT id FROM transactions WHERE upload_batch_id = :batchId",
+                new MapSqlParameterSource("batchId", batchId), Long.class);
+    }
+
+    private static MapSqlParameterSource storedColumns(Transaction t) {
+        return new MapSqlParameterSource()
+                .addValue("id", t.id())
+                .addValue("date", t.date())
+                .addValue("description", t.description())
+                .addValue("amount", t.amount())
+                .addValue("type", t.type())
+                .addValue("category", t.category())
+                .addValue("categorySource", t.categorySource())
+                .addValue("batchId", t.uploadBatchId())
+                .addValue("createdAt", t.createdAt())
+                .addValue("accountId", t.accountId())
+                .addValue("splitShare", t.splitShare())
+                .addValue("splitNote", t.splitNote())
+                .addValue("externalId", t.externalId());
+    }
+
+    /**
      * Replaces every transaction with exactly what a backup holds, ids included — a restore, not
      * a merge. Only the stored columns are written; {@code account_name}/{@code account_currency}
      * on the model are joined in at read time and have no column of their own to insert into.

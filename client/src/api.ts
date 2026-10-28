@@ -18,6 +18,7 @@ import type {
   DateRangeValue,
   DuplicateChargeGroup,
   FreshnessResponse,
+  HistoryEntry,
   EscalationType,
   FilterPreset,
   Goal,
@@ -891,4 +892,14 @@ export function dismissDuplicateCharges(transactionIds: number[]) {
     method: "POST",
     body: JSON.stringify({ transaction_ids: transactionIds }),
   });
+}
+
+/** Recent changes to transactions, newest first. */
+export function fetchHistory(limit = 50) {
+  return request<{ entries: HistoryEntry[] }>(`/history${qs({ limit })}`);
+}
+
+/** Undoes one change; rows changed again since are left alone and counted in `skipped`. */
+export function undoChange(id: number) {
+  return request<{ restored: number; skipped: number; removed: number }>(`/history/${id}/undo`, { method: "POST" });
 }

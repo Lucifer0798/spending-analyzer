@@ -178,8 +178,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V27)
-  src/test/                 632 tests
+    db/migration/           Versioned schema migrations (V1–V28)
+  src/test/                 640 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -207,7 +207,7 @@ forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
 
 ## The database
 
-Eighteen tables, all created automatically:
+Nineteen tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -229,9 +229,10 @@ Eighteen tables, all created automatically:
 | `keyword_rules` | Your own "description contains this word → this category" rules |
 | `transfer_pairs` | A debit and credit you matched as one transfer (with what each was before, for undo), or ruled out |
 | `duplicate_dismissals` | Groups of look-alike charges you said aren't double charges, so they aren't flagged again |
+| `change_log` | Recent changes to transactions — before-and-after snapshots — so they can be undone |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V28__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V29__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -272,6 +273,7 @@ All endpoints live under `/api`.
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
 | `GET` | `/transactions/uncategorized-merchants` | Uncategorized transactions grouped by merchant (and currency), most first, with the ids to answer each group via `bulk-category` |
 | `GET` `POST` | `/transactions/duplicates` | Likely double charges (`accountId`); `/transactions/duplicates/dismiss` with `{"transaction_ids": [...]}` marks a group "not a duplicate" |
+| `GET` `POST` | `/history` | Recent changes to transactions (`limit`, default 50); `POST /history/{id}/undo` undoes one, leaving anything changed again since |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized; `batchId` (an upload's id) also reports that upload's own counts, and how many earlier rows were categorized in passing |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
@@ -801,6 +803,15 @@ out, so it's the unusual repeat that stands out. **Show these** lists the charge
 **Not a duplicate** stops that group being flagged again. Nothing is deleted: a real double charge
 is one to raise with the merchant or your bank.
 
+**Recent changes can be undone.** **Manage → History** lists what's been done to your transactions
+— editing one, recategorizing (including a whole merchant from the review queue), deleting,
+re-applying keyword rules, importing a statement — newest first, each with **Undo**. Undo puts rows
+back exactly as they were, a deleted one with its original id so its tags reattach, and unlearns
+what a category correction taught merchant memory. It never overwrites something you've changed
+again since: those rows are left alone and counted. Undoing an import removes what it added. A
+deleted transaction's receipt can't come back, and the entry says so beforehand. The newest 200
+changes are kept; a reset or a backup restore clears the list.
+
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
 one row. Clicking a merchant opens Transactions searching for that name — a plain text search, so
@@ -887,7 +898,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (632).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (640).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -964,6 +975,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Change history & undo~~ — Manage → History lists recent edits, recategorizing, deletes,
+  re-applied rules and imports, each with Undo that never overwrites a newer change
 - ~~Double-charge detector~~ — likely duplicate charges (same merchant and amount, a day or two
   apart, not a habit) are flagged on the Transactions page, with "Not a duplicate" to dismiss
 - ~~Subscription audit~~ — the Recurring page flags price rises, charges still coming after a

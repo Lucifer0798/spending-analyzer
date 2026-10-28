@@ -52,6 +52,7 @@ public class BackupService {
     private final KeywordRuleRepository keywordRules;
     private final TransferPairRepository transferPairs;
     private final DuplicateDismissalRepository duplicateDismissals;
+    private final ChangeLogService changeLog;
 
     public BackupService(
             AccountRepository accounts,
@@ -70,7 +71,8 @@ public class BackupService {
             NetWorthTargetRepository netWorthTarget,
             KeywordRuleRepository keywordRules,
             TransferPairRepository transferPairs,
-            DuplicateDismissalRepository duplicateDismissals
+            DuplicateDismissalRepository duplicateDismissals,
+            ChangeLogService changeLog
     ) {
         this.accounts = accounts;
         this.categories = categories;
@@ -89,6 +91,7 @@ public class BackupService {
         this.keywordRules = keywordRules;
         this.transferPairs = transferPairs;
         this.duplicateDismissals = duplicateDismissals;
+        this.changeLog = changeLog;
     }
 
     public record BackupSummary(
@@ -157,6 +160,8 @@ public class BackupService {
         keywordRules.restoreAll(data.keywordRules());
         transferPairs.restoreAll(data.transferPairs());
         duplicateDismissals.restoreAll(data.duplicateDismissals());
+        // History describes the dataset being replaced; undoing any of it now would be nonsense.
+        changeLog.clear();
         predictionsCache.deleteAll();
 
         return new BackupSummary(

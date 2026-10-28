@@ -14,6 +14,7 @@ import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
+import com.spendinganalyzer.service.ChangeLogService;
 import com.spendinganalyzer.service.MerchantNormalizer;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -47,6 +48,7 @@ public class TransactionController {
     private final TransactionReceiptRepository receiptRepository;
     private final TransferPairRepository transferPairRepository;
     private final DuplicateDismissalRepository duplicateDismissalRepository;
+    private final ChangeLogService changeLog;
 
     public TransactionController(
             TransactionRepository repository,
@@ -55,7 +57,8 @@ public class TransactionController {
             TagRepository tagRepository,
             TransactionReceiptRepository receiptRepository,
             TransferPairRepository transferPairRepository,
-            DuplicateDismissalRepository duplicateDismissalRepository
+            DuplicateDismissalRepository duplicateDismissalRepository,
+            ChangeLogService changeLog
     ) {
         this.repository = repository;
         this.categoryRepository = categoryRepository;
@@ -64,6 +67,7 @@ public class TransactionController {
         this.receiptRepository = receiptRepository;
         this.transferPairRepository = transferPairRepository;
         this.duplicateDismissalRepository = duplicateDismissalRepository;
+        this.changeLog = changeLog;
     }
 
     @GetMapping("/transactions")
@@ -231,12 +235,14 @@ public class TransactionController {
         }
 
         String learnedMerchant = null;
+        List<ChangeLogService.MemoryChange> memoryChanges = new ArrayList<>();
         if (category != null) {
             repository.updateCategory(id, category, "user");
             // Use the new description when one was supplied, so memory keys on what the
             // transaction now says rather than what it used to.
             String source = description != null ? description : existing.get().description();
             learnedMerchant = MerchantNormalizer.normalize(source);
+            memoryChanges.add(changeLog.memoryBefore(learnedMerchant, category));
             merchantCategoryRepository.remember(learnedMerchant, category, MerchantCategory.SOURCE_USER);
             changedAnything = true;
         }
@@ -276,6 +282,13 @@ public class TransactionController {
         }
 
         Transaction updated = repository.findById(id).orElseThrow();
+        boolean onlyCategory = category != null && date == null && description == null && amount == null && type == null
+                && !body.containsKey("split_share") && !body.containsKey("split_note");
+        changeLog.recordEdit(onlyCategory ? "category" : "edit",
+                onlyCategory
+                        ? "\"" + existing.get().description() + "\" → " + category
+                        : "Edited \"" + existing.get().description() + "\"",
+                List.of(existing.get()), List.of(updated), memoryChanges);
         return ResponseEntity.ok(Map.of(
                 "ok", true,
                 "transaction", updated,
@@ -285,9 +298,12 @@ public class TransactionController {
 
     @DeleteMapping("/transactions/{id}")
     public ResponseEntity<?> delete(@PathVariable long id) {
+        var existing = repository.findById(id);
+        int receipts = receiptRepository.transactionIdsWithReceipts(List.of(id)).size();
         if (!repository.deleteById(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
         }
+        changeLog.recordDelete("Deleted \"" + existing.get().description() + "\"", List.of(existing.get()), receipts);
         // No foreign key would do this automatically -- a receipt's bytes are real disk space,
         // unlike an orphaned tag-join row, so this is worth cleaning up explicitly rather than
         // leaving it unreachable forever.
@@ -325,12 +341,17 @@ public class TransactionController {
         int updated = repository.updateCategoryBulk(ids, category, MerchantCategory.SOURCE_USER);
 
         Set<String> taughtMerchants = new LinkedHashSet<>();
+        List<ChangeLogService.MemoryChange> memoryChanges = new ArrayList<>();
         for (Transaction t : targets) {
             String merchantKey = MerchantNormalizer.normalize(t.description());
             if (taughtMerchants.add(merchantKey)) {
+                memoryChanges.add(changeLog.memoryBefore(merchantKey, category));
                 merchantCategoryRepository.remember(merchantKey, category, MerchantCategory.SOURCE_USER);
             }
         }
+        changeLog.recordEdit("category",
+                "Categorized " + targets.size() + " transaction" + (targets.size() == 1 ? "" : "s") + " as " + category,
+                targets, repository.findByIds(ids), memoryChanges);
 
         return ResponseEntity.ok(Map.of("ok", true, "updated", updated));
     }
@@ -364,8 +385,11 @@ public class TransactionController {
             return ResponseEntity.badRequest().body(new ErrorResponse("ids is required and must not be empty."));
         }
 
+        List<Transaction> doomed = repository.findByIds(ids);
+        int receipts = receiptRepository.transactionIdsWithReceipts(ids).size();
         int deleted = repository.deleteBulk(ids);
         receiptRepository.deleteBulk(ids);
+        changeLog.recordDelete("Deleted " + deleted + " transaction" + (deleted == 1 ? "" : "s"), doomed, receipts);
         transferPairRepository.deleteForTransactions(ids);
         return ResponseEntity.ok(Map.of("ok", true, "deleted", deleted));
     }
@@ -386,6 +410,8 @@ public class TransactionController {
         receiptRepository.deleteAll();
         transferPairRepository.deleteAll();
         duplicateDismissalRepository.deleteAll();
+        // Every snapshot in it describes transactions that are gone.
+        changeLog.clear();
         return Map.of("ok", true);
     }
 

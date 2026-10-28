@@ -127,6 +127,26 @@ never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither take
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
 
+**Undo is snapshot-based and refuses to overwrite newer work.** `ChangeLogService` writes a
+`change_log` row (V28) per change, its `payload` JSON (Jackson 3's `tools.jackson` `ObjectMapper`)
+holding `RowChange(before, after)` per affected transaction -- `after` null for a delete -- plus
+`MemoryChange`s and, for an import, the upload batch id. Recorded from the controllers: single
+PATCH (summary `"desc" → Category` when only the category changed, else `Edited "desc"`),
+bulk-category (the review queue uses it), single and bulk delete, `reapply-rules` with
+`dryRun=false` (snapshot of every `rule` row before, re-read after), and each upload. `recordEdit`
+drops rows that came out identical, and records nothing if nothing changed. Undo restores a row only
+if every stored column still equals `after` (`sameStored`); otherwise it's skipped and counted.
+Deletes come back via `insertWithId` -- AUTOINCREMENT never reuses an id, and `transaction_tags`
+rows outlive a delete, so tags reattach; receipts and transfer pairs were deleted and don't (the
+entry carries `receiptsLost`). A category correction's memory lesson is captured *before* the
+`remember` call (`memoryBefore`: the catch-all rule's category and source, or none) and undone only
+while the catch-all still holds the corrected category as 'user'; then it's set back
+(`setCatchAll`) or removed (`deleteCatchAll`). Undoing an import deletes the batch's remaining rows
+the way bulk delete does. Entries past the newest 200 are dropped on insert; reset and backup
+restore clear the log, since its snapshots describe a dataset that's gone. A partially failed PATCH
+(a 400 from a later field after an earlier one was written) isn't recorded -- pre-existing
+behaviour that undo can't see.
+
 **The double-charge detector groups by account, merchant key and cents, and skips habits.**
 `DuplicateChargeService` reads every debit outside transfer and income categories, keys it by
 account + `MerchantNormalizer` key + amount in cents, and drops any key seen on `HABIT_DAYS` (4) or

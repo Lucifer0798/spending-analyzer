@@ -6,6 +6,7 @@ import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.service.ChangeLogService;
 import com.spendinganalyzer.service.DuplicateDetectionService;
 import com.spendinganalyzer.service.FileParsingService;
 import com.spendinganalyzer.service.OfxParser;
@@ -33,6 +34,7 @@ public class UploadController {
 
     private final FileParsingService fileParsingService;
     private final OfxParser ofxParser;
+    private final ChangeLogService changeLog;
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
     private final DuplicateDetectionService duplicateDetectionService;
@@ -42,10 +44,12 @@ public class UploadController {
             TransactionRepository transactionRepository,
             AccountRepository accountRepository,
             DuplicateDetectionService duplicateDetectionService,
-            OfxParser ofxParser
+            OfxParser ofxParser,
+            ChangeLogService changeLog
     ) {
         this.fileParsingService = fileParsingService;
         this.ofxParser = ofxParser;
+        this.changeLog = changeLog;
         this.transactionRepository = transactionRepository;
         this.accountRepository = accountRepository;
         this.duplicateDetectionService = duplicateDetectionService;
@@ -145,6 +149,8 @@ public class UploadController {
         String batchId = UUID.randomUUID().toString();
         if (!toInsert.isEmpty()) {
             transactionRepository.insertBatch(toInsert, batchId, targetAccountId);
+            changeLog.recordImport("Imported " + toInsert.size() + " transaction" + (toInsert.size() == 1 ? "" : "s")
+                    + " into " + account.get().name() + " from " + file.getOriginalFilename(), batchId, toInsert.size());
         }
 
         long preCategorized = toInsert.stream().filter(t -> t.category() != null).count();
