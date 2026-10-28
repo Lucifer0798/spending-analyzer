@@ -839,3 +839,13 @@ export interface SubscriptionAuditResponse {
   currency?: string;
   findings: SubscriptionFinding[];
 }
+
+/** Debits that look like the same purchase taken twice: one account, one merchant, one amount, a day or two apart. */
+export interface DuplicateChargeGroup {
+  /** The cleaned-up merchant name merchant memory uses. */
+  merchant: string;
+  accountId: number;
+  amount: number;
+  /** Oldest first. */
+  transactions: Transaction[];
+}

@@ -16,6 +16,7 @@ import type {
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
+  DuplicateChargeGroup,
   FreshnessResponse,
   EscalationType,
   FilterPreset,
@@ -877,4 +878,17 @@ export function fetchCashFlow(horizonDays = 60) {
 /** How current each active account's statements and balances are. */
 export function fetchAccountFreshness() {
   return request<FreshnessResponse>("/accounts/freshness");
+}
+
+/** Likely double charges, newest first; `accountId` null means every account. */
+export function fetchDuplicateCharges(accountId: number | null) {
+  return request<{ groups: DuplicateChargeGroup[] }>(`/transactions/duplicates${qs({ accountId })}`);
+}
+
+/** "Not a duplicate" for exactly this group, so it isn't offered again. */
+export function dismissDuplicateCharges(transactionIds: number[]) {
+  return request<{ ok: true }>("/transactions/duplicates/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ transaction_ids: transactionIds }),
+  });
 }

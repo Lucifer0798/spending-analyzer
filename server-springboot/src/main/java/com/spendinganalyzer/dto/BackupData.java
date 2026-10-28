@@ -16,6 +16,7 @@ import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.model.TransactionReceipt;
 import com.spendinganalyzer.model.TransactionTag;
 import com.spendinganalyzer.model.TransferPair;
+import com.spendinganalyzer.repository.DuplicateDismissalRepository;
 
 import java.util.List;
 
@@ -46,7 +47,12 @@ public record BackupData(
         /** Null when no target is set -- a singleton, not a list, since there is only ever one. */
         NetWorthTarget netWorthTarget,
         List<KeywordRule> keywordRules,
-        List<TransferPair> transferPairs
+        List<TransferPair> transferPairs,
+        /**
+         * Optional, so the version wasn't bumped for it: a version-9 file from before it existed
+         * restores as "nothing dismissed", which is what that file's instance had.
+         */
+        List<DuplicateDismissalRepository.Dismissal> duplicateDismissals
 ) {
     // Bumped from 8: transferPairs is a new field a version-8 file has no value for, and there
     // is no migration path between backup versions -- see BackupController.

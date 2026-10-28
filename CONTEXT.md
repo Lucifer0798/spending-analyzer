@@ -127,6 +127,18 @@ never summed. `balances.csv` is `findAllForActiveAccounts()` as-is. Neither take
 account filter, like the page itself; nothing logged gives a header-only file, and the page
 disables both links until there's history.
 
+**The double-charge detector groups by account, merchant key and cents, and skips habits.**
+`DuplicateChargeService` reads every debit outside transfer and income categories, keys it by
+account + `MerchantNormalizer` key + amount in cents, and drops any key seen on `HABIT_DAYS` (4) or
+more distinct dates -- the daily coffee -- before clustering the rest by date: a charge joins the
+cluster while it's within `WINDOW_DAYS` (2) of the previous one, so three in a row chain into one
+group. A real double charge at a habitual merchant is missed by design; flagging every habit would
+make the panel useless. Clusters of two or more are groups, newest first. "Not a duplicate" stores
+the group's sorted, comma-joined ids in `duplicate_dismissals` (V27); a further matching charge
+makes a different key, so the bigger group is offered again. Nothing is deleted or changed.
+Dismissals are in the backup without bumping `CURRENT_VERSION` (an optional field; a v9 file without
+it restores as none) and cleared by reset.
+
 **The Manage page is one component per section, sharing data, `run` and one banner.**
 `ManagePage` still loads everything the sections display together (`reload`), owns `run` (do the
 write, reload, call `onAccountsChanged`, set the notice or error) and the single error/notice banner,
