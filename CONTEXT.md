@@ -212,6 +212,12 @@ and most utility bills out) -- worded as "worth checking", since it's a heuristi
 still-charging first, then by yearly amount. The card is keyed to the charges list's data, so
 flagging from either updates both.
 
+> Possible double charges joined the alerts menu later as one "nudge" item (between the serious
+> items and statements due), fetched in App on the same every-tab-change cadence but *with* the
+> account filter -- unlike the cash-flow and freshness alerts -- so the count matches what the
+> Transactions page's own review lists when the item opens it (`Handoff.reviewDuplicates` ->
+> `initialDuplicatesOpen` -> `DuplicateReview initiallyOpen`).
+
 **Header alerts are one menu, not a badge each.** Over-budget, low-balance and statement-due
 badges plus eight tabs wrapped onto several lines on a phone, so App builds one `AlertItem[]`
 (serious first: overspent budgets as a single item, then each low account; then each statement due

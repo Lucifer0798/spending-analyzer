@@ -10,6 +10,8 @@ interface Props {
   onShow: (merchant: string) => void;
   /** Any value that changes whenever the page's transactions change, so the groups re-fetch. */
   refreshKey?: unknown;
+  /** Start expanded -- when arriving from the header's alerts menu. */
+  initiallyOpen?: boolean;
 }
 
 /**
@@ -18,9 +20,9 @@ interface Props {
  * transaction: it's something to raise with the merchant or bank, or to say isn't a duplicate.
  * Renders nothing when there's nothing to flag.
  */
-export function DuplicateReview({ accountId, onShow, refreshKey }: Props) {
+export function DuplicateReview({ accountId, onShow, refreshKey, initiallyOpen = false }: Props) {
   const [groups, setGroups] = useState<DuplicateChargeGroup[] | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

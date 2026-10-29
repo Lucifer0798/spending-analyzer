@@ -19,6 +19,7 @@ import {
   fetchBudgets,
   fetchAccountFreshness,
   fetchCashFlow,
+  fetchDuplicateCharges,
   fetchDateBounds,
   logout,
   resetAllData,
@@ -32,6 +33,7 @@ import type {
   CashFlowForecast,
   DateBounds,
   DateRangeValue,
+  DuplicateChargeGroup,
   FreshnessResponse,
 } from "./types";
 import { ALL_TIME } from "./types";
@@ -52,6 +54,8 @@ interface Handoff {
   reviewUncategorized?: boolean;
   /** Transactions: open the transfer review (an import summary's "Review transfers"). */
   reviewTransfers?: boolean;
+  /** Transactions: open the double-charge review (the alerts menu's "possible double charges"). */
+  reviewDuplicates?: boolean;
   /** Category tab: which category a Dashboard bar drilled into. */
   openedCategory?: string;
   /** Net Worth: scroll to the cash-flow forecast (a low-balance alert). */
@@ -173,7 +177,16 @@ function App() {
 
   const statementsDue = freshness?.accounts.filter((a) => a.statementDue) ?? [];
 
-  // Serious first: money already overspent or about to run out, then statements to import.
+  // Drives the "possible double charges" alert. Follows the account filter, like the budgets alert,
+  // so the count matches what the Transactions page's own review lists when it's opened.
+  const [duplicates, setDuplicates] = useState<DuplicateChargeGroup[]>([]);
+  useEffect(() => {
+    if (!signedIn) return;
+    fetchDuplicateCharges(accountId).then((r) => setDuplicates(r.groups)).catch(() => setDuplicates([]));
+  }, [accountId, refreshKey, signedIn, tab]);
+
+  // Serious first: money already overspent or about to run out; then things to check -- charges
+  // that look taken twice, statements to import.
   const alerts: AlertItem[] = [
     ...(overBudget.length > 0
       ? [
@@ -193,6 +206,17 @@ function App() {
       detail: `Projected below zero on ${dayMonth(a.firstNegativeDate!)}`,
       onSelect: () => go("net-worth", { showCashFlow: true }),
     })),
+    ...(duplicates.length > 0
+      ? [
+          {
+            key: "double-charges",
+            tone: "nudge" as const,
+            title: duplicates.length === 1 ? "1 possible double charge" : `${duplicates.length} possible double charges`,
+            detail: [...new Set(duplicates.map((g) => g.merchant))].join(", "),
+            onSelect: () => go("transactions", { reviewDuplicates: true }),
+          },
+        ]
+      : []),
     ...statementsDue.map((a) => ({
       key: `statement-${a.accountId}`,
       tone: "nudge" as const,
@@ -414,6 +438,7 @@ function App() {
             initialCategory={handoff.category}
             initialReviewOpen={handoff.reviewUncategorized}
             initialTransfersOpen={handoff.reviewTransfers}
+            initialDuplicatesOpen={handoff.reviewDuplicates}
           />
         )}
         {tab === "recurring" && <RecurringPage accountId={accountId} range={range} />}

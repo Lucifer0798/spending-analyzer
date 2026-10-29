@@ -801,7 +801,8 @@ look like one purchase taken twice: the same amount at the same merchant in the 
 day or two apart. Places you buy the same thing from all the time — the morning coffee — are left
 out, so it's the unusual repeat that stands out. **Show these** lists the charges side by side;
 **Not a duplicate** stops that group being flagged again. Nothing is deleted: a real double charge
-is one to raise with the merchant or your bank.
+is one to raise with the merchant or your bank. They're in the header's alerts menu too, as "N
+possible double charges", which opens Transactions with the review already open.
 
 **Recent changes can be undone.** **Manage → History** lists what's been done to your transactions
 — editing one, recategorizing (including a whole merchant from the review queue), deleting,
@@ -977,6 +978,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Double charges in alerts~~ — possible double charges show in the header's alerts menu and open
+  the review on the Transactions page
 - ~~Undo where you act~~ — the Transactions page, the uncategorized review and the import summary
   offer Undo for the change just made, without going to Manage → History
 - ~~Change history & undo~~ — Manage → History lists recent edits, recategorizing, deletes,
