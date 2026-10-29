@@ -41,6 +41,8 @@ interface Props {
   initialReviewOpen?: boolean;
   /** Opens the transfer review panel expanded -- read once at mount, like initialSearch. */
   initialTransfersOpen?: boolean;
+  /** Opens the double-charge review expanded -- read once at mount, like initialSearch. */
+  initialDuplicatesOpen?: boolean;
   /** Pre-selects the category filter -- read once at mount, like initialSearch. */
   initialCategory?: string;
 }
@@ -70,6 +72,7 @@ export function TransactionsTable({
   initialSearch = "",
   initialReviewOpen = false,
   initialTransfersOpen = false,
+  initialDuplicatesOpen = false,
   initialCategory = "",
 }: Props) {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
@@ -495,6 +498,7 @@ export function TransactionsTable({
       <DuplicateReview
         accountId={accountId}
         refreshKey={transactions}
+        initiallyOpen={initialDuplicatesOpen}
         onShow={(merchant) => {
           setSearchInput(merchant);
           setSearchFilter(merchant);
