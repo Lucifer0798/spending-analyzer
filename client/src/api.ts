@@ -250,7 +250,8 @@ export function updateTransaction(
     split_note?: string | null;
   }
 ) {
-  return request<{ ok: true; transaction: Transaction; learnedMerchant: string }>(
+  // changeId: the History entry, for an Undo beside the edit -- null when nothing changed.
+  return request<{ ok: true; transaction: Transaction; learnedMerchant: string; changeId: number | null }>(
     `/transactions/${id}`,
     { method: "PATCH", body: JSON.stringify(changes) }
   );
@@ -266,7 +267,7 @@ export function clearTransactionSplit(id: number) {
 }
 
 export function deleteTransaction(id: number) {
-  return request<{ ok: true }>(`/transactions/${id}`, { method: "DELETE" });
+  return request<{ ok: true; changeId: number | null }>(`/transactions/${id}`, { method: "DELETE" });
 }
 
 /** Tags a transaction, creating the tag first if this is the first time it's been used. */
@@ -309,7 +310,7 @@ export function fetchUncategorizedMerchants(accountId: number | null) {
 
 /** Categorizes several transactions at once, teaching merchant memory for each one's own description. */
 export function bulkCategorize(ids: number[], category: string) {
-  return request<{ ok: true; updated: number }>("/transactions/bulk-category", {
+  return request<{ ok: true; updated: number; changeId: number | null }>("/transactions/bulk-category", {
     method: "PATCH",
     body: JSON.stringify({ ids, category }),
   });
@@ -324,7 +325,7 @@ export function bulkAddTag(ids: number[], name: string) {
 }
 
 export function bulkDeleteTransactions(ids: number[]) {
-  return request<{ ok: true; deleted: number }>("/transactions/bulk-delete", {
+  return request<{ ok: true; deleted: number; changeId: number | null }>("/transactions/bulk-delete", {
     method: "POST",
     body: JSON.stringify({ ids }),
   });

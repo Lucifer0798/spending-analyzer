@@ -27,6 +27,7 @@ import { ExportLink } from "./ExportLink";
 import { UncategorizedReview } from "./UncategorizedReview";
 import { TransferReview } from "./TransferReview";
 import { DuplicateReview } from "./DuplicateReview";
+import { UndoNote } from "./UndoNote";
 
 interface Props {
   accountId: number | null;
@@ -93,6 +94,10 @@ export function TransactionsTable({
   const [bulkCategoryChoice, setBulkCategoryChoice] = useState("");
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  // The last change made from this page, offered for undo where it happened. One at a time: a new
+  // change replaces the note (every one stays undoable from Manage → History).
+  const [lastChange, setLastChange] = useState<{ id: number; text: string } | null>(null);
+  const offerUndo = (id: number | null, text: string) => setLastChange(id === null ? null : { id, text });
 
   useEffect(() => {
     fetchCategories().then((r) => {
@@ -247,7 +252,8 @@ export function TransactionsTable({
       prev.map((t) => (t.id === id ? { ...t, category, category_source: "user" } : t))
     );
     try {
-      await updateTransactionCategory(id, category);
+      const r = await updateTransactionCategory(id, category);
+      offerUndo(r.changeId, `"${r.transaction.description}" → ${category}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update category.");
       load();
@@ -293,7 +299,8 @@ export function TransactionsTable({
     setSaving(true);
     setError(null);
     try {
-      await updateTransaction(original.id, changes);
+      const r = await updateTransaction(original.id, changes);
+      offerUndo(r.changeId, `Saved changes to "${r.transaction.description}"`);
       cancelEdit();
       load();
     } catch (e) {
@@ -343,7 +350,8 @@ export function TransactionsTable({
     if (!confirm(`Delete "${t.description}" (${currencyPrecise(t.amount, t.account_currency ?? undefined)}) on ${t.date}?`)) return;
     setError(null);
     try {
-      await deleteTransaction(t.id);
+      const r = await deleteTransaction(t.id);
+      offerUndo(r.changeId, `Deleted "${t.description}"`);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete transaction.");
@@ -372,7 +380,8 @@ export function TransactionsTable({
     setBulkBusy(true);
     setError(null);
     try {
-      await bulkCategorize([...selectedIds], bulkCategoryChoice);
+      const r = await bulkCategorize([...selectedIds], bulkCategoryChoice);
+      offerUndo(r.changeId, `Categorized ${r.updated} transaction${r.updated === 1 ? "" : "s"} as ${bulkCategoryChoice}`);
       setBulkCategoryChoice("");
       load();
     } catch (e) {
@@ -404,7 +413,8 @@ export function TransactionsTable({
     setBulkBusy(true);
     setError(null);
     try {
-      await bulkDeleteTransactions([...selectedIds]);
+      const r = await bulkDeleteTransactions([...selectedIds]);
+      offerUndo(r.changeId, `Deleted ${r.deleted} transaction${r.deleted === 1 ? "" : "s"}`);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete the selection.");
@@ -525,6 +535,16 @@ export function TransactionsTable({
         <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </div>
+      )}
+
+      {lastChange && (
+        <UndoNote
+          key={lastChange.id}
+          text={lastChange.text}
+          changeId={lastChange.id}
+          onUndone={load}
+          onDismiss={() => setLastChange(null)}
+        />
       )}
 
       {selectedIds.size > 0 && (

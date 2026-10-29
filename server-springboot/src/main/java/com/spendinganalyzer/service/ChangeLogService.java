@@ -88,8 +88,11 @@ public class ChangeLogService {
                 current.map(MerchantCategory::source).orElse(null), newCategory);
     }
 
-    /** Rows changed in place. Rows that came out identical are left out; nothing changed means nothing recorded. */
-    public void recordEdit(String action, String summary, List<Transaction> before, List<Transaction> after,
+    /**
+     * Rows changed in place. Rows that came out identical are left out; nothing changed means nothing
+     * recorded. Returns the entry's id -- what an Undo next to the action calls -- or null for none.
+     */
+    public Long recordEdit(String action, String summary, List<Transaction> before, List<Transaction> after,
                            List<MemoryChange> memoryChanges) {
         Map<Long, Transaction> afterById = after.stream().collect(Collectors.toMap(Transaction::id, Function.identity()));
         List<RowChange> rows = new ArrayList<>();
@@ -100,27 +103,32 @@ public class ChangeLogService {
         List<MemoryChange> realMemory = memoryChanges.stream()
                 .filter(m -> !(m.afterCategory().equals(m.beforeCategory()) && MerchantCategory.SOURCE_USER.equals(m.beforeSource())))
                 .toList();
-        if (rows.isEmpty() && realMemory.isEmpty()) return;
-        save(action, summary, rows.size(), new Payload(rows, realMemory, null, 0));
+        if (rows.isEmpty() && realMemory.isEmpty()) return null;
+        return save(action, summary, rows.size(), new Payload(rows, realMemory, null, 0));
     }
 
-    public void recordDelete(String summary, List<Transaction> deleted, int receiptsLost) {
-        if (deleted.isEmpty()) return;
-        save("delete", summary, deleted.size(),
+    /** As {@link #recordEdit}, for deleted rows. */
+    public Long recordDelete(String summary, List<Transaction> deleted, int receiptsLost) {
+        if (deleted.isEmpty()) return null;
+        return save("delete", summary, deleted.size(),
                 new Payload(deleted.stream().map(t -> new RowChange(t, null)).toList(), List.of(), null, receiptsLost));
     }
 
-    public void recordImport(String summary, String batchId, int count) {
-        if (count == 0) return;
-        save("import", summary, count, new Payload(List.of(), List.of(), batchId, 0));
+    /** As {@link #recordEdit}, for an upload's batch. */
+    public Long recordImport(String summary, String batchId, int count) {
+        if (count == 0) return null;
+        return save("import", summary, count, new Payload(List.of(), List.of(), batchId, 0));
     }
 
-    private void save(String action, String summary, int rowCount, Payload payload) {
+    private long save(String action, String summary, int rowCount, Payload payload) {
         jdbc.update("INSERT INTO change_log (action, summary, row_count, payload) VALUES (:action, :summary, :rows, :payload)",
                 new MapSqlParameterSource().addValue("action", action).addValue("summary", summary)
                         .addValue("rows", rowCount).addValue("payload", json.writeValueAsString(payload)));
+        // One writer at a time, and inside the caller's transaction: the newest row is this one.
+        Long id = jdbc.queryForObject("SELECT MAX(id) FROM change_log", new MapSqlParameterSource(), Long.class);
         jdbc.update("DELETE FROM change_log WHERE id NOT IN (SELECT id FROM change_log ORDER BY id DESC LIMIT :keep)",
                 new MapSqlParameterSource("keep", KEEP));
+        return id;
     }
 
     // --- reading and undoing ----------------------------------------------------------------

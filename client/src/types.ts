@@ -165,6 +165,8 @@ export interface UploadResult {
   parsed: number;
   accountId: number;
   accountName: string;
+  /** The History entry for this import -- what "Undo this import" calls. Null when nothing was added. */
+  changeId: number | null;
 }
 
 /**

@@ -147,6 +147,15 @@ restore clear the log, since its snapshots describe a dataset that's gone. A par
 (a 400 from a later field after an earlier one was written) isn't recorded -- pre-existing
 behaviour that undo can't see.
 
+> Undo in place: each recording endpoint returns its entry as `changeId` (null when nothing was
+> recorded) -- PATCH/DELETE `/transactions/{id}`, bulk-category, bulk-delete (via `withChangeId`,
+> since `Map.of` refuses a null) and `UploadResponse.changeId`. The client's `UndoNote` shows
+> "text · Undo · ×" where the action happened and calls the same `/history/{id}/undo`, then shows
+> `describeUndo`'s wording (shared with History). TransactionsTable keeps one `lastChange`; the
+> uncategorized review keeps its note up after undoing (clearing it there left the old "✓ X →
+> Category" line showing); the upload summary's "Undo this import" replaces the summary with what
+> was removed.
+
 **The double-charge detector groups by account, merchant key and cents, and skips habits.**
 `DuplicateChargeService` reads every debit outside transfer and income categories, keys it by
 account + `MerchantNormalizer` key + amount in cents, and drops any key seen on `HABIT_DAYS` (4) or

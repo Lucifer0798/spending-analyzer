@@ -179,7 +179,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V28)
-  src/test/                 640 tests
+  src/test/                 641 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -810,7 +810,9 @@ back exactly as they were, a deleted one with its original id so its tags reatta
 what a category correction taught merchant memory. It never overwrites something you've changed
 again since: those rows are left alone and counted. Undoing an import removes what it added. A
 deleted transaction's receipt can't come back, and the entry says so beforehand. The newest 200
-changes are kept; a reset or a backup restore clears the list.
+changes are kept; a reset or a backup restore clears the list. You don't have to go to Manage for
+the latest one: recategorizing, editing or deleting on the Transactions page, answering the
+uncategorized review, and importing a statement each show "Done — **Undo**" right where you did it.
 
 **Top merchants and the year in review count a chain as one place.** Both group spend by the
 same cleaned-up merchant name merchant memory uses, so `WHOLE FOODS MARKET #101` and `#202` are
@@ -898,7 +900,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (640).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (641).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -975,6 +977,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Undo where you act~~ — the Transactions page, the uncategorized review and the import summary
+  offer Undo for the change just made, without going to Manage → History
 - ~~Change history & undo~~ — Manage → History lists recent edits, recategorizing, deletes,
   re-applied rules and imports, each with Undo that never overwrites a newer change
 - ~~Double-charge detector~~ — likely duplicate charges (same merchant and amount, a day or two
