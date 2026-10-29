@@ -147,9 +147,10 @@ public class UploadController {
         }
 
         String batchId = UUID.randomUUID().toString();
+        Long changeId = null;
         if (!toInsert.isEmpty()) {
             transactionRepository.insertBatch(toInsert, batchId, targetAccountId);
-            changeLog.recordImport("Imported " + toInsert.size() + " transaction" + (toInsert.size() == 1 ? "" : "s")
+            changeId = changeLog.recordImport("Imported " + toInsert.size() + " transaction" + (toInsert.size() == 1 ? "" : "s")
                     + " into " + account.get().name() + " from " + file.getOriginalFilename(), batchId, toInsert.size());
         }
 
@@ -162,7 +163,8 @@ public class UploadController {
                 skipped,
                 parsed.size(),
                 targetAccountId,
-                account.get().name()
+                account.get().name(),
+                changeId
         ));
     }
 }

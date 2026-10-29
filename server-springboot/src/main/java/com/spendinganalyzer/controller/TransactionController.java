@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -284,16 +285,18 @@ public class TransactionController {
         Transaction updated = repository.findById(id).orElseThrow();
         boolean onlyCategory = category != null && date == null && description == null && amount == null && type == null
                 && !body.containsKey("split_share") && !body.containsKey("split_note");
-        changeLog.recordEdit(onlyCategory ? "category" : "edit",
+        Long changeId = changeLog.recordEdit(onlyCategory ? "category" : "edit",
                 onlyCategory
                         ? "\"" + existing.get().description() + "\" → " + category
                         : "Edited \"" + existing.get().description() + "\"",
                 List.of(existing.get()), List.of(updated), memoryChanges);
-        return ResponseEntity.ok(Map.of(
-                "ok", true,
-                "transaction", updated,
-                "learnedMerchant", learnedMerchant == null ? "" : learnedMerchant
-        ));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("ok", true);
+        response.put("transaction", updated);
+        response.put("learnedMerchant", learnedMerchant == null ? "" : learnedMerchant);
+        // The History entry, for an Undo beside the edit; null when nothing actually changed.
+        response.put("changeId", changeId);
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/transactions/{id}")
@@ -303,14 +306,14 @@ public class TransactionController {
         if (!repository.deleteById(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
         }
-        changeLog.recordDelete("Deleted \"" + existing.get().description() + "\"", List.of(existing.get()), receipts);
+        Long changeId = changeLog.recordDelete("Deleted \"" + existing.get().description() + "\"", List.of(existing.get()), receipts);
         // No foreign key would do this automatically -- a receipt's bytes are real disk space,
         // unlike an orphaned tag-join row, so this is worth cleaning up explicitly rather than
         // leaving it unreachable forever.
         receiptRepository.delete(id);
         // A pair with one half gone pairs nothing; the surviving half keeps its transfer category.
         transferPairRepository.deleteForTransactions(List.of(id));
-        return ResponseEntity.ok(Map.of("ok", true));
+        return ResponseEntity.ok(withChangeId(Map.of("ok", true), changeId));
     }
 
     // --- bulk actions -------------------------------------------------------------
@@ -349,11 +352,11 @@ public class TransactionController {
                 merchantCategoryRepository.remember(merchantKey, category, MerchantCategory.SOURCE_USER);
             }
         }
-        changeLog.recordEdit("category",
+        Long changeId = changeLog.recordEdit("category",
                 "Categorized " + targets.size() + " transaction" + (targets.size() == 1 ? "" : "s") + " as " + category,
                 targets, repository.findByIds(ids), memoryChanges);
 
-        return ResponseEntity.ok(Map.of("ok", true, "updated", updated));
+        return ResponseEntity.ok(withChangeId(Map.of("ok", true, "updated", updated), changeId));
     }
 
     /** Tags several transactions at once, creating the tag first if this is the first time it's been used. */
@@ -389,9 +392,16 @@ public class TransactionController {
         int receipts = receiptRepository.transactionIdsWithReceipts(ids).size();
         int deleted = repository.deleteBulk(ids);
         receiptRepository.deleteBulk(ids);
-        changeLog.recordDelete("Deleted " + deleted + " transaction" + (deleted == 1 ? "" : "s"), doomed, receipts);
+        Long changeId = changeLog.recordDelete("Deleted " + deleted + " transaction" + (deleted == 1 ? "" : "s"), doomed, receipts);
         transferPairRepository.deleteForTransactions(ids);
-        return ResponseEntity.ok(Map.of("ok", true, "deleted", deleted));
+        return ResponseEntity.ok(withChangeId(Map.of("ok", true, "deleted", deleted), changeId));
+    }
+
+    /** Adds the History entry's id -- for an Undo beside the action -- which may be null, so not via Map.of. */
+    private static Map<String, Object> withChangeId(Map<String, Object> body, Long changeId) {
+        Map<String, Object> response = new LinkedHashMap<>(body);
+        response.put("changeId", changeId);
+        return response;
     }
 
     private static List<Long> asIdList(Object value) {

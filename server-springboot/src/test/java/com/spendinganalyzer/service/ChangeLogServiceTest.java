@@ -188,6 +188,32 @@ class ChangeLogServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("each action's response carries its History entry's id, for an Undo beside it; a no-op carries none")
+    void responsesCarryChangeId() {
+        long a = add("2026-05-01", "SHOP ONE", 10, null);
+        long b = add("2026-05-02", "SHOP TWO", 20, null);
+
+        var bulk = (Map<String, Object>) transactionsApi.bulkCategory(Map.of("ids", List.of(a, b), "category", "Shopping")).getBody();
+        assertThat(bulk.get("changeId")).isEqualTo(latest().id());
+
+        var edit = (Map<String, Object>) transactionsApi.update(a, Map.of("category", "Groceries")).getBody();
+        assertThat(edit.get("changeId")).isEqualTo(latest().id());
+        var noop = (Map<String, Object>) transactionsApi.update(a, Map.of("category", "Groceries")).getBody();
+        assertThat(noop.get("changeId")).isNull();
+
+        var deleted = (Map<String, Object>) transactionsApi.bulkDelete(Map.of("ids", List.of(a))).getBody();
+        assertThat(deleted.get("changeId")).isEqualTo(latest().id());
+        var single = (Map<String, Object>) transactionsApi.delete(b).getBody();
+        assertThat(single.get("changeId")).isEqualTo(latest().id());
+
+        var upload = (com.spendinganalyzer.dto.UploadResponse) uploads.upload(new MockMultipartFile("file", "may.csv", "text/csv",
+                        "Date,Description,Amount\n2026-05-09,NEW ROW,-3\n".getBytes(StandardCharsets.UTF_8)),
+                Account.DEFAULT_ID, true, null, null, null, null, null, null).getBody();
+        assertThat(upload.changeId()).isEqualTo(latest().id());
+    }
+
+    @Test
     @DisplayName("keeps only the newest entries; reset and backup restore clear the log")
     void retentionAndClearing() {
         for (int i = 0; i < ChangeLogService.KEEP + 5; i++) changeLog.recordImport("import " + i, "batch-" + i, 1);

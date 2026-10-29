@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { bulkCategorize, fetchUncategorizedMerchants } from "../api";
 import type { UncategorizedMerchant } from "../types";
 import { currencyPrecise } from "../format";
+import { UndoNote } from "./UndoNote";
 import { dayMonthYear } from "../dates";
 
 interface Props {
@@ -29,6 +30,8 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastDone, setLastDone] = useState<string | null>(null);
+  // The History entry behind lastDone, for undoing that choice right here.
+  const [lastChangeId, setLastChangeId] = useState<number | null>(null);
 
   const load = () => {
     fetchUncategorizedMerchants(accountId)
@@ -39,11 +42,26 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
   useEffect(load, [accountId, refreshKey]);
 
   if (!groups || groups.length === 0) {
-    return lastDone ? (
+    if (!lastDone) return null;
+    // Undoing the last choice brings its merchant back into the queue, so offer it here too.
+    return lastChangeId !== null ? (
+      <UndoNote
+        text={`All caught up — every transaction has a category. ${lastDone}`}
+        changeId={lastChangeId}
+        onUndone={() => {
+          load();
+          onChanged();
+        }}
+        onDismiss={() => {
+          setLastDone(null);
+          setLastChangeId(null);
+        }}
+      />
+    ) : (
       <p className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
         All caught up — every transaction has a category. {lastDone}
       </p>
-    ) : null;
+    );
   }
 
   const transactionCount = groups.reduce((n, g) => n + g.count, 0);
@@ -56,6 +74,7 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
     setError(null);
     try {
       const r = await bulkCategorize(g.transaction_ids, category);
+      setLastChangeId(r.changeId);
       setLastDone(`${g.merchant} → ${category} (${r.updated} transaction${r.updated === 1 ? "" : "s"}); remembered for next time.`);
       load();
       onChanged();
@@ -88,7 +107,26 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
             next statement from the same place is categorized automatically.
           </p>
           {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
-          {lastDone && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">✓ {lastDone}</p>}
+          {lastDone && lastChangeId !== null ? (
+            <div className="mt-2">
+              <UndoNote
+                key={lastChangeId}
+                text={`✓ ${lastDone}`}
+                changeId={lastChangeId}
+                // The note stays up to say what the undo did; the queue reloads with the merchant back in it.
+                onUndone={() => {
+                  load();
+                  onChanged();
+                }}
+                onDismiss={() => {
+                  setLastDone(null);
+                  setLastChangeId(null);
+                }}
+              />
+            </div>
+          ) : (
+            lastDone && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">✓ {lastDone}</p>
+          )}
 
           <ul className="mt-3 divide-y divide-amber-200/70 dark:divide-amber-900/50">
             {groups.map((g) => {

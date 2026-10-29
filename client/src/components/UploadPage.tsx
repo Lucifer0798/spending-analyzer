@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, fetchAccountFreshness, fetchTransferSuggestions, runCategorization, uploadFile } from "../api";
+import { ApiError, fetchAccountFreshness, fetchTransferSuggestions, runCategorization, undoChange, uploadFile } from "../api";
+import { describeUndo } from "../undo";
 import type { Account, CategorizeResult, ColumnDetectionResult, FreshnessResponse, UploadResult } from "../types";
 import { AccountFreshnessList } from "./AccountFreshnessList";
 import { accountTypeLabel } from "../format";
@@ -187,6 +188,9 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
   const [categorization, setCategorization] = useState<CategorizeResult | null>(null);
   // Likely transfers with at least one side from this upload; null until checked.
   const [transferCount, setTransferCount] = useState<number | null>(null);
+  // Set once "Undo this import" has run: what it did, shown in place of the summary.
+  const [importUndone, setImportUndone] = useState<string | null>(null);
+  const [undoingImport, setUndoingImport] = useState(false);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [targetAccountId, setTargetAccountId] = useState<number>(
     selectedAccountId ?? accounts[0]?.id ?? 1
@@ -212,6 +216,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
       setResult(null);
       setCategorization(null);
       setTransferCount(null);
+      setImportUndone(null);
       setColumnsNeeded(null);
       setStage("uploading");
       try {
@@ -278,6 +283,21 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
   useEffect(() => {
     fetchAccountFreshness().then(setFreshness).catch(() => setFreshness(null));
   }, [result]);
+  /** Takes the whole upload back out -- the same undo Manage → History offers for it. */
+  const undoImport = async () => {
+    if (result?.changeId == null) return;
+    setUndoingImport(true);
+    setError(null);
+    try {
+      setImportUndone(describeUndo(await undoChange(result.changeId)));
+      fetchAccountFreshness().then(setFreshness).catch(() => setFreshness(null));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't undo the import.");
+    } finally {
+      setUndoingImport(false);
+    }
+  };
+
   // This upload's own counts -- present whenever categorization ran for it.
   const fileCounts = categorization?.batch ?? null;
 
@@ -387,7 +407,13 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
         </div>
       )}
 
-      {stage === "done" && result && (
+      {stage === "done" && result && importUndone && (
+        <p className="mt-6 rounded-lg bg-slate-100 p-4 text-sm text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+          {importUndone} {result.accountName} is back to how it was before this file.
+        </p>
+      )}
+
+      {stage === "done" && result && !importUndone && (
         <div className="mt-6 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
           <p>
             Read <strong>{result.parsed}</strong> transaction{result.parsed === 1 ? "" : "s"} from the file into{" "}
@@ -490,6 +516,16 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
             >
               View dashboard →
             </button>
+            {/* Wrong file, or the wrong account: take the whole upload back out. */}
+            {result.changeId !== null && (
+              <button
+                onClick={undoImport}
+                disabled={undoingImport}
+                className="rounded-md border border-emerald-700/40 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-300/30 dark:text-emerald-200 dark:hover:bg-emerald-950"
+              >
+                {undoingImport ? "Undoing…" : "Undo this import"}
+              </button>
+            )}
           </div>
         </div>
       )}

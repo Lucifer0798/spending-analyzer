@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchHistory, undoChange } from "../../api";
 import type { HistoryEntry } from "../../types";
+import { describeUndo } from "../../undo";
 import type { Banner, Run } from "./types";
 
 /** Shown before "Show more"; the server keeps up to 200. */
@@ -17,13 +18,6 @@ function ago(at: string) {
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
-function outcome(r: { restored: number; skipped: number; removed: number }) {
-  const parts: string[] = [];
-  if (r.removed > 0) parts.push(`removed ${r.removed} imported transaction${r.removed === 1 ? "" : "s"}`);
-  if (r.restored > 0) parts.push(`put back ${r.restored} transaction${r.restored === 1 ? "" : "s"}`);
-  if (r.skipped > 0) parts.push(`left ${r.skipped} that changed again since`);
-  return parts.length > 0 ? `Undone — ${parts.join(", ")}.` : "Undone.";
-}
 
 /**
  * Recent changes to transactions -- edits, recategorizing, deletes, re-applied rules, imports --
@@ -48,7 +42,7 @@ export function HistorySection({ run, banner, refreshKey }: { run: Run; banner: 
     // Only set once the undo succeeded -- on failure `run` has already put the error in the banner.
     let message: string | null = null;
     await run(async () => {
-      message = outcome(await undoChange(e.id));
+      message = describeUndo(await undoChange(e.id));
     });
     if (message) banner.setNotice(message);
     setBusy(null);

@@ -9,5 +9,7 @@ public record UploadResponse(
         @JsonProperty("skippedDuplicates") int skippedDuplicates,
         @JsonProperty("parsed") int parsed,
         @JsonProperty("accountId") long accountId,
-        @JsonProperty("accountName") String accountName
+        @JsonProperty("accountName") String accountName,
+        /** The History entry for this import -- what "Undo this import" calls. Null when nothing was added. */
+        @JsonProperty("changeId") Long changeId
 ) {}
