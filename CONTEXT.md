@@ -177,6 +177,19 @@ file imports don't fit `run` -- a rejected merchant file lists per-row errors in
 so they get `reload` and a `Banner` (`setError`/`setNotice`) instead. The split was checked by
 rendering the page before and after it: identical `innerHTML`, 57,840 characters.
 
+**The Transactions page is split the same way: the list stays in `TransactionsTable`, each row's
+actions move into the row.** `TransactionsTable` keeps what the whole page shares -- the page of
+rows and `load`, the filters and debounced search, the selection, `editingId`, the one error line
+and the `lastChange` undo offer. `components/transactions/` has `TransactionRow` (category picker,
+split, tags, receipt, Edit/Delete, each with its own API call), `EditRow` (owns its draft while
+open), `BulkActions` and `FilterPresets` (owns the preset list). A row changes itself in place
+through `onPatch` (tags, the receipt flag, an optimistic category) or asks for `onReload`. Two
+pieces of state stay up on purpose so nothing a user half-typed is lost: the "+ tag" drafts, kept by
+id in the page so they outlive opening a row's editor, and the bulk bar's chosen category and tag --
+`BulkActions` stays mounted and renders nothing with no selection, as the inline bar's state did.
+Checked by rendering the page in seven states (default, reviews open, two ticked, a row being edited,
+page 2, a search, search cleared) before and after: identical `innerHTML` in each.
+
 **Excel parsing has its own tests, run as .xlsx and as .xls.** `ExcelParsingTest` builds workbooks
 with Apache POI in memory -- date cells in two formats, a text date, negative and `#,##0.00`
 amounts, a formula, a missing row, debit/credit columns, a blank trailing header -- and runs each
