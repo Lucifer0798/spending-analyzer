@@ -1,33 +1,15 @@
 import { useEffect, useState } from "react";
-import {
-  addTransactionTag,
-  bulkAddTag,
-  bulkCategorize,
-  bulkDeleteTransactions,
-  clearTransactionSplit,
-  deleteFilterPreset,
-  deleteTransaction,
-  deleteTransactionReceipt,
-  exportUrl,
-  fetchCategories,
-  fetchFilterPresets,
-  fetchTags,
-  fetchTransactions,
-  receiptUrl,
-  removeTransactionTag,
-  saveFilterPreset,
-  setTransactionSplit,
-  updateTransaction,
-  updateTransactionCategory,
-  uploadTransactionReceipt,
-} from "../api";
+import { exportUrl, fetchCategories, fetchTags, fetchTransactions } from "../api";
 import type { DateRangeValue, FilterPreset, Tag, TransactionWithTags } from "../types";
-import { currencyPrecise } from "../format";
 import { ExportLink } from "./ExportLink";
 import { UncategorizedReview } from "./UncategorizedReview";
 import { TransferReview } from "./TransferReview";
 import { DuplicateReview } from "./DuplicateReview";
 import { UndoNote } from "./UndoNote";
+import { FilterPresets } from "./transactions/FilterPresets";
+import { BulkActions } from "./transactions/BulkActions";
+import { TransactionRow } from "./transactions/TransactionRow";
+import { EditRow } from "./transactions/EditRow";
 
 interface Props {
   accountId: number | null;
@@ -47,23 +29,13 @@ interface Props {
   initialCategory?: string;
 }
 
-interface EditDraft {
-  date: string;
-  description: string;
-  amount: string;
-  type: "debit" | "credit";
-}
-
 const PAGE_SIZE = 50;
 
 /**
- * Below md a row is a card: a three-column grid (checkbox | details | amount) with each cell
- * placed by col/row classes, stacking into lines -- description, date, category, tags, actions.
- * From md up the same markup is an ordinary table row and the grid classes do nothing.
+ * The Transactions page: filters and presets, the review panels, the bulk-action bar, and a page of
+ * rows. Each row's own actions live in transactions/TransactionRow (or EditRow while it's open);
+ * this component owns the list itself, the filters, and the selection.
  */
-const CARD_ROW = "grid grid-cols-[auto_1fr_auto] items-start gap-x-3 gap-y-1.5 p-3 md:table-row md:p-0";
-const CARD_CELL = "block md:table-cell md:px-4 md:py-2 md:align-middle";
-
 export function TransactionsTable({
   accountId,
   range,
@@ -86,17 +58,11 @@ export function TransactionsTable({
   // A category with no entry here just renders without a swatch.
   const [colorByCategory, setColorByCategory] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<Tag[]>([]);
-  const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [draft, setDraft] = useState<EditDraft | null>(null);
-  const [saving, setSaving] = useState(false);
   const [tagDrafts, setTagDrafts] = useState<Record<number, string>>({});
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [bulkCategoryChoice, setBulkCategoryChoice] = useState("");
-  const [bulkTagInput, setBulkTagInput] = useState("");
-  const [bulkBusy, setBulkBusy] = useState(false);
   // The last change made from this page, offered for undo where it happened. One at a time: a new
   // change replaces the note (every one stays undoable from Manage → History).
   const [lastChange, setLastChange] = useState<{ id: number; text: string } | null>(null);
@@ -113,11 +79,6 @@ export function TransactionsTable({
     });
   }, []);
 
-  const loadPresets = () => {
-    fetchFilterPresets().then(setPresets).catch(() => {});
-  };
-  useEffect(loadPresets, []);
-
   const applyPreset = (preset: FilterPreset) => {
     setCategoryFilter(preset.category ?? "");
     setTagFilter(preset.tag ?? "");
@@ -125,36 +86,6 @@ export function TransactionsTable({
     setSearchFilter(preset.search ?? "");
     onAccountIdChange(preset.account_id);
     onRangeChange({ from: preset.date_from, to: preset.date_to });
-  };
-
-  const saveCurrentAsPreset = async () => {
-    const name = prompt("Save the current filters as a preset named:");
-    if (!name || !name.trim()) return;
-    setError(null);
-    try {
-      await saveFilterPreset({
-        name: name.trim(),
-        category: categoryFilter || undefined,
-        tag: tagFilter || undefined,
-        search: searchFilter || undefined,
-        account_id: accountId,
-        date_from: range.from || undefined,
-        date_to: range.to || undefined,
-      });
-      loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save the preset.");
-    }
-  };
-
-  const handleDeletePreset = async (preset: FilterPreset) => {
-    if (!confirm(`Delete the preset "${preset.name}"?`)) return;
-    try {
-      await deleteFilterPreset(preset.id);
-      loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete the preset.");
-    }
   };
 
   const loadTags = () => {
@@ -208,158 +139,8 @@ export function TransactionsTable({
 
   useEffect(load, [page, categoryFilter, tagFilter, searchFilter, accountId, range]);
 
-  const handleAddTag = async (t: TransactionWithTags) => {
-    const name = (tagDrafts[t.id] ?? "").trim();
-    if (!name) return;
-    setTagDrafts((d) => ({ ...d, [t.id]: "" }));
-    try {
-      const { tags: updated } = await addTransactionTag(t.id, name);
-      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, tags: updated } : x)));
-      loadTags();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add tag.");
-    }
-  };
-
-  const handleRemoveTag = async (t: TransactionWithTags, tag: string) => {
-    try {
-      const { tags: updated } = await removeTransactionTag(t.id, tag);
-      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, tags: updated } : x)));
-      loadTags();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove tag.");
-    }
-  };
-
-  const handleUploadReceipt = async (t: TransactionWithTags, file: File) => {
-    try {
-      await uploadTransactionReceipt(t.id, file);
-      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, has_receipt: true } : x)));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to attach receipt.");
-    }
-  };
-
-  const handleDeleteReceipt = async (t: TransactionWithTags) => {
-    if (!confirm("Remove this receipt?")) return;
-    try {
-      await deleteTransactionReceipt(t.id);
-      setTransactions((prev) => prev.map((x) => (x.id === t.id ? { ...x, has_receipt: false } : x)));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove receipt.");
-    }
-  };
-
-  const handleCategoryChange = async (id: number, category: string) => {
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, category, category_source: "user" } : t))
-    );
-    try {
-      const r = await updateTransactionCategory(id, category);
-      offerUndo(r.changeId, `"${r.transaction.description}" → ${category}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update category.");
-      load();
-    }
-  };
-
-  const startEdit = (t: TransactionWithTags) => {
-    setError(null);
-    setEditingId(t.id);
-    setDraft({
-      date: t.date,
-      description: t.description,
-      amount: String(t.amount),
-      type: t.type,
-    });
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setDraft(null);
-  };
-
-  const saveEdit = async (original: TransactionWithTags) => {
-    if (!draft) return;
-    const amount = Number(draft.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Amount must be a number greater than zero.");
-      return;
-    }
-
-    // Send only what actually changed, so an untouched field is never overwritten.
-    const changes: Parameters<typeof updateTransaction>[1] = {};
-    if (draft.date !== original.date) changes.date = draft.date;
-    if (draft.description.trim() !== original.description) changes.description = draft.description.trim();
-    if (amount !== original.amount) changes.amount = amount;
-    if (draft.type !== original.type) changes.type = draft.type;
-
-    if (Object.keys(changes).length === 0) {
-      cancelEdit();
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    try {
-      const r = await updateTransaction(original.id, changes);
-      offerUndo(r.changeId, `Saved changes to "${r.transaction.description}"`);
-      cancelEdit();
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save changes.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSetSplit = async (t: TransactionWithTags) => {
-    const fullAmount = currencyPrecise(t.amount, t.account_currency ?? undefined);
-    const shareInput = prompt(
-      `Your share of the ${fullAmount} charge:`,
-      String(t.split_share ?? t.amount)
-    );
-    if (shareInput === null) return;
-    const share = Number(shareInput);
-    if (!Number.isFinite(share) || share < 0 || share > t.amount) {
-      setError(`Split share must be a number between 0 and ${fullAmount}.`);
-      return;
-    }
-    // A cancelled note prompt still saves the share -- there's no reason to discard a share the
-    // user already confirmed just because they had nothing to add for who owes what.
-    const note = prompt("Note for who owes what (optional):", t.split_note ?? "") ?? "";
-
-    setError(null);
-    try {
-      await setTransactionSplit(t.id, share, note);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save the split.");
-    }
-  };
-
-  const handleClearSplit = async (t: TransactionWithTags) => {
-    if (!confirm(`Clear the split on "${t.description}"? The full amount will count as yours again.`)) return;
-    setError(null);
-    try {
-      await clearTransactionSplit(t.id);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to clear the split.");
-    }
-  };
-
-  const handleDelete = async (t: TransactionWithTags) => {
-    if (!confirm(`Delete "${t.description}" (${currencyPrecise(t.amount, t.account_currency ?? undefined)}) on ${t.date}?`)) return;
-    setError(null);
-    try {
-      const r = await deleteTransaction(t.id);
-      offerUndo(r.changeId, `Deleted "${t.description}"`);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete transaction.");
-    }
-  };
+  const patchRow = (id: number, patch: Partial<TransactionWithTags>) =>
+    setTransactions((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   const toggleSelected = (id: number) => {
     setSelectedIds((prev) => {
@@ -378,60 +159,9 @@ export function TransactionsTable({
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const handleBulkCategorize = async () => {
-    if (!bulkCategoryChoice) return;
-    setBulkBusy(true);
-    setError(null);
-    try {
-      const r = await bulkCategorize([...selectedIds], bulkCategoryChoice);
-      offerUndo(r.changeId, `Categorized ${r.updated} transaction${r.updated === 1 ? "" : "s"} as ${bulkCategoryChoice}`);
-      setBulkCategoryChoice("");
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to categorize the selection.");
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
-  const handleBulkTag = async () => {
-    const name = bulkTagInput.trim();
-    if (!name) return;
-    setBulkBusy(true);
-    setError(null);
-    try {
-      await bulkAddTag([...selectedIds], name);
-      setBulkTagInput("");
-      load();
-      loadTags();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to tag the selection.");
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedIds.size} selected transaction${selectedIds.size === 1 ? "" : "s"}?`)) return;
-    setBulkBusy(true);
-    setError(null);
-    try {
-      const r = await bulkDeleteTransactions([...selectedIds]);
-      offerUndo(r.changeId, `Deleted ${r.deleted} transaction${r.deleted === 1 ? "" : "s"}`);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete the selection.");
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const showAccountColumn = accountId === null;
   const columnCount = showAccountColumn ? 8 : 7;
-
-  const inputClass =
-    "w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900";
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -505,35 +235,11 @@ export function TransactionsTable({
         }}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {presets.map((p) => (
-          <span
-            key={p.id}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-          >
-            <button
-              onClick={() => applyPreset(p)}
-              className="font-medium text-slate-700 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
-              title="Apply this preset — category, tag, search, account, and date range"
-            >
-              {p.name}
-            </button>
-            <button
-              onClick={() => handleDeletePreset(p)}
-              className="text-slate-400 hover:text-red-600"
-              title={`Delete "${p.name}"`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <button
-          onClick={saveCurrentAsPreset}
-          className="rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-        >
-          + Save current filters as preset…
-        </button>
-      </div>
+      <FilterPresets
+        filters={{ category: categoryFilter, tag: tagFilter, search: searchFilter, accountId, range }}
+        onApply={applyPreset}
+        setError={setError}
+      />
 
       {error && (
         <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -551,62 +257,16 @@ export function TransactionsTable({
         />
       )}
 
-      {selectedIds.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm dark:border-indigo-900/50 dark:bg-indigo-950/30">
-          <span className="font-medium text-indigo-900 dark:text-indigo-200">
-            {selectedIds.size} selected
-          </span>
-          <select
-            value={bulkCategoryChoice}
-            onChange={(e) => setBulkCategoryChoice(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
-          >
-            <option value="">Set category…</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <button
-            disabled={bulkBusy || !bulkCategoryChoice}
-            onClick={handleBulkCategorize}
-            className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            Apply
-          </button>
-          <input
-            list="tag-suggestions"
-            value={bulkTagInput}
-            onChange={(e) => setBulkTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleBulkTag();
-            }}
-            placeholder="Add tag…"
-            className="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
-          />
-          <button
-            disabled={bulkBusy || !bulkTagInput.trim()}
-            onClick={handleBulkTag}
-            className="rounded-md px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
-          >
-            Add tag
-          </button>
-          <button
-            disabled={bulkBusy}
-            onClick={handleBulkDelete}
-            className="rounded-md px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 dark:hover:bg-red-950/40"
-          >
-            Delete
-          </button>
-          <button
-            onClick={clearSelection}
-            className="ml-auto rounded-md px-3 py-1 text-sm text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
-          >
-            Clear selection
-          </button>
-        </div>
-      )}
+      {/* Renders nothing with no rows ticked. */}
+      <BulkActions
+        selectedIds={selectedIds}
+        categories={categories}
+        onClear={clearSelection}
+        onChanged={load}
+        onTagsChanged={loadTags}
+        offerUndo={offerUndo}
+        setError={setError}
+      />
 
       {/* Below md the header is hidden (rows become cards), so its select-all moves up here. */}
       {transactions.length > 0 && (
@@ -617,7 +277,7 @@ export function TransactionsTable({
       )}
 
       {/* One set of markup for both layouts: a table from md up, and below that each row is a
-          three-column grid card (checkbox | details | amount) -- see CARD_ROW / CARD_CELL. */}
+          three-column grid card (checkbox | details | amount) -- see transactions/layout.ts. */}
       <div className="rounded-lg border border-slate-200 md:overflow-x-auto dark:border-slate-800">
         <table className="block min-w-full md:table md:divide-y md:divide-slate-200 dark:md:divide-slate-800">
           <thead className="hidden bg-slate-50 md:table-header-group dark:bg-slate-900">
@@ -658,237 +318,40 @@ export function TransactionsTable({
             )}
 
             {transactions.map((t) =>
-              editingId === t.id && draft ? (
-                <tr key={t.id} className={`${CARD_ROW} bg-indigo-50/50 dark:bg-indigo-950/20`}>
-                  <td className={`${CARD_CELL} col-start-1 row-start-1`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(t.id)}
-                      onChange={() => toggleSelected(t.id)}
-                    />
-                  </td>
-                  <td className={`${CARD_CELL} col-start-2 row-start-2`}>
-                    <input
-                      type="date"
-                      value={draft.date}
-                      onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                      className={inputClass}
-                    />
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-1`} colSpan={showAccountColumn ? 2 : 1}>
-                    <input
-                      value={draft.description}
-                      onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                      className={inputClass}
-                    />
-                  </td>
-                  <td className={`${CARD_CELL} col-start-3 row-start-2`}>
-                    <div className="flex items-center gap-1">
-                      <select
-                        value={draft.type}
-                        onChange={(e) => setDraft({ ...draft, type: e.target.value as "debit" | "credit" })}
-                        className={inputClass}
-                      >
-                        <option value="debit">−</option>
-                        <option value="credit">+</option>
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        value={draft.amount}
-                        onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
-                        className={`${inputClass} text-right`}
-                      />
-                    </div>
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-3 text-xs text-slate-500`}>
-                    {t.category && colorByCategory[t.category] && (
-                      <span
-                        className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
-                        style={{ backgroundColor: colorByCategory[t.category] }}
-                      />
-                    )}
-                    {t.category ?? "Uncategorized"}
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-4 text-xs text-slate-500`}>
-                    {t.tags.length > 0 ? t.tags.join(", ") : "—"}
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-5 whitespace-nowrap md:text-right`}>
-                    <button
-                      disabled={saving}
-                      onClick={() => saveEdit(t)}
-                      className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {saving ? "Saving…" : "Save"}
-                    </button>
-                    <button
-                      disabled={saving}
-                      onClick={cancelEdit}
-                      className="ml-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                    >
-                      Cancel
-                    </button>
-                  </td>
-                </tr>
+              editingId === t.id ? (
+                <EditRow
+                  key={t.id}
+                  t={t}
+                  selected={selectedIds.has(t.id)}
+                  onToggleSelected={() => toggleSelected(t.id)}
+                  showAccountColumn={showAccountColumn}
+                  colorByCategory={colorByCategory}
+                  onClose={() => setEditingId(null)}
+                  onSaved={load}
+                  offerUndo={offerUndo}
+                  setError={setError}
+                />
               ) : (
-                <tr key={t.id} className={`${CARD_ROW} ${selectedIds.has(t.id) ? "bg-indigo-50/30 dark:bg-indigo-950/10" : ""}`}>
-                  <td className={`${CARD_CELL} col-start-1 row-start-1`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(t.id)}
-                      onChange={() => toggleSelected(t.id)}
-                    />
-                  </td>
-                  <td className={`${CARD_CELL} col-start-2 row-start-2 whitespace-nowrap text-xs text-slate-500 md:text-sm md:text-slate-600 dark:md:text-slate-400`}>
-                    {t.date}
-                    {/* The account column is hidden on a card, so the name rides along with the date. */}
-                    {showAccountColumn && <span className="md:hidden"> · {t.account_name}</span>}
-                  </td>
-                  <td className={`${CARD_CELL} col-start-2 row-start-1 text-sm font-medium text-slate-800 md:font-normal dark:text-slate-200`}>
-                    {t.description}
-                  </td>
-                  {showAccountColumn && (
-                    <td className="hidden whitespace-nowrap px-4 py-2 text-xs text-slate-500 md:table-cell">{t.account_name}</td>
-                  )}
-                  <td
-                    className={`${CARD_CELL} col-start-3 row-span-2 row-start-1 whitespace-nowrap text-right text-sm font-medium ${
-                      t.type === "credit" ? "text-emerald-600" : "text-slate-800 dark:text-slate-200"
-                    }`}
-                  >
-                    {t.type === "credit" ? "+" : "-"}
-                    {currencyPrecise(t.amount, t.account_currency ?? undefined)}
-                    <div className="mt-0.5 text-right text-[10px] font-normal normal-case text-slate-400">
-                      {t.split_share != null ? (
-                        <span title={t.split_note ?? undefined}>
-                          your {currencyPrecise(t.split_share, t.account_currency ?? undefined)}
-                          <button
-                            onClick={() => handleSetSplit(t)}
-                            className="ml-1 text-indigo-500 hover:underline"
-                          >
-                            edit
-                          </button>
-                          <button
-                            onClick={() => handleClearSplit(t)}
-                            className="ml-1 text-slate-400 hover:text-red-600"
-                            title="Clear split"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ) : (
-                        <button onClick={() => handleSetSplit(t)} className="text-indigo-500 hover:underline">
-                          split
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-3 text-sm`}>
-                    {t.category && colorByCategory[t.category] && (
-                      <span
-                        className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
-                        style={{ backgroundColor: colorByCategory[t.category] }}
-                      />
-                    )}
-                    <select
-                      value={t.category ?? ""}
-                      onChange={(e) => handleCategoryChange(t.id, e.target.value)}
-                      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                    >
-                      <option value="" disabled>
-                        Uncategorized
-                      </option>
-                      {categories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    {t.category_source && (
-                      <span className="ml-2 text-[10px] uppercase text-slate-400">{t.category_source}</span>
-                    )}
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-4 text-sm`}>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {t.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                        >
-                          {tag}
-                          <button
-                            onClick={() => handleRemoveTag(t, tag)}
-                            className="text-slate-400 hover:text-red-600"
-                            title={`Remove "${tag}"`}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                      <input
-                        list="tag-suggestions"
-                        value={tagDrafts[t.id] ?? ""}
-                        onChange={(e) => setTagDrafts((d) => ({ ...d, [t.id]: e.target.value }))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleAddTag(t);
-                        }}
-                        placeholder="+ tag"
-                        className="w-16 rounded border border-dashed border-slate-300 bg-transparent px-1 py-0.5 text-xs focus:w-28 dark:border-slate-700"
-                      />
-                    </div>
-                  </td>
-                  <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-5 -ml-2 whitespace-nowrap md:ml-0 md:text-right`}>
-                    {t.has_receipt ? (
-                      <>
-                        <a
-                          href={receiptUrl(t.id)}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="View receipt"
-                          className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
-                        >
-                          Receipt
-                        </a>
-                        <button
-                          onClick={() => handleDeleteReceipt(t)}
-                          title="Remove receipt"
-                          className="rounded px-1 py-1 text-xs text-slate-400 hover:text-red-600"
-                        >
-                          ×
-                        </button>
-                      </>
-                    ) : (
-                      <label
-                        title="Attach a receipt image or PDF"
-                        className="cursor-pointer rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                      >
-                        + Receipt
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleUploadReceipt(t, file);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-                    )}
-                    <button
-                      onClick={() => startEdit(t)}
-                      className="ml-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(t)}
-                      className="ml-1 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+                <TransactionRow
+                  key={t.id}
+                  t={t}
+                  selected={selectedIds.has(t.id)}
+                  onToggleSelected={() => toggleSelected(t.id)}
+                  showAccountColumn={showAccountColumn}
+                  categories={categories}
+                  colorByCategory={colorByCategory}
+                  tagDraft={tagDrafts[t.id] ?? ""}
+                  onTagDraftChange={(value) => setTagDrafts((d) => ({ ...d, [t.id]: value }))}
+                  onPatch={(patch) => patchRow(t.id, patch)}
+                  onReload={load}
+                  onTagsChanged={loadTags}
+                  onEdit={() => {
+                    setError(null);
+                    setEditingId(t.id);
+                  }}
+                  offerUndo={offerUndo}
+                  setError={setError}
+                />
               )
             )}
           </tbody>
