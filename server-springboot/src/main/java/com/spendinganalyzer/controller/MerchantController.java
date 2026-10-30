@@ -4,8 +4,10 @@ import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.model.MerchantCategory;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
+import com.spendinganalyzer.service.ChangeLogService;
 import com.spendinganalyzer.service.MerchantImportService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,15 +22,23 @@ public class MerchantController {
     private final MerchantCategoryRepository repository;
     private final CategoryRepository categoryRepository;
     private final MerchantImportService importService;
+    private final ChangeLogService changeLog;
 
     public MerchantController(
             MerchantCategoryRepository repository,
             CategoryRepository categoryRepository,
-            MerchantImportService importService
+            MerchantImportService importService,
+            ChangeLogService changeLog
     ) {
         this.repository = repository;
         this.categoryRepository = categoryRepository;
         this.importService = importService;
+        this.changeLog = changeLog;
+    }
+
+    /** All of merchant memory, for an action that can touch any of it. */
+    private ChangeLogService.Watch watchAll() {
+        return changeLog.watch("merchant_categories", "1 = 1", Map.of());
     }
 
     @GetMapping("/merchants")
@@ -51,6 +61,7 @@ public class MerchantController {
      * catch-all, which is what correcting a transaction by hand writes.
      */
     @PostMapping("/merchants")
+    @Transactional
     public ResponseEntity<?> saveRule(@RequestBody Map<String, Object> body) {
         String merchantKey = body.get("merchant_key") instanceof String s ? s.trim().toUpperCase() : "";
         String category = body.get("category") instanceof String s ? s.trim() : "";
@@ -77,22 +88,35 @@ public class MerchantController {
                     .body(new ErrorResponse("min_amount must be less than max_amount."));
         }
 
+        var watch = changeLog.watch("merchant_categories", "merchant_key = :key", Map.of("key", merchantKey));
         repository.saveRule(merchantKey, category, min, max, MerchantCategory.SOURCE_USER);
+        changeLog.recordSettings("merchant-memory", "Merchant memory: " + merchantKey + " → " + category
+                + (min > 0 || max < MerchantCategory.UNBOUNDED ? " (for some amounts)" : ""), watch);
         return ResponseEntity.ok(Map.of("ok", true, "merchants", repository.findByKey(merchantKey)));
     }
 
     /** Forgets one merchant so it is asked about fresh on the next categorization run. */
     @DeleteMapping("/merchants/{id}")
+    @Transactional
     public ResponseEntity<?> forget(@PathVariable long id) {
+        var watch = changeLog.watch("merchant_categories", "id = :id", Map.of("id", id));
         if (!repository.delete(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Merchant not found."));
         }
+        var rule = watch.before().get(0);
+        changeLog.recordSettings("merchant-memory",
+                "Forgot " + rule.get("merchant_key") + " → " + rule.get("category") + " in merchant memory", watch);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
     @DeleteMapping("/merchants")
+    @Transactional
     public Map<String, Object> forgetAll() {
-        return Map.of("ok", true, "forgotten", repository.deleteAll());
+        var watch = watchAll();
+        int forgotten = repository.deleteAll();
+        changeLog.recordSettings("merchant-memory", "Forgot all of merchant memory (" + forgotten + " rule"
+                + (forgotten == 1 ? "" : "s") + ")", watch);
+        return Map.of("ok", true, "forgotten", forgotten);
     }
 
     /**
@@ -102,6 +126,7 @@ public class MerchantController {
      * any row is invalid -- see {@link MerchantImportService}.
      */
     @PostMapping("/merchants/import")
+    @Transactional
     public ResponseEntity<?> importRules(
             @RequestParam("file") MultipartFile file,
             @RequestParam(defaultValue = "merge") String mode
@@ -116,7 +141,12 @@ public class MerchantController {
 
         try {
             var rules = importService.parse(file.getInputStream());
-            return ResponseEntity.ok(importService.apply(rules, mode.equals("replace")));
+            var watch = watchAll();
+            var result = importService.apply(rules, mode.equals("replace"));
+            changeLog.recordSettings("merchant-memory", (mode.equals("replace") ? "Replaced merchant memory with " : "Imported ")
+                    + rules.size() + " merchant rule" + (rules.size() == 1 ? "" : "s")
+                    + (file.getOriginalFilename() != null ? " from " + file.getOriginalFilename() : ""), watch);
+            return ResponseEntity.ok(result);
         } catch (MerchantImportService.ImportException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "errors", e.errors));
         } catch (IOException e) {
