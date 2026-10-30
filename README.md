@@ -181,7 +181,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V29)
-  src/test/                 652 tests
+  src/test/                 661 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -231,7 +231,7 @@ Twenty-one tables, all created automatically:
 | `keyword_rules` | Your own "description contains this word → this category" rules |
 | `transfer_pairs` | A debit and credit you matched as one transfer (with what each was before, for undo), or ruled out |
 | `duplicate_dismissals` | Groups of look-alike charges you said aren't double charges, so they aren't flagged again |
-| `change_log` | Recent changes to transactions — before-and-after snapshots — so they can be undone |
+| `change_log` | Recent changes to transactions and settings — before-and-after snapshots — so they can be undone |
 | `merchant_names` | A friendlier name per merchant; spellings sharing a name are merged into one merchant |
 | `merchant_suggestion_dismissals` | Look-alike merchants you said aren't one, so they aren't suggested again |
 
@@ -277,7 +277,7 @@ All endpoints live under `/api`.
 | `PATCH` `POST` | `/transactions/bulk-category` `/transactions/bulk-tags` | Categorize or tag several transactions in one request |
 | `GET` | `/transactions/uncategorized-merchants` | Uncategorized transactions grouped by merchant (and currency), most first, with the ids to answer each group via `bulk-category` |
 | `GET` `POST` | `/transactions/duplicates` | Likely double charges (`accountId`); `/transactions/duplicates/dismiss` with `{"transaction_ids": [...]}` marks a group "not a duplicate" |
-| `GET` `POST` | `/history` | Recent changes to transactions (`limit`, default 50); `POST /history/{id}/undo` undoes one, leaving anything changed again since |
+| `GET` `POST` | `/history` | Recent changes to transactions and settings (`limit`, default 50); `POST /history/{id}/undo` undoes one, leaving anything changed again since |
 | `POST` | `/transactions/bulk-delete` | Delete several transactions in one request |
 | `POST` | `/categorize` | Categorize anything uncategorized; `batchId` (an upload's id) also reports that upload's own counts, and how many earlier rows were categorized in passing |
 | `GET` | `/summary` | Category totals, monthly totals, per-category trends |
@@ -816,7 +816,11 @@ back exactly as they were, a deleted one with its original id so its tags reatta
 what a category correction taught merchant memory. It never overwrites something you've changed
 again since: those rows are left alone and counted. Undoing an import removes what it added. A
 deleted transaction's receipt can't come back, and the entry says so beforehand. The newest 200
-changes are kept; a reset or a backup restore clears the list. You don't have to go to Manage for
+changes are kept; a reset or a backup restore clears the list. Changes on the Manage page are
+there too: adding, renaming, recoloring or deleting a category (a rename or delete is one entry
+covering everything it touched — the category's transactions, budget, keyword rules and memory),
+setting or removing a budget, adding or deleting a keyword rule, merchant memory rules (one,
+forgetting all, an import), and merchant names. You don't have to go to Manage for
 the latest one: recategorizing, editing or deleting on the Transactions page, answering the
 uncategorized review, and importing a statement each show "Done — **Undo**" right where you did it.
 
@@ -919,7 +923,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (652).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (661).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -996,6 +1000,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~More actions in History~~ — category, budget, keyword-rule, merchant-memory and merchant-name
+  changes on the Manage page are recorded in History with Undo, a category rename or delete as one entry
 - ~~Merchant rename / merge~~ — Manage → Merchant names gives merchants a friendly name and merges
   look-alike spellings, used by top merchants, the year review, recurring, search and categorization
 - ~~Double charges in alerts~~ — possible double charges show in the header's alerts menu and open

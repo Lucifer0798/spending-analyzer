@@ -208,6 +208,22 @@ carry them (and turned-down suggestions) as optional fields with no version bump
 endpoint is `POST /api/merchant-names`, not PUT: `CorsConfig` allows GET/POST/PATCH/DELETE only, and
 the Vite proxy sends an Origin, so a PUT is refused as "Invalid CORS request" in development.
 
+**Settings changes are recorded by snapshot, not by per-action undo code.** A Manage write calls
+`changeLog.watch(table, where, params)` for each table it can touch, does its work, then
+`recordSettings(...)`, which re-reads the watched rows (by `where` again, to catch created rows, and by
+key, for rows a rename moved out of `where`) and keeps every row that differs as a `TableChange`
+(before/after maps; null before = created, null after = deleted). Undo walks them last-first and puts
+a row back only while it still equals `after` (`hit_count` ignored, since categorizing bumps it); a
+clash with a unique constraint (a category re-created under the old name) counts as "changed since"
+and is skipped, not a failure -- SQLite reports that as error 19, which Spring doesn't always
+translate, so `isConstraintViolation` checks the code. Table and key names come only from `KEYS`.
+A category rename or delete watches every table the cascade reaches (transactions' `category`
+column only, memory, budgets, keyword rules, transfer pairs' previous categories), so one entry undoes
+it all. Category PATCH now validates everything before writing anything, so a bad color no longer
+leaves a rename half-applied. These endpoints don't return a `changeId` -- most return the entity,
+and wrapping it would change their shape -- so there's no inline Undo on Manage yet; History is
+on the same page.
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The

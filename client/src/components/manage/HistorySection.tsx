@@ -20,8 +20,9 @@ function ago(at: string) {
 
 
 /**
- * Recent changes to transactions -- edits, recategorizing, deletes, re-applied rules, imports --
- * with Undo. Undo never overwrites anything changed again since; it says how many it left.
+ * Recent changes -- to transactions (edits, recategorizing, deletes, re-applied rules, imports) and to
+ * what's set up on this page (categories, budgets, keyword rules, merchant memory and names) -- with
+ * Undo. Undo never overwrites anything changed again since; it says how many it left.
  */
 export function HistorySection({ run, banner, refreshKey }: { run: Run; banner: Banner; refreshKey: unknown }) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
@@ -55,13 +56,14 @@ export function HistorySection({ run, banner, refreshKey }: { run: Run; banner: 
     <section className="mt-10">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">History</h2>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        Recent changes to your transactions, newest first. Undo puts things back as they were — but never
-        over something you've changed again since, and a deleted transaction's receipt can't come back.
+        Recent changes to your transactions and to the categories, budgets, rules, merchant memory and
+        merchant names on this page, newest first. Undo puts things back as they were — but never over
+        something you've changed again since, and a deleted transaction's receipt can't come back.
       </p>
 
       {entries === null || entries.length === 0 ? (
         <p className="mt-4 rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500 dark:bg-slate-900">
-          Nothing yet. Edits, recategorizing, deletes and imports will show up here.
+          Nothing yet. Edits, recategorizing, deletes, imports and changes on this page will show up here.
         </p>
       ) : (
         <>

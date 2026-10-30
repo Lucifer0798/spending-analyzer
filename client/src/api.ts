@@ -932,5 +932,8 @@ export function fetchHistory(limit = 50) {
 
 /** Undoes one change; rows changed again since are left alone and counted in `skipped`. */
 export function undoChange(id: number) {
-  return request<{ restored: number; skipped: number; removed: number }>(`/history/${id}/undo`, { method: "POST" });
+  // settingsRestored: categories, budgets, rules, merchant memory or names put back.
+  return request<{ restored: number; skipped: number; removed: number; settingsRestored: number }>(`/history/${id}/undo`, {
+    method: "POST",
+  });
 }
