@@ -75,7 +75,8 @@ class BackupControllerTest {
                 exported.recurringOverrides(), exported.goals(), exported.goalContributions(),
                 exported.tags(), exported.transactionTags(), exported.accountBalances(),
                 exported.filterPresets(), exported.transactionReceipts(), exported.netWorthTarget(),
-                exported.keywordRules(), exported.transferPairs(), exported.duplicateDismissals());
+                exported.keywordRules(), exported.transferPairs(), exported.duplicateDismissals(),
+                exported.merchantNames(), exported.dismissedMerchantSuggestions());
 
         ResponseEntity<?> response = controller.restore(wrongVersion);
 

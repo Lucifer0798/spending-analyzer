@@ -4,7 +4,9 @@ import { addDays } from "./dates";
 /** One expected charge on one date -- a recurring series projected forward. */
 export interface UpcomingBill {
   date: string;
+  /** The series' key -- unique per series, unlike `name`. */
   merchant: string;
+  name: string;
   /** What it usually costs: the latest charge if the price changed, else the average. */
   amount: number;
   cadence: RecurringSeries["cadence"];
@@ -26,7 +28,7 @@ export function upcomingBills(series: RecurringSeries[], today: string, horizonD
   const bills: UpcomingBill[] = [];
   for (const s of series) {
     const amount = s.price_changed ? s.last_amount : s.average_amount;
-    const base = { merchant: s.merchant, amount, cadence: s.cadence, cancelling: s.flagged_for_cancellation };
+    const base = { merchant: s.merchant, name: s.name, amount, cadence: s.cadence, cancelling: s.flagged_for_cancellation };
     if (s.next_expected_date < today) {
       bills.push({ ...base, date: s.next_expected_date, overdue: true });
       continue;
@@ -36,5 +38,5 @@ export function upcomingBills(series: RecurringSeries[], today: string, horizonD
       bills.push({ ...base, date: d, overdue: false });
     }
   }
-  return bills.sort((a, b) => (a.date === b.date ? a.merchant.localeCompare(b.merchant) : a.date.localeCompare(b.date)));
+  return bills.sort((a, b) => (a.date === b.date ? a.name.localeCompare(b.name) : a.date.localeCompare(b.date)));
 }

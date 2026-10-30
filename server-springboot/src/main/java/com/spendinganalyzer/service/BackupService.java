@@ -7,6 +7,7 @@ import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.DuplicateDismissalRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.FilterPresetRepository;
 import com.spendinganalyzer.repository.GoalContributionRepository;
 import com.spendinganalyzer.repository.GoalRepository;
@@ -23,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.TreeSet;
 
 /**
  * Everything worth backing up, as one JSON file, and the other direction: replacing every table
@@ -52,6 +55,7 @@ public class BackupService {
     private final KeywordRuleRepository keywordRules;
     private final TransferPairRepository transferPairs;
     private final DuplicateDismissalRepository duplicateDismissals;
+    private final MerchantNameRepository merchantNames;
     private final ChangeLogService changeLog;
 
     public BackupService(
@@ -72,6 +76,7 @@ public class BackupService {
             KeywordRuleRepository keywordRules,
             TransferPairRepository transferPairs,
             DuplicateDismissalRepository duplicateDismissals,
+            MerchantNameRepository merchantNames,
             ChangeLogService changeLog
     ) {
         this.accounts = accounts;
@@ -91,6 +96,7 @@ public class BackupService {
         this.keywordRules = keywordRules;
         this.transferPairs = transferPairs;
         this.duplicateDismissals = duplicateDismissals;
+        this.merchantNames = merchantNames;
         this.changeLog = changeLog;
     }
 
@@ -110,7 +116,8 @@ public class BackupService {
             boolean netWorthTarget,
             int keywordRules,
             int transferPairs,
-            int duplicateDismissals
+            int duplicateDismissals,
+            int merchantNames
     ) {}
 
     public BackupData export() {
@@ -133,7 +140,9 @@ public class BackupService {
                 netWorthTarget.find().orElse(null),
                 keywordRules.findAll(),
                 transferPairs.findAll(),
-                duplicateDismissals.findAll()
+                duplicateDismissals.findAll(),
+                merchantNames.findAll(),
+                List.copyOf(new TreeSet<>(merchantNames.dismissedStems()))
         );
     }
 
@@ -160,6 +169,8 @@ public class BackupService {
         keywordRules.restoreAll(data.keywordRules());
         transferPairs.restoreAll(data.transferPairs());
         duplicateDismissals.restoreAll(data.duplicateDismissals());
+        merchantNames.restoreAll(data.merchantNames());
+        merchantNames.restoreDismissedStems(data.dismissedMerchantSuggestions());
         // History describes the dataset being replaced; undoing any of it now would be nonsense.
         changeLog.clear();
         predictionsCache.deleteAll();
@@ -180,7 +191,8 @@ public class BackupService {
                 data.netWorthTarget() != null,
                 data.keywordRules() == null ? 0 : data.keywordRules().size(),
                 data.transferPairs() == null ? 0 : data.transferPairs().size(),
-                data.duplicateDismissals() == null ? 0 : data.duplicateDismissals().size()
+                data.duplicateDismissals() == null ? 0 : data.duplicateDismissals().size(),
+                data.merchantNames() == null ? 0 : data.merchantNames().size()
         );
     }
 }

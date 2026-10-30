@@ -205,6 +205,9 @@ export interface RecurringSeries {
   price_changed: boolean;
   /** What it used to cost, going into the change — null unless price_changed. */
   previous_amount: number | null;
+  /** What to call it: the merchant's name (Manage → Merchant names), else `merchant`, which stays
+   *  the key overrides are saved against. */
+  name: string;
 }
 
 export type RecurringAction = "cancel" | "exclude";
@@ -819,8 +822,10 @@ export interface FreshnessResponse {
 /** One thing about the recurring charges worth acting on -- see the Recurring page's audit. */
 export interface SubscriptionFinding {
   kind: "price_increase" | "still_charging" | "overlap";
-  /** One merchant, except for an overlap, which lists the group. */
+  /** One merchant, except for an overlap, which lists the group -- keys, what a cancel flag is saved against. */
   merchants: string[];
+  /** What to call each of `merchants`, same order. */
+  names: string[];
   category: string | null;
   cadence: string;
   /** What's at stake over a year: the extra from a rise, a year more of a charge that should have
@@ -844,7 +849,7 @@ export interface SubscriptionAuditResponse {
 
 /** Debits that look like the same purchase taken twice: one account, one merchant, one amount, a day or two apart. */
 export interface DuplicateChargeGroup {
-  /** The cleaned-up merchant name merchant memory uses. */
+  /** The merchant's name if it has one, else the cleaned-up key merchant memory uses. */
   merchant: string;
   accountId: number;
   amount: number;
@@ -863,4 +868,29 @@ export interface HistoryEntry {
   undoneAt: string | null;
   /** Receipts deleted along with the transactions -- undo can't bring those back. */
   receiptsLost: number;
+}
+
+/** One merchant, by the key merchant memory and recurring detection use. */
+export interface MerchantNameEntry {
+  key: string;
+  /** null when it has none. */
+  name: string | null;
+  /** Transactions at it; 0 for a name kept after its transactions went (reset keeps names). */
+  count: number;
+  /** Its commonest raw description -- null when count is 0. */
+  example: string | null;
+  lastDate: string | null;
+}
+
+/** Spellings sharing a distinctive first word, offered for merging under one name. */
+export interface MerchantNameSuggestion {
+  stem: string;
+  keys: string[];
+  name: string;
+  count: number;
+}
+
+export interface MerchantNamesResponse {
+  merchants: MerchantNameEntry[];
+  suggestions: MerchantNameSuggestion[];
 }

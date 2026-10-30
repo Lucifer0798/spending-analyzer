@@ -10,6 +10,7 @@ import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.PeriodComparison;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -31,10 +32,13 @@ public class StatsService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final AccountRepository accountRepository;
+    private final MerchantNameRepository merchantNames;
 
-    public StatsService(NamedParameterJdbcTemplate jdbc, AccountRepository accountRepository) {
+    public StatsService(NamedParameterJdbcTemplate jdbc, AccountRepository accountRepository,
+                        MerchantNameRepository merchantNames) {
         this.jdbc = jdbc;
         this.accountRepository = accountRepository;
+        this.merchantNames = merchantNames;
     }
 
     /**
@@ -316,7 +320,8 @@ public class StatsService {
      * Spend grouped by merchant, biggest total first. Grouped in Java rather than SQL because the
      * key is {@link MerchantNormalizer#normalize} of the description -- store numbers and order
      * references stripped -- which SQLite can't compute; a {@code GROUP BY description} would
-     * split one supermarket into a row per branch.
+     * split one supermarket into a row per branch. A merchant given a name is listed under it, and
+     * merchants sharing a name are one row -- that's what merging them means.
      *
      * @return every merchant with spend in range, ties broken by name so the order is stable
      */
@@ -343,9 +348,10 @@ public class StatsService {
             String last;
             final Map<String, Double> byCategory = new HashMap<>();
         }
+        MerchantNameRepository.Names names = merchantNames.load();
         Map<String, Acc> byMerchant = new HashMap<>();
         for (Row row : rows) {
-            Acc acc = byMerchant.computeIfAbsent(MerchantNormalizer.normalize(row.description()), k -> new Acc());
+            Acc acc = byMerchant.computeIfAbsent(names.label(MerchantNormalizer.normalize(row.description())), k -> new Acc());
             acc.total += row.amount();
             acc.count++;
             if (acc.first == null || row.date().compareTo(acc.first) < 0) acc.first = row.date();

@@ -8,6 +8,7 @@ import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,13 +48,16 @@ class CashFlowServiceTest {
     @Autowired
     private RecurringOverrideRepository overrides;
 
+    @Autowired
+    private MerchantNameRepository merchantNames;
+
     private CashFlowService service;
 
     /** Every test runs on 14 October 2026. */
     @BeforeEach
     void fixToday() {
         Clock clock = Clock.fixed(LocalDate.of(2026, 10, 14).atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
-        service = new CashFlowService(accounts, balances, transactions, recurring, overrides, clock);
+        service = new CashFlowService(accounts, balances, transactions, recurring, overrides, merchantNames, clock);
     }
 
     private void add(long accountId, String type, String description, double amount, String... dates) {

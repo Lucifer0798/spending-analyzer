@@ -23,7 +23,12 @@ public record RecurringSeries(
         /** True when the last charge differs from what came before it by more than a rounding blip. */
         @JsonProperty("price_changed") boolean priceChanged,
         /** What it used to cost, going into the change — null unless {@code priceChanged}. */
-        @JsonProperty("previous_amount") Double previousAmount
+        @JsonProperty("previous_amount") Double previousAmount,
+        /**
+         * What to call it: the merchant's name if it has one, else {@code merchant}. {@code merchant}
+         * stays the key, since that's what overrides are stored against.
+         */
+        String name
 ) {
     /**
      * Detection itself never looks at overrides — {@link
@@ -34,6 +39,13 @@ public record RecurringSeries(
     public RecurringSeries withOverride(boolean flaggedForCancellation, Long overrideId) {
         return new RecurringSeries(merchant, category, cadence, averageAmount, lastAmount, lastDate,
                 nextExpectedDate, occurrences, medianIntervalDays, annualizedCost, confidence,
-                flaggedForCancellation, overrideId, dueInDays, priceChanged, previousAmount);
+                flaggedForCancellation, overrideId, dueInDays, priceChanged, previousAmount, name);
+    }
+
+    /** Layered in by the controller, like {@link #withOverride}: detection only knows keys. */
+    public RecurringSeries withName(String name) {
+        return new RecurringSeries(merchant, category, cadence, averageAmount, lastAmount, lastDate,
+                nextExpectedDate, occurrences, medianIntervalDays, annualizedCost, confidence,
+                flaggedForCancellation, overrideId, dueInDays, priceChanged, previousAmount, name == null ? merchant : name);
     }
 }

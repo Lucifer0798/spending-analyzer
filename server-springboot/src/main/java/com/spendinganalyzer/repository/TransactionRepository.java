@@ -3,6 +3,7 @@ package com.spendinganalyzer.repository;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.service.MerchantNormalizer;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -20,9 +21,11 @@ import java.util.Set;
 public class TransactionRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final MerchantNameRepository merchantNames;
 
-    public TransactionRepository(NamedParameterJdbcTemplate jdbc) {
+    public TransactionRepository(NamedParameterJdbcTemplate jdbc, MerchantNameRepository merchantNames) {
         this.jdbc = jdbc;
+        this.merchantNames = merchantNames;
     }
 
     private static final String SELECT_WITH_ACCOUNT = """
@@ -245,16 +248,37 @@ public class TransactionRepository {
      * SQLite's LIKE is already case-insensitive for ASCII, so no COLLATE or LOWER() is needed.
      * The search term's own {@code %}/{@code _} wildcard characters are escaped so a term like
      * "50% off" matches that literal text rather than being read as a wildcard pattern.
+     *
+     * <p>A term matching a merchant's name also finds every description that is that merchant --
+     * searching "Amazon" finds "AMZN MKTP US*2K4" once that's been named Amazon. The key is
+     * computed in Java ({@link MerchantNormalizer}), so those descriptions are worked out here and
+     * matched exactly; that only runs when some name matches.
      */
-    private static void appendSearchFilter(StringBuilder sql, MapSqlParameterSource params, String search) {
+    private void appendSearchFilter(StringBuilder sql, MapSqlParameterSource params, String search) {
         if (search != null && !search.isBlank()) {
             String escaped = search.trim()
                     .replace("\\", "\\\\")
                     .replace("%", "\\%")
                     .replace("_", "\\_");
-            sql.append(" AND t.description LIKE :search ESCAPE '\\'");
-            params.addValue("search", "%" + escaped + "%");
+            String pattern = "%" + escaped + "%";
+            params.addValue("search", pattern);
+            List<String> named = descriptionsOfMerchantsNamedLike(pattern);
+            if (named.isEmpty()) {
+                sql.append(" AND t.description LIKE :search ESCAPE '\\'");
+            } else {
+                sql.append(" AND (t.description LIKE :search ESCAPE '\\' OR t.description IN (:namedDescriptions))");
+                params.addValue("namedDescriptions", named);
+            }
         }
+    }
+
+    private List<String> descriptionsOfMerchantsNamedLike(String pattern) {
+        Set<String> keys = new HashSet<>(merchantNames.keysNamedLike(pattern));
+        if (keys.isEmpty()) return List.of();
+        return jdbc.queryForList("SELECT DISTINCT description FROM transactions", new MapSqlParameterSource(), String.class)
+                .stream()
+                .filter(d -> keys.contains(MerchantNormalizer.normalize(d)))
+                .toList();
     }
 
     public boolean updateCategory(long id, String category, String source) {

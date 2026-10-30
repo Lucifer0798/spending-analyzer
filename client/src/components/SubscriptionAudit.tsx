@@ -17,20 +17,20 @@ function describe(f: SubscriptionFinding, cur: string): { title: string; detail:
   switch (f.kind) {
     case "still_charging":
       return {
-        title: `${f.merchants[0]} is still charging`,
+        title: `${f.names[0]} is still charging`,
         detail: `Charged ${currencyPrecise(f.toAmount!, cur)} on ${dayMonthYear(f.chargedOn!)}, after you flagged it to cancel on ${dayMonthYear(f.flaggedOn!)}. Worth checking the cancellation went through.`,
         stake: `${currency(f.yearlyAmount, 0, cur)} a year if it carries on`,
       };
     case "price_increase":
       return {
-        title: `${f.merchants[0]} went up`,
+        title: `${f.names[0]} went up`,
         detail: `From ${currencyPrecise(f.fromAmount!, cur)} to ${currencyPrecise(f.toAmount!, cur)} ${per}.`,
         stake: `${currency(f.yearlyAmount, 0, cur)} more a year`,
       };
     default:
       return {
         title: `${f.merchants.length} ${f.category} charges ${per}`,
-        detail: `${f.merchants.join(", ")} — worth checking you still use all of them.`,
+        detail: `${f.names.join(", ")} — worth checking you still use all of them.`,
         stake: `${currency(f.yearlyAmount, 0, cur)} a year together`,
       };
   }

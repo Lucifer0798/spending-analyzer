@@ -24,6 +24,7 @@ import { BudgetsSection } from "./manage/BudgetsSection";
 import { CategoriesSection } from "./manage/CategoriesSection";
 import { HistorySection } from "./manage/HistorySection";
 import { MerchantMemorySection } from "./manage/MerchantMemorySection";
+import { MerchantNamesSection } from "./manage/MerchantNamesSection";
 import { RecurringOverridesSection } from "./manage/RecurringOverridesSection";
 import { TagsSection } from "./manage/TagsSection";
 import type { Banner, Run } from "./manage/types";
@@ -124,6 +125,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
         reload={reload}
         banner={banner}
       />
+
+      {/* Fetches its own list; `categories` is a fresh array after every reload, so it follows the page. */}
+      <MerchantNamesSection run={run} refreshKey={categories} />
 
       <KeywordRulesSection categories={categories.map((c) => c.name)} />
 

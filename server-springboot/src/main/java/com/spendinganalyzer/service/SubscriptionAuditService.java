@@ -36,7 +36,9 @@ public class SubscriptionAuditService {
     static final double SMALL_CHARGE = 50.0;
 
     /**
-     * @param merchants    one for price_increase and still_charging; the group for overlap
+     * @param merchants    one for price_increase and still_charging; the group for overlap -- keys,
+     *                     what a cancel flag is saved against
+     * @param names        what to call each of {@code merchants}, in the same order
      * @param yearlyAmount what's at stake over a year -- see the class comment for each kind
      * @param fromAmount   price_increase only: the average before the change
      * @param toAmount     price_increase and still_charging: the latest charge
@@ -46,6 +48,7 @@ public class SubscriptionAuditService {
     public record Finding(
             String kind,
             List<String> merchants,
+            List<String> names,
             String category,
             String cadence,
             double yearlyAmount,
@@ -69,13 +72,13 @@ public class SubscriptionAuditService {
             // Overrides store a timestamp; the charge only a date. Charged on a later day means the
             // flag didn't stop it -- the same day is ambiguous, so it isn't counted.
             if (flaggedOn != null && s.lastDate().compareTo(flaggedOn) > 0) {
-                findings.add(new Finding(Finding.STILL_CHARGING, List.of(s.merchant()), s.category(), s.cadence(),
+                findings.add(new Finding(Finding.STILL_CHARGING, List.of(s.merchant()), List.of(s.name()), s.category(), s.cadence(),
                         Money.round2(s.lastAmount() * perYear(s)), null, s.lastAmount(), s.lastDate(), flaggedOn));
             }
 
             // Already being cancelled, a rise is moot -- and if it keeps charging, that's the finding above.
             if (flaggedOn == null && s.priceChanged() && s.previousAmount() != null && s.lastAmount() > s.previousAmount()) {
-                findings.add(new Finding(Finding.PRICE_INCREASE, List.of(s.merchant()), s.category(), s.cadence(),
+                findings.add(new Finding(Finding.PRICE_INCREASE, List.of(s.merchant()), List.of(s.name()), s.category(), s.cadence(),
                         Money.round2((s.lastAmount() - s.previousAmount()) * perYear(s)),
                         s.previousAmount(), s.lastAmount(), null, null));
             }
@@ -90,7 +93,8 @@ public class SubscriptionAuditService {
             if (group.size() < 2) continue;
             RecurringSeries first = group.get(0);
             findings.add(new Finding(Finding.OVERLAP,
-                    group.stream().map(RecurringSeries::merchant).toList(), first.category(), first.cadence(),
+                    group.stream().map(RecurringSeries::merchant).toList(),
+                    group.stream().map(RecurringSeries::name).toList(), first.category(), first.cadence(),
                     Money.round2(group.stream().mapToDouble(s -> s.lastAmount() * perYear(s)).sum()),
                     null, null, null, null));
         }

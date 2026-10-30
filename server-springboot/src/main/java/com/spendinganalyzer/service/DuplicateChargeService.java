@@ -2,6 +2,7 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.DuplicateDismissalRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -44,6 +45,7 @@ public class DuplicateChargeService {
     /** Seen on this many distinct days, the same merchant and amount is a habit, not a mistake. */
     static final int HABIT_DAYS = 4;
 
+    /** @param merchant the merchant's name if it has one, else its key -- grouping is always by key */
     public record Group(String merchant, long accountId, double amount, List<Transaction> transactions) {}
 
     private record Row(long id, long accountId, String merchant, long cents, LocalDate date) {}
@@ -51,12 +53,14 @@ public class DuplicateChargeService {
     private final NamedParameterJdbcTemplate jdbc;
     private final TransactionRepository transactions;
     private final DuplicateDismissalRepository dismissals;
+    private final MerchantNameRepository merchantNames;
 
     public DuplicateChargeService(NamedParameterJdbcTemplate jdbc, TransactionRepository transactions,
-                                  DuplicateDismissalRepository dismissals) {
+                                  DuplicateDismissalRepository dismissals, MerchantNameRepository merchantNames) {
         this.jdbc = jdbc;
         this.transactions = transactions;
         this.dismissals = dismissals;
+        this.merchantNames = merchantNames;
     }
 
     /** Every likely double charge, newest first; {@code accountId} null means every account. */
@@ -103,10 +107,11 @@ public class DuplicateChargeService {
         Map<Long, Transaction> byId = transactions.findByIds(new ArrayList<>(ids)).stream()
                 .collect(Collectors.toMap(Transaction::id, Function.identity()));
 
+        MerchantNameRepository.Names names = merchantNames.load();
         return clusters.stream()
                 .sorted(Comparator.comparing((List<Row> c) -> c.get(c.size() - 1).date()).reversed()
                         .thenComparing(c -> c.get(0).id(), Comparator.reverseOrder()))
-                .map(c -> new Group(c.get(0).merchant(), c.get(0).accountId(), c.get(0).cents() / 100.0,
+                .map(c -> new Group(names.label(c.get(0).merchant()), c.get(0).accountId(), c.get(0).cents() / 100.0,
                         c.stream().map(r -> byId.get(r.id())).toList()))
                 .toList();
     }

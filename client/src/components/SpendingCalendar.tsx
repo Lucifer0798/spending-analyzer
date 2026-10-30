@@ -191,7 +191,7 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
                 const day = byDate.get(date);
                 const dayBills = billsByDate.get(date) ?? [];
                 const billText = dayBills
-                  .map((b) => `${b.overdue ? "overdue: " : "due: "}${b.merchant} ~${currencyPrecise(b.amount, cur)}${b.cancelling ? " (flagged to cancel)" : ""}`)
+                  .map((b) => `${b.overdue ? "overdue: " : "due: "}${b.name} ~${currencyPrecise(b.amount, cur)}${b.cancelling ? " (flagged to cancel)" : ""}`)
                   .join("; ");
                 const label = [
                   day
@@ -294,7 +294,7 @@ export function SpendingCalendar({ accountId, range, onOpenDay }: Props) {
                     {b.overdue ? "overdue" : dayLabel(b.date)}
                   </span>
                   <span className={`truncate text-slate-800 dark:text-slate-200 ${b.cancelling ? "line-through opacity-70" : ""}`}>
-                    {b.merchant}
+                    {b.name}
                   </span>
                 </button>
                 <span className="text-right text-slate-700 dark:text-slate-300">

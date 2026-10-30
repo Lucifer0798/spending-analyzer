@@ -7,6 +7,7 @@ import com.spendinganalyzer.model.KeywordRule;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.KeywordRuleRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,6 +30,7 @@ class CategorizationServiceTest {
     private CategoryRepository categories;
     private MerchantCategoryRepository memory;
     private KeywordRuleRepository keywordRules;
+    private MerchantNameRepository names;
     private CategorizationService service;
 
     @BeforeEach
@@ -37,7 +39,9 @@ class CategorizationServiceTest {
         categories = mock(CategoryRepository.class);
         memory = mock(MerchantCategoryRepository.class);
         keywordRules = mock(KeywordRuleRepository.class);
-        service = new CategorizationService(transactions, categories, memory, keywordRules);
+        names = mock(MerchantNameRepository.class);
+        when(names.load()).thenReturn(MerchantNameRepository.Names.NONE);
+        service = new CategorizationService(transactions, categories, memory, keywordRules, names);
         when(keywordRules.findAll()).thenReturn(List.of());
 
         when(categories.findAllNames()).thenReturn(List.of(
@@ -97,6 +101,29 @@ class CategorizationServiceTest {
         service.categorizeAll();
 
         verify(transactions).updateCategory(1L, "Groceries", "cache");
+    }
+
+    @Test
+    @DisplayName("a merchant merged with another (same name) uses what memory learned for it, unless it has its own")
+    void mergedMerchantsShareMemory() {
+        when(transactions.findUncategorized()).thenReturn(List.of(
+                tx(1, "AMZN MKTP US*2K4"),
+                tx(2, "AMAZON PRIME"),
+                tx(3, "AMZN DIGITAL")));
+        // Two merged spellings taught differently: the later correction (AMAZON.COM, in March) answers.
+        when(memory.loadAll()).thenReturn(Map.of(
+                "AMAZON.COM", List.of(new MerchantCategory(7, "AMAZON.COM", "Shopping",
+                        0, MerchantCategory.UNBOUNDED, "user", 0, "2026-01-01", "2026-03-01")),
+                "AMAZON PRIME", remembered("AMAZON PRIME", "Other", "user")));
+        when(names.load()).thenReturn(new MerchantNameRepository.Names(Map.of(
+                "AMAZON.COM", "Amazon", "AMZN MKTP US", "Amazon", "AMAZON PRIME", "Amazon")));
+
+        CategorizeResponse response = service.categorizeAll();
+
+        verify(transactions).updateCategory(1L, "Shopping", "cache");
+        verify(transactions).updateCategory(2L, "Other", "cache");      // its own lesson wins
+        verify(transactions, never()).updateCategory(eq(3L), any(), eq("cache"));  // not merged, so not shared
+        assertThat(response.fromMemory()).isEqualTo(2);
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.spendinganalyzer.model.AccountBalance;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,22 +58,24 @@ public class CashFlowService {
     private final TransactionRepository transactions;
     private final RecurringDetectionService recurring;
     private final RecurringOverrideRepository overrides;
+    private final MerchantNameRepository merchantNames;
     private final Clock clock;
 
     @Autowired
     public CashFlowService(AccountRepository accounts, AccountBalanceRepository balances,
                            TransactionRepository transactions, RecurringDetectionService recurring,
-                           RecurringOverrideRepository overrides) {
-        this(accounts, balances, transactions, recurring, overrides, Clock.systemDefaultZone());
+                           RecurringOverrideRepository overrides, MerchantNameRepository merchantNames) {
+        this(accounts, balances, transactions, recurring, overrides, merchantNames, Clock.systemDefaultZone());
     }
 
     /** Package-private: lets tests fix "today". */
     CashFlowService(AccountRepository accounts, AccountBalanceRepository balances,
                     TransactionRepository transactions, RecurringDetectionService recurring,
-                    RecurringOverrideRepository overrides, Clock clock) {
+                    RecurringOverrideRepository overrides, MerchantNameRepository merchantNames, Clock clock) {
         this.accounts = accounts;
         this.balances = balances;
         this.transactions = transactions;
+        this.merchantNames = merchantNames;
         this.recurring = recurring;
         this.overrides = overrides;
         this.clock = clock;
@@ -103,14 +106,16 @@ public class CashFlowService {
         double starting = Money.round2(logged.balance() + since.net());
 
         List<Event> events = new ArrayList<>();
-        for (RecurringSeries s : recurring.detect(transactions.findByAccountAndType(account.id(), "debit"))) {
+        MerchantNameRepository.Names names = merchantNames.load();
+        for (RecurringSeries d : recurring.detect(transactions.findByAccountAndType(account.id(), "debit"))) {
+            RecurringSeries s = d.withName(names.label(d.merchant()));
             RecurringOverride flag = flags.get(s.merchant());
             if (flag != null && RecurringOverride.ACTION_EXCLUDE.equals(flag.action())) continue;
             boolean cancelling = flag != null && RecurringOverride.ACTION_CANCEL.equals(flag.action());
             project(s, -amountOf(s), asOf, end, cancelling, true, events);
         }
-        for (RecurringSeries s : recurring.detect(transactions.findByAccountAndType(account.id(), "credit"))) {
-            project(s, amountOf(s), asOf, end, false, false, events);
+        for (RecurringSeries d : recurring.detect(transactions.findByAccountAndType(account.id(), "credit"))) {
+            project(d.withName(names.label(d.merchant())), amountOf(d), asOf, end, false, false, events);
         }
         // Same-day order: money in before money out, so a payday and a rent on one date don't show a
         // dip that wouldn't really happen.
@@ -166,12 +171,12 @@ public class CashFlowService {
             if (!step(s, last, 2).isAfter(asOf)) return;
             LocalDate firstDay = asOf.plusDays(1);
             if (countIfLate && !firstDay.isAfter(end)) {
-                into.add(new Event(firstDay.toString(), s.merchant(), signedAmount, s.cadence(), 0, true, cancelling));
+                into.add(new Event(firstDay.toString(), s.name(), signedAmount, s.cadence(), 0, true, cancelling));
             }
             n = 2;
         }
         for (LocalDate due = step(s, last, n); !due.isAfter(end); due = step(s, last, ++n)) {
-            into.add(new Event(due.toString(), s.merchant(), signedAmount, s.cadence(), 0, false, cancelling));
+            into.add(new Event(due.toString(), s.name(), signedAmount, s.cadence(), 0, false, cancelling));
         }
     }
 

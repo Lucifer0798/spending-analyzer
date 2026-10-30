@@ -8,11 +8,13 @@ import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.KeywordRuleRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -45,17 +47,20 @@ public class CategorizationService {
     private final CategoryRepository categoryRepository;
     private final MerchantCategoryRepository merchantCategoryRepository;
     private final KeywordRuleRepository keywordRuleRepository;
+    private final MerchantNameRepository merchantNameRepository;
 
     public CategorizationService(
             TransactionRepository transactionRepository,
             CategoryRepository categoryRepository,
             MerchantCategoryRepository merchantCategoryRepository,
-            KeywordRuleRepository keywordRuleRepository
+            KeywordRuleRepository keywordRuleRepository,
+            MerchantNameRepository merchantNameRepository
     ) {
         this.transactionRepository = transactionRepository;
         this.categoryRepository = categoryRepository;
         this.merchantCategoryRepository = merchantCategoryRepository;
         this.keywordRuleRepository = keywordRuleRepository;
+        this.merchantNameRepository = merchantNameRepository;
     }
 
     private enum Kind { MEMORY, KEYWORD, BUILT_IN }
@@ -72,11 +77,12 @@ public class CategorizationService {
         private final Set<String> validCategories = new HashSet<>(categoryRepository.findAllNames());
         private final Map<String, List<MerchantCategory>> memory = merchantCategoryRepository.loadAll();
         private final KeywordRuleMatcher keywordRules = new KeywordRuleMatcher(keywordRuleRepository.findAll());
+        private final MerchantNameRepository.Names names = merchantNameRepository.load();
 
         Optional<Decision> decide(Transaction t) {
             // Which memory rule applies depends on the amount, so this is per transaction.
             MerchantCategory remembered = MerchantCategory
-                    .bestMatch(memory.getOrDefault(MerchantNormalizer.normalize(t.description()), List.of()), t.amount())
+                    .bestMatch(rememberedFor(MerchantNormalizer.normalize(t.description())), t.amount())
                     .orElse(null);
             // A remembered category is only usable while that category still exists.
             if (remembered != null && validCategories.contains(remembered.category())) {
@@ -93,6 +99,25 @@ public class CategorizationService {
             return RuleBasedCategorizer.categorize(t.description(), t.type(), validCategories)
                     .map(category -> new Decision(category, "rule", Kind.BUILT_IN, null));
         }
+
+        /**
+         * A merchant's own lessons; failing those, the most recently taught lessons of a spelling it
+         * was merged with (same name) -- merging them says they're one merchant, and when the
+         * spellings were taught differently, the latest correction is the user's current answer.
+         */
+        private List<MerchantCategory> rememberedFor(String key) {
+            List<MerchantCategory> own = memory.get(key);
+            if (own != null) return own;
+            return names.mergedWith(key).stream()
+                    .map(memory::get)
+                    .filter(Objects::nonNull)
+                    .max(Comparator.comparing(CategorizationService::lastTaught))
+                    .orElse(List.of());
+        }
+    }
+
+    private static String lastTaught(List<MerchantCategory> rules) {
+        return rules.stream().map(MerchantCategory::updatedAt).filter(Objects::nonNull).max(String::compareTo).orElse("");
     }
 
     public CategorizeResponse categorizeAll() {

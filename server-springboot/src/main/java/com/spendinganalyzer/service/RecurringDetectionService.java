@@ -145,7 +145,8 @@ public class RecurringDetectionService {
                 null,
                 dueInDays,
                 priceChanged,
-                priceChanged ? Money.round2(priorAverage) : null
+                priceChanged ? Money.round2(priorAverage) : null,
+                merchant
         ));
     }
 
