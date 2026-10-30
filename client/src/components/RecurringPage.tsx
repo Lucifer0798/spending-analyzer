@@ -195,7 +195,7 @@ function RecurringIncomeSection({ accountId, range }: Props) {
                 {series.map((r) => (
                   <tr key={r.merchant}>
                     <td className="px-4 py-2">
-                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.merchant}</div>
+                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.name}</div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
                       {CADENCE_LABELS[r.cadence] ?? r.cadence}
@@ -328,7 +328,7 @@ function RecurringChargesSection({ accountId, range }: Props) {
                 {series.map((r) => (
                   <tr key={r.merchant}>
                     <td className="px-4 py-2">
-                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.merchant}</div>
+                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.name}</div>
                       {r.category && <div className="text-xs text-slate-500">{r.category}</div>}
                       <PriceChangeNote series={r} currencyCode={cur} />
                     </td>

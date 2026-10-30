@@ -13,6 +13,7 @@ import com.spendinganalyzer.dto.SummaryResponse;
 import com.spendinganalyzer.dto.TopMerchantsResponse;
 import com.spendinganalyzer.model.RecurringOverride;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.service.AnomalyDetectionService;
@@ -51,6 +52,7 @@ public class InsightsController {
     private final CategoryRepository categoryRepository;
     private final MoneyFlowService moneyFlowService;
     private final SubscriptionAuditService subscriptionAuditService;
+    private final MerchantNameRepository merchantNames;
 
     public InsightsController(
             StatsService statsService,
@@ -63,7 +65,8 @@ public class InsightsController {
             CategoryDetailService categoryDetailService,
             CategoryRepository categoryRepository,
             MoneyFlowService moneyFlowService,
-            SubscriptionAuditService subscriptionAuditService
+            SubscriptionAuditService subscriptionAuditService,
+            MerchantNameRepository merchantNames
     ) {
         this.statsService = statsService;
         this.insightsService = insightsService;
@@ -76,6 +79,7 @@ public class InsightsController {
         this.categoryRepository = categoryRepository;
         this.moneyFlowService = moneyFlowService;
         this.subscriptionAuditService = subscriptionAuditService;
+        this.merchantNames = merchantNames;
     }
 
     @GetMapping("/summary")
@@ -276,8 +280,13 @@ public class InsightsController {
         );
     }
 
-    /** What {@code /recurring} lists: detected spending series, excluded merchants dropped, cancel flags applied. */
+    /**
+     * What {@code /recurring} lists: detected spending series, excluded merchants dropped, cancel
+     * flags applied, named. Merged merchants stay separate series -- two spellings can be two
+     * subscriptions, and pooling their charges would muddle both cadences -- but show one name.
+     */
     private List<RecurringSeries> recurringSeries(Long accountId, DateRange range, Map<String, RecurringOverride> overrides) {
+        MerchantNameRepository.Names names = merchantNames.load();
         return recurringDetectionService.detect(transactionRepository.findSpendingTransactions(accountId, range))
                 .stream()
                 // Excluded merchants are dropped outright -- never really a subscription, so
@@ -286,7 +295,7 @@ public class InsightsController {
                 .map(s -> {
                     RecurringOverride o = overrides.get(s.merchant());
                     boolean cancelling = o != null && RecurringOverride.ACTION_CANCEL.equals(o.action());
-                    return s.withOverride(cancelling, cancelling ? o.id() : null);
+                    return s.withOverride(cancelling, cancelling ? o.id() : null).withName(names.label(s.merchant()));
                 })
                 .toList();
     }
@@ -347,8 +356,11 @@ public class InsightsController {
         }
 
         DateRange range = DateRange.of(from, to);
+        MerchantNameRepository.Names names = merchantNames.load();
         List<RecurringSeries> series = recurringDetectionService.detect(
-                transactionRepository.findIncomeTransactions(accountId, range));
+                        transactionRepository.findIncomeTransactions(accountId, range)).stream()
+                .map(s -> s.withName(names.label(s.merchant())))
+                .toList();
         double totalAnnualized = series.stream().mapToDouble(RecurringSeries::annualizedCost).sum();
 
         String resolvedMonth = resolveIncomeMonth(accountId, month);

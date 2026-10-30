@@ -31,6 +31,7 @@ import type {
   MerchantImportMode,
   MerchantImportResult,
   MerchantMemory,
+  MerchantNamesResponse,
   MerchantsResponse,
   MoneyFlow,
   NetWorthResponse,
@@ -892,6 +893,35 @@ export function dismissDuplicateCharges(transactionIds: number[]) {
   return request<{ ok: true }>("/transactions/duplicates/dismiss", {
     method: "POST",
     body: JSON.stringify({ transaction_ids: transactionIds }),
+  });
+}
+
+/** Every merchant (by key) with its name, if any, plus look-alikes worth merging. */
+export function fetchMerchantNames() {
+  return request<MerchantNamesResponse>("/merchant-names");
+}
+
+/** Names each merchant -- one key renames it, several merge them. Returns the name as stored. */
+export function renameMerchants(keys: string[], name: string) {
+  return request<{ ok: true; name: string; updated: number }>("/merchant-names", {
+    method: "POST",
+    body: JSON.stringify({ keys, name }),
+  });
+}
+
+/** Takes the name off each, so it shows (and counts) as itself again. */
+export function clearMerchantNames(keys: string[]) {
+  return request<{ ok: true; cleared: number }>("/merchant-names/clear", {
+    method: "POST",
+    body: JSON.stringify({ keys }),
+  });
+}
+
+/** "Not the same merchant" for one look-alike suggestion, by its shared word. */
+export function dismissMerchantSuggestion(stem: string) {
+  return request<{ ok: true }>("/merchant-names/suggestions/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ stem }),
   });
 }
 

@@ -17,6 +17,7 @@ import com.spendinganalyzer.model.TransactionReceipt;
 import com.spendinganalyzer.model.TransactionTag;
 import com.spendinganalyzer.model.TransferPair;
 import com.spendinganalyzer.repository.DuplicateDismissalRepository;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 
 import java.util.List;
 
@@ -52,7 +53,11 @@ public record BackupData(
          * Optional, so the version wasn't bumped for it: a version-9 file from before it existed
          * restores as "nothing dismissed", which is what that file's instance had.
          */
-        List<DuplicateDismissalRepository.Dismissal> duplicateDismissals
+        List<DuplicateDismissalRepository.Dismissal> duplicateDismissals,
+        /** Optional like {@code duplicateDismissals}: a file from before names restores with none. */
+        List<MerchantNameRepository.MerchantName> merchantNames,
+        /** Optional too: look-alike suggestions turned down, by their shared word. */
+        List<String> dismissedMerchantSuggestions
 ) {
     // Bumped from 8: transferPairs is a new field a version-8 file has no value for, and there
     // is no migration path between backup versions -- see BackupController.

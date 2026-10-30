@@ -24,7 +24,7 @@ class SubscriptionAuditServiceTest {
             default -> 30;
         };
         return new RecurringSeries(merchant, category, cadence, last, last, lastDate, "2026-11-01", 6, interval,
-                last * 12, "high", false, null, 7, previous != null, previous);
+                last * 12, "high", false, null, 7, previous != null, previous, merchant);
     }
 
     private static RecurringOverride cancelFlag(String merchant, String createdAt) {

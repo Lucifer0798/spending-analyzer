@@ -190,6 +190,32 @@ id in the page so they outlive opening a row's editor, and the bulk bar's chosen
 Checked by rendering the page in seven states (default, reviews open, two ticked, a row being edited,
 page 2, a search, search cleared) before and after: identical `innerHTML` in each.
 
+**A merchant name is a label on the `MerchantNormalizer` key; descriptions never change.**
+`merchant_names` (V29) maps key → name; keys sharing a name are merged. Each place reads the names
+once per run (`MerchantNameRepository.load()` → `Names`) and decides what a merge means there:
+top merchants and the year review group by `names.label(key)`, so merged spellings are one row;
+recurring stays one series per key (two spellings can be two subscriptions, and pooling charges
+would muddle both cadences) and gets `name` beside `merchant` -- the key stays, because recurring
+overrides are stored against it; the cash-flow forecast, bills calendar, subscription audit
+(`names` beside `merchants`) and double-charge groups show the name but still group by key. Merchant
+memory looks up its own key first and, failing that, the most recently taught (`updated_at`) of the
+spellings it's merged with -- a correction's lesson stays on the key it was taught for, so taking a
+name off undoes the sharing. Search can't compute a key in SQL, so a term matching a name gets the
+matching keys, then every distinct description that normalizes to one, then `description IN (...)`;
+that only runs when some name matches. A name differing only in case from one other merchants have
+takes that spelling, so "amazon" joins "Amazon". Reset keeps names, like merchant memory; backups
+carry them (and turned-down suggestions) as optional fields with no version bump. The rename
+endpoint is `POST /api/merchant-names`, not PUT: `CorsConfig` allows GET/POST/PATCH/DELETE only, and
+the Vite proxy sends an Origin, so a PUT is refused as "Invalid CORS request" in development.
+
+**Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
+anything not a letter or digit) when it's at least four characters, not all digits, and not a
+processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The
+offered name is the whole words all the keys start with ("Blue Bottle Coffee"), or the stem when
+they share none (`AMAZON.COM` / `AMAZON MKTP` → "Amazon"), or a name some of them already have.
+Nothing merges until the user says so; "Not the same" stores the stem in
+`merchant_suggestion_dismissals`.
+
 **Excel parsing has its own tests, run as .xlsx and as .xls.** `ExcelParsingTest` builds workbooks
 with Apache POI in memory -- date cells in two formats, a text date, negative and `#,##0.00`
 amounts, a formula, a missing row, debit/credit columns, a blank trailing header -- and runs each
