@@ -76,7 +76,7 @@ class ChangeLogServiceTest {
         assertThat(latest().summary()).isEqualTo("\"PAWS & CLAWS 0091\" → Healthcare");
         assertThat(memory.findCatchAll("PAWS & CLAWS")).isPresent();
 
-        assertThat(undo(latest())).isEqualTo(new UndoResult(1, 0, 0));
+        assertThat(undo(latest())).isEqualTo(new UndoResult(1, 0, 0, 0));
         assertThat(get(id).category()).isEqualTo("Shopping");
         assertThat(get(id).categorySource()).isEqualTo("import");
         assertThat(memory.findCatchAll("PAWS & CLAWS")).isEmpty();   // there was no lesson before
@@ -107,7 +107,7 @@ class ChangeLogServiceTest {
         assertThat(bulk.summary()).isEqualTo("Categorized 2 transactions as Shopping");
         transactionsApi.update(b, Map.of("description", "SHOP TWO (renamed)"));
 
-        assertThat(undo(bulk)).isEqualTo(new UndoResult(1, 1, 0));
+        assertThat(undo(bulk)).isEqualTo(new UndoResult(1, 1, 0, 0));
         assertThat(get(a).category()).isNull();
         assertThat(get(b).category()).isEqualTo("Shopping");
         assertThat(get(b).description()).isEqualTo("SHOP TWO (renamed)");
@@ -126,7 +126,7 @@ class ChangeLogServiceTest {
         assertThat(deleted.summary()).isEqualTo("Deleted 2 transactions");
         assertThat(deleted.receiptsLost()).isEqualTo(1);
 
-        assertThat(undo(deleted)).isEqualTo(new UndoResult(2, 0, 0));
+        assertThat(undo(deleted)).isEqualTo(new UndoResult(2, 0, 0, 0));
         assertThat(get(a).description()).isEqualTo("TRAIN TICKET");
         assertThat(get(b).amount()).isEqualTo(240);
         assertThat(tags.namesFor(a)).containsExactly("work trip");
@@ -149,7 +149,7 @@ class ChangeLogServiceTest {
         Entry imported = latest();
         assertThat(imported.summary()).isEqualTo("Imported 2 transactions into Default from april.csv");
 
-        assertThat(undo(imported)).isEqualTo(new UndoResult(0, 0, 2));
+        assertThat(undo(imported)).isEqualTo(new UndoResult(0, 0, 2, 0));
         assertThat(transactions.find(null, null, null, com.spendinganalyzer.dto.DateRange.ALL, 100, 0))
                 .extracting(Transaction::id).containsExactly(before);
     }

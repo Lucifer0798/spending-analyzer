@@ -5,7 +5,9 @@ import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.service.BudgetService;
+import com.spendinganalyzer.service.ChangeLogService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.YearMonth;
@@ -20,15 +22,18 @@ public class BudgetController {
     private final BudgetRepository budgets;
     private final BudgetService budgetService;
     private final CategoryRepository categories;
+    private final ChangeLogService changeLog;
 
     public BudgetController(
             BudgetRepository budgets,
             BudgetService budgetService,
-            CategoryRepository categories
+            CategoryRepository categories,
+            ChangeLogService changeLog
     ) {
         this.budgets = budgets;
         this.budgetService = budgetService;
         this.categories = categories;
+        this.changeLog = changeLog;
     }
 
     /**
@@ -59,6 +64,7 @@ public class BudgetController {
      * and controls it directly.
      */
     @PostMapping("/budgets")
+    @Transactional
     public ResponseEntity<?> set(@RequestBody Map<String, Object> body) {
         String category = body.get("category") instanceof String s ? s.trim() : "";
         Double limit = body.get("monthly_limit") instanceof Number n ? n.doubleValue() : null;
@@ -150,16 +156,23 @@ public class BudgetController {
                     "escalation and rollover are only available for monthly budgets."));
         }
 
-        return ResponseEntity.ok(budgets.upsert(
+        var watch = changeLog.watch("budgets", "category = :category", Map.of("category", category));
+        boolean existed = !watch.before().isEmpty();
+        Budget saved = budgets.upsert(
                 category, limit, escalationType, escalationValue, escalationFrequencyMonths, escalationStartMonth,
-                rolloverStartMonth, period));
+                rolloverStartMonth, period);
+        changeLog.recordSettings("budget", (existed ? "Changed" : "Set") + " the budget for " + category, watch);
+        return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/budgets/{id}")
+    @Transactional
     public ResponseEntity<?> delete(@PathVariable long id) {
+        var watch = changeLog.watch("budgets", "id = :id", Map.of("id", id));
         if (!budgets.deleteById(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Budget not found."));
         }
+        changeLog.recordSettings("budget", "Removed the budget for " + watch.before().get(0).get("category"), watch);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 }

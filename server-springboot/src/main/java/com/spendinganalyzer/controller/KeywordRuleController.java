@@ -6,9 +6,11 @@ import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.KeywordRuleRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.service.ChangeLogService;
 import com.spendinganalyzer.service.KeywordRuleMatcher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -34,11 +36,14 @@ public class KeywordRuleController {
     private final KeywordRuleRepository rules;
     private final CategoryRepository categories;
     private final TransactionRepository transactions;
+    private final ChangeLogService changeLog;
 
-    public KeywordRuleController(KeywordRuleRepository rules, CategoryRepository categories, TransactionRepository transactions) {
+    public KeywordRuleController(KeywordRuleRepository rules, CategoryRepository categories, TransactionRepository transactions,
+                                 ChangeLogService changeLog) {
         this.rules = rules;
         this.categories = categories;
         this.transactions = transactions;
+        this.changeLog = changeLog;
     }
 
     /** In the order they're tried -- longest keyword first. */
@@ -48,6 +53,7 @@ public class KeywordRuleController {
     }
 
     @PostMapping
+    @Transactional
     public ResponseEntity<?> create(@RequestBody Map<String, Object> body) {
         String keyword = body.get("keyword") instanceof String s ? s.trim().replaceAll("\\s+", " ") : "";
         String category = body.get("category") instanceof String s ? s.trim() : "";
@@ -64,14 +70,22 @@ public class KeywordRuleController {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(new ErrorResponse("There's already a rule for \"" + keyword + "\" -- delete it first to change its category."));
         }
-        return ResponseEntity.ok(rules.create(keyword, category));
+        var watch = changeLog.watch("keyword_rules", "keyword = :keyword", Map.of("keyword", keyword));
+        var created = rules.create(keyword, category);
+        changeLog.recordSettings("keyword-rule", "Added the keyword rule \"" + keyword + "\" → " + category, watch);
+        return ResponseEntity.ok(created);
     }
 
     @DeleteMapping("/{id}")
+    @Transactional
     public ResponseEntity<?> delete(@PathVariable long id) {
+        var watch = changeLog.watch("keyword_rules", "id = :id", Map.of("id", id));
         if (!rules.delete(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Rule not found."));
         }
+        var rule = watch.before().get(0);
+        changeLog.recordSettings("keyword-rule",
+                "Deleted the keyword rule \"" + rule.get("keyword") + "\" → " + rule.get("category"), watch);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
