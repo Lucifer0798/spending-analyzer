@@ -18,6 +18,7 @@ there's no hosted database and no account to sign up for.
 | **Categorize** | Sorts transactions into categories with built-in rules, and remembers every merchant you correct |
 | **Multiple accounts** | Keep a current account and a credit card separate, or view everything together |
 | **Transfers** | Spots money moved between your own accounts so it isn't counted as spending or income |
+| **Spending challenges** | "No eating out for two weeks" or "under $200 on Shopping this month", tracked day by day on the Dashboard |
 | **Merchant names** | Rename `AMZN MKTP US*2K4` to "Amazon" and merge its other spellings, so reports count it once |
 | **Recurring charges** | Finds subscriptions and regular bills, with an annual cost and next expected date |
 | **Predictions** | Forecasts next month per category and suggests where to reduce spending |
@@ -180,8 +181,8 @@ server-springboot/          Spring Boot backend
     repository/             Database access
     model/ dto/             Data shapes
   src/main/resources/
-    db/migration/           Versioned schema migrations (V1–V29)
-  src/test/                 661 tests
+    db/migration/           Versioned schema migrations (V1–V30)
+  src/test/                 671 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -209,7 +210,7 @@ forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
 
 ## The database
 
-Twenty-one tables, all created automatically:
+Twenty-two tables, all created automatically:
 
 | Table | Holds |
 |---|---|
@@ -234,9 +235,10 @@ Twenty-one tables, all created automatically:
 | `change_log` | Recent changes to transactions and settings — before-and-after snapshots — so they can be undone |
 | `merchant_names` | A friendlier name per merchant; spellings sharing a name are merged into one merchant |
 | `merchant_suggestion_dismissals` | Look-alike merchants you said aren't one, so they aren't suggested again |
+| `challenges` | A short spending challenge — a category (or all spending), a limit (0 for "none at all") and dates |
 
 Schema changes are **Flyway migrations** in `db/migration/`. Each file runs once, in order, and
-is recorded — so upgrading never wipes your data. To change the schema, add a new `V30__*.sql`
+is recorded — so upgrading never wipes your data. To change the schema, add a new `V31__*.sql`
 rather than editing an existing file.
 
 Categories carry `is_income` and `is_transfer` flags rather than the code checking for the literal
@@ -322,6 +324,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
 | `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50; `batchId` keeps only pairs with a side from that upload) |
 | `GET` `POST` `DELETE` | `/transfers` | Matched and dismissed pairs; `/transfers/confirm` and `/transfers/dismiss` take `{"pairs": [{"debit_id", "credit_id"}]}`; `DELETE /transfers/{id}` undoes one |
+| `GET` `POST` `DELETE` | `/challenges` | Every spending challenge with how it's going; `POST {"category", "limitAmount", "startDate", "endDate", "accountId"}` starts one (limit 0 = no spending, category null = all spending), `DELETE /challenges/{id}` removes one |
 | `GET` `POST` | `/merchant-names` | Every merchant with its name and look-alikes worth merging; `POST {"keys": [...], "name": "Amazon"}` names one or merges several, `/merchant-names/clear` takes names off, `/merchant-names/suggestions/dismiss` turns a suggestion down |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
@@ -835,6 +838,18 @@ months of the year actually have transactions, because a year imported from Marc
 differently from a full one — and when comparing against the year before, it warns if the two
 years have different amounts of data, since part of any difference is then just coverage.
 
+**Spending challenges are a short promise, checked against what you actually spent.** The
+Dashboard's **Challenges** card starts one from today: *no spending* on a category (or on anything),
+or *spend under* an amount, for a week, two weeks, 30 days or the rest of the month. Each shows a
+square per day — green with nothing spent, red with spend (amber for a cap's smaller days), grey
+still to come — with the streak of clear days, a cap's amount left and whether it's on pace, and
+roughly what it saved against your usual: the average daily spend in that scope over the 90 days
+before it started, times the days so far, minus what you spent. It's worked out from transactions
+every time, so importing a late statement can still break (or keep) one; while the newest
+transaction is older than today, the card says so. Any spend over the limit — any at all, for a
+no-spend one — marks it **Broken**; finishing within it marks it **Kept**. Starting and deleting
+one are in History, and renaming or deleting a category carries its challenges along, like budgets.
+
 **Merchants can have a name, and spellings can be merged.** **Manage → Merchant names** lists every
 merchant with how often it appears. Give one a name (`AMZN MKTP US` → "Amazon") and top merchants,
 the year in review, Recurring, the bills calendar, the cash-flow forecast and the double-charge
@@ -923,7 +938,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (661).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (671).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1000,6 +1015,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Spending challenges~~ — no-spend or spend-under challenges for a category or everything, tracked
+  day by day on the Dashboard with a streak, pace and what they saved against your usual
 - ~~More actions in History~~ — category, budget, keyword-rule, merchant-memory and merchant-name
   changes on the Manage page are recorded in History with Undo, a category rename or delete as one entry
 - ~~Merchant rename / merge~~ — Manage → Merchant names gives merchants a friendly name and merges

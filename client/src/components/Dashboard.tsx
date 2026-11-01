@@ -17,6 +17,7 @@ import { currency } from "../format";
 import { ExportLink } from "./ExportLink";
 import { AnomaliesCard } from "./AnomaliesCard";
 import { BudgetsCard } from "./BudgetsCard";
+import { ChallengesCard } from "./ChallengesCard";
 import { BudgetVsIncomeCard } from "./BudgetVsIncomeCard";
 import { ComparisonCard } from "./ComparisonCard";
 import { TopMerchantsCard } from "./TopMerchantsCard";
@@ -369,6 +370,9 @@ export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenC
       {/* Renders nothing for "all time" or a half-open filter -- there's no defined-length
           period to compare against. */}
       <ComparisonCard accountId={accountId} range={range} />
+
+      {/* Shows every challenge whatever the filters -- each carries its own dates and account. */}
+      <ChallengesCard accountId={accountId} />
 
       {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
           for anyone not using them. */}

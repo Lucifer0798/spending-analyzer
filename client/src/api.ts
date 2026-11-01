@@ -13,6 +13,7 @@ import type {
   CategoryDrilldown,
   DailySpend,
   CategoryDetail,
+  ChallengeProgress,
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
@@ -923,6 +924,27 @@ export function dismissMerchantSuggestion(stem: string) {
     method: "POST",
     body: JSON.stringify({ stem }),
   });
+}
+
+/** Every spending challenge with how it's going, newest start first. */
+export function fetchChallenges() {
+  return request<{ challenges: ChallengeProgress[] }>("/challenges");
+}
+
+/** Starts a challenge; limitAmount 0 means no spending, category null means all spending. */
+export function createChallenge(body: {
+  category: string | null;
+  limitAmount: number;
+  startDate: string;
+  endDate: string;
+  accountId: number | null;
+  name?: string;
+}) {
+  return request<ChallengeProgress>("/challenges", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function deleteChallenge(id: number) {
+  return request<{ ok: true }>(`/challenges/${id}`, { method: "DELETE" });
 }
 
 /** Recent changes to transactions, newest first. */

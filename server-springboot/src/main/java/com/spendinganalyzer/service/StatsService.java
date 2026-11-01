@@ -380,10 +380,16 @@ public class StatsService {
      * definition as every other total here (SPEND_FILTER, EFFECTIVE_AMOUNT).
      */
     public List<DailyTotal> computeDailyTotals(Long accountId, DateRange range, String currency) {
+        return computeDailyTotals(accountId, range, currency, null);
+    }
+
+    /** As above, limited to one category when {@code category} is non-null -- for a spending challenge. */
+    public List<DailyTotal> computeDailyTotals(Long accountId, DateRange range, String currency, String category) {
         String sql = "SELECT t.date AS day, ROUND(SUM(" + EFFECTIVE_AMOUNT + "), 2) AS total, COUNT(*) AS count "
                 + SPEND_FILTER + filters(accountId, range, currency)
+                + (category != null ? " AND t.category = :category" : "")
                 + " GROUP BY t.date ORDER BY t.date";
-        return jdbc.query(sql, params(accountId, range, currency), (rs, rowNum) ->
+        return jdbc.query(sql, params(accountId, range, currency).addValue("category", category), (rs, rowNum) ->
                 new DailyTotal(rs.getString("day"), rs.getDouble("total"), rs.getInt("count")));
     }
 

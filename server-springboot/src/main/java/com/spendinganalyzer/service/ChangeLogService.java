@@ -82,6 +82,7 @@ public class ChangeLogService {
      */
     static final Map<String, String> KEYS = Map.of(
             "categories", "id",
+            "challenges", "id",
             "transactions", "id",
             "budgets", "id",
             "keyword_rules", "id",

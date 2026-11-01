@@ -93,6 +93,7 @@ public class CategoryRepository {
         jdbc.update("UPDATE merchant_categories SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE budgets SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE keyword_rules SET category = :newName WHERE category = :oldName", names);
+        jdbc.update("UPDATE challenges SET category = :newName WHERE category = :oldName", names);
         jdbc.update("UPDATE transfer_pairs SET debit_prev_category = :newName WHERE debit_prev_category = :oldName", names);
         jdbc.update("UPDATE transfer_pairs SET credit_prev_category = :newName WHERE credit_prev_category = :oldName", names);
     }
@@ -151,6 +152,8 @@ public class CategoryRepository {
         jdbc.update("UPDATE transfer_pairs SET debit_prev_category = :reassignTo WHERE debit_prev_category = :name", reassign);
         jdbc.update("UPDATE transfer_pairs SET credit_prev_category = :reassignTo WHERE credit_prev_category = :name", reassign);
         jdbc.update("DELETE FROM budgets WHERE category = :name", new MapSqlParameterSource("name", name));
+        // Like a budget: a challenge about a category that's gone has nothing left to measure.
+        jdbc.update("DELETE FROM challenges WHERE category = :name", new MapSqlParameterSource("name", name));
         jdbc.update("DELETE FROM categories WHERE id = :id", new MapSqlParameterSource("id", id));
     }
 

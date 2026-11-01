@@ -224,6 +224,20 @@ leaves a rename half-applied. These endpoints don't return a `changeId` -- most 
 and wrapping it would change their shape -- so there's no inline Undo on Manage yet; History is
 on the same page.
 
+**Challenges are computed on read and never store progress.** `challenges` (V30) holds only the
+promise: category (null = all spending), `limit_amount` (0 = no spending), dates, account (null =
+all). `ChallengeService.progress` works the rest out each time from `StatsService` -- the same spend
+definition as everything else (no income or transfers, split share counts), via a new per-category
+`computeDailyTotals` overload -- so a late statement can still break one. Broken is spent above the
+limit plus a cent of slack (so rounding never breaks a kept one); a cap's "on pace" is spent within
+the limit's share of the days so far. "Saved" compares to the scope's average daily spend over the 90
+days before the start, null when that window has no spend. All accounts in mixed currencies is "not
+applicable" rather than mixing. The card shows every challenge regardless of the Dashboard's filters
+(each carries its own dates and account) and starts new ones today, scoped to the account filter.
+Create/delete are History entries; a new row's watch is `id > maxId()`, since AUTOINCREMENT ids only
+grow. Category rename/delete cascade into challenges like budgets (delete removes them; undoing the
+delete brings them back).
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The

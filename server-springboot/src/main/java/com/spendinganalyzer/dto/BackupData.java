@@ -4,6 +4,7 @@ import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.AccountBalance;
 import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.model.Category;
+import com.spendinganalyzer.model.Challenge;
 import com.spendinganalyzer.model.FilterPreset;
 import com.spendinganalyzer.model.Goal;
 import com.spendinganalyzer.model.GoalContribution;
@@ -57,7 +58,9 @@ public record BackupData(
         /** Optional like {@code duplicateDismissals}: a file from before names restores with none. */
         List<MerchantNameRepository.MerchantName> merchantNames,
         /** Optional too: look-alike suggestions turned down, by their shared word. */
-        List<String> dismissedMerchantSuggestions
+        List<String> dismissedMerchantSuggestions,
+        /** Optional too: spending challenges; a file from before them restores with none. */
+        List<Challenge> challenges
 ) {
     // Bumped from 8: transferPairs is a new field a version-8 file has no value for, and there
     // is no migration path between backup versions -- see BackupController.

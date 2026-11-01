@@ -894,3 +894,41 @@ export interface MerchantNamesResponse {
   merchants: MerchantNameEntry[];
   suggestions: MerchantNameSuggestion[];
 }
+
+/** A short spending challenge. limitAmount 0 is "no spending"; category null is all spending. */
+export interface Challenge {
+  id: number;
+  name: string;
+  category: string | null;
+  limitAmount: number;
+  startDate: string;
+  endDate: string;
+  accountId: number | null;
+  createdAt: string;
+}
+
+export type ChallengeStatus = "UPCOMING" | "ACTIVE" | "COMPLETED" | "BROKEN";
+
+/** How a challenge is going, worked out from transactions on every read. */
+export interface ChallengeProgress {
+  challenge: Challenge;
+  /** False for "all accounts" across more than one currency -- nothing below is filled in then. */
+  applicable: boolean;
+  currency: string | null;
+  status: ChallengeStatus;
+  spent: number;
+  daysTotal: number;
+  daysElapsed: number;
+  /** Consecutive days with nothing spent, counting back from today (or the end). */
+  streak: number;
+  /** A cap only: spent no more than the limit's share of the days so far. */
+  onPace: boolean | null;
+  /** A cap only: what's left of the limit. */
+  remaining: number | null;
+  /** Against the usual daily spend in the 90 days before it began; null with nothing to compare. */
+  saved: number | null;
+  /** The newest transaction on record in its scope -- spend after it may not be imported yet. */
+  dataThrough: string | null;
+  /** One per day; spent is null for days still to come. */
+  days: { date: string; spent: number | null }[];
+}

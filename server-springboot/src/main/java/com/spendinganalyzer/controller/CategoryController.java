@@ -39,6 +39,7 @@ public class CategoryController {
                 changeLog.watch("merchant_categories", "category = :name", p),
                 changeLog.watch("budgets", "category = :name", p),
                 changeLog.watch("keyword_rules", "category = :name", p),
+                changeLog.watch("challenges", "category = :name", p),
                 changeLog.watch("transfer_pairs", List.of("debit_prev_category", "credit_prev_category"),
                         "debit_prev_category = :name OR credit_prev_category = :name", p),
         };
