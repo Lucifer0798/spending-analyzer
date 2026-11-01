@@ -159,9 +159,11 @@ class ChallengeServiceTest {
     void createDeleteAndHistory() {
         Map<String, Object> body = new HashMap<>(Map.of("category", "Dining & Coffee", "limitAmount", 0,
                 "startDate", "2026-10-08", "endDate", "2026-10-21", "accountId", Account.DEFAULT_ID));
-        var created = (Progress) api.create(body).getBody();
+        var response = api.create(body);
+        var created = (Progress) response.getBody();
         assertThat(created.challenge().name()).isEqualTo("No spending on Dining & Coffee");
         assertThat(changeLog.recent(1).get(0).summary()).isEqualTo("Started the challenge \"No spending on Dining & Coffee\"");
+        assertThat(response.getHeaders().getFirst("X-Change-Id")).isEqualTo(String.valueOf(changeLog.recent(1).get(0).id()));
 
         long id = created.challenge().id();
         api.delete(id);

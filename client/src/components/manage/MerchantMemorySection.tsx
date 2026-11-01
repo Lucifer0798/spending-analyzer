@@ -3,6 +3,7 @@ import { ApiError, exportUrl, forgetAllMerchants, forgetMerchant, importMerchant
 import type { CategoryDetail, MerchantImportMode, MerchantsResponse } from "../../types";
 import { currency } from "../../format";
 import { ExportLink } from "../ExportLink";
+import { changeIdOf } from "../../undo";
 import type { Banner, Run } from "./types";
 
 export function MerchantMemorySection({
@@ -51,7 +52,8 @@ export function MerchantMemorySection({
     try {
       const result = await importMerchants(file, merchantImportMode);
       await reload();
-      banner.setNotice(
+      banner.offerUndo(
+        changeIdOf(result),
         result.replaced
           ? `Replaced merchant memory: ${result.removed} rules removed, ${result.imported} imported.`
           : `Imported ${result.imported} merchant rules: ${result.created} new, ${result.updated} updated.`

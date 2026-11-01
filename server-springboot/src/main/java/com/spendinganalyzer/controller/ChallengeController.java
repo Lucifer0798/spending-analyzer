@@ -94,8 +94,8 @@ public class ChallengeController {
         // AUTOINCREMENT ids only grow, so the new row is the one above today's highest.
         var watch = changeLog.watch("challenges", "id > :maxId", Map.of("maxId", challenges.maxId()));
         Challenge created = challenges.create(name, category, limit, start.toString(), end.toString(), accountId);
-        changeLog.recordSettings("challenge", "Started the challenge \"" + name + "\"", watch);
-        return ResponseEntity.ok(service.progress(created));
+        Long changeId = changeLog.recordSettings("challenge", "Started the challenge \"" + name + "\"", watch);
+        return ChangeHeader.ok(service.progress(created), changeId);
     }
 
     @DeleteMapping("/{id}")
@@ -103,8 +103,8 @@ public class ChallengeController {
     public ResponseEntity<?> delete(@PathVariable long id) {
         var watch = changeLog.watch("challenges", "id = :id", Map.of("id", id));
         if (!challenges.delete(id)) return ResponseEntity.status(404).body(new ErrorResponse("Challenge not found."));
-        changeLog.recordSettings("challenge", "Deleted the challenge \"" + watch.before().get(0).get("name") + "\"", watch);
-        return ResponseEntity.ok(Map.of("ok", true));
+        Long changeId = changeLog.recordSettings("challenge", "Deleted the challenge \"" + watch.before().get(0).get("name") + "\"", watch);
+        return ChangeHeader.ok(Map.of("ok", true), changeId);
     }
 
     /** "No spending on Dining & Coffee", "Under 200 on Shopping", "No spending at all". */

@@ -182,7 +182,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 671 tests
+  src/test/                 672 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -823,7 +823,10 @@ changes are kept; a reset or a backup restore clears the list. Changes on the Ma
 there too: adding, renaming, recoloring or deleting a category (a rename or delete is one entry
 covering everything it touched — the category's transactions, budget, keyword rules and memory),
 setting or removing a budget, adding or deleting a keyword rule, merchant memory rules (one,
-forgetting all, an import), and merchant names. You don't have to go to Manage for
+forgetting all, an import), and merchant names. Each of those also shows "Done — **Undo**" in a
+note pinned to the bottom of the screen, so the change you just made can be taken back without
+scrolling down to History. (Adding a keyword rule that immediately categorized transactions is the
+exception: Undo would remove the rule but not those categories, so it's left to History.) You don't have to go to Manage for
 the latest one: recategorizing, editing or deleting on the Transactions page, answering the
 uncategorized review, and importing a statement each show "Done — **Undo**" right where you did it.
 
@@ -938,7 +941,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (671).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (672).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1017,6 +1020,8 @@ Nothing open right now — see Done below.
 
 - ~~Spending challenges~~ — no-spend or spend-under challenges for a category or everything, tracked
   day by day on the Dashboard with a streak, pace and what they saved against your usual
+- ~~Undo on Manage~~ — a change on the Manage page shows "Done — Undo" in a toast at the bottom of
+  the screen, like the Transactions page
 - ~~More actions in History~~ — category, budget, keyword-rule, merchant-memory and merchant-name
   changes on the Manage page are recorded in History with Undo, a category rename or delete as one entry
 - ~~Merchant rename / merge~~ — Manage → Merchant names gives merchants a friendly name and merges

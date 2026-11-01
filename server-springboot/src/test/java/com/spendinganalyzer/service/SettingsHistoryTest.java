@@ -243,6 +243,23 @@ class SettingsHistoryTest {
     }
 
     @Test
+    @DisplayName("each write names its History entry in X-Change-Id, for an Undo beside it; a no-op sends none")
+    void changeIdHeader() {
+        var created = categoriesApi.create(Map.of("name", "Pet care"));
+        assertThat(created.getHeaders().getFirst("X-Change-Id")).isEqualTo(String.valueOf(latest().id()));
+        assertThat(created.getBody()).isInstanceOf(Category.class);   // the body is unchanged
+
+        long id = ((Category) created.getBody()).id();
+        assertThat(categoriesApi.update(id, Map.of("color", "#123456")).getHeaders().getFirst("X-Change-Id"))
+                .isEqualTo(String.valueOf(latest().id()));
+        assertThat(categoriesApi.update(id, Map.of("color", "#123456")).getHeaders().getFirst("X-Change-Id")).isNull();
+
+        assertThat(memoryApi.forgetAll().getHeaders().getFirst("X-Change-Id")).isNull();   // nothing to forget
+        assertThat(namesApi.rename(Map.of("keys", List.of("AMAZON.COM"), "name", "Amazon")).getHeaders().getFirst("X-Change-Id"))
+                .isEqualTo(String.valueOf(latest().id()));
+    }
+
+    @Test
     @DisplayName("saving what's already there records nothing")
     void noOpsAreNotRecorded() {
         setBudget("Groceries", 400);

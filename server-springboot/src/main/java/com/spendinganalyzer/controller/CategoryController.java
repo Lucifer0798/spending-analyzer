@@ -91,8 +91,8 @@ public class CategoryController {
 
         var watch = changeLog.watch("categories", "name = :name", Map.of("name", name));
         Category created = categoryRepository.create(name, isIncome, isTransfer);
-        changeLog.recordSettings("category", "Added the category \"" + name + "\"", watch);
-        return ResponseEntity.ok(created);
+        Long changeId = changeLog.recordSettings("category", "Added the category \"" + name + "\"", watch);
+        return ChangeHeader.ok(created, changeId);
     }
 
     /**
@@ -159,9 +159,9 @@ public class CategoryController {
                 ? "Renamed the category \"" + category.name() + "\" to \"" + newName + "\""
                         + (what.isEmpty() ? "" : " and changed its " + String.join(", ", what))
                 : "Changed the " + String.join(", ", what) + " of the category \"" + category.name() + "\"";
-        changeLog.recordSettings("category", summary, watches);
+        Long changeId = changeLog.recordSettings("category", summary, watches);
 
-        return ResponseEntity.ok(categoryRepository.findById(id).orElseThrow());
+        return ChangeHeader.ok(categoryRepository.findById(id).orElseThrow(), changeId);
     }
 
     /**
@@ -184,14 +184,14 @@ public class CategoryController {
         int reassigned = categoryRepository.transactionCount(category.name());
         var watches = watchCategory(id, category.name());
         categoryRepository.deleteAndReassign(id, category.name(), FALLBACK_CATEGORY);
-        changeLog.recordSettings("category", "Deleted the category \"" + category.name() + "\""
+        Long changeId = changeLog.recordSettings("category", "Deleted the category \"" + category.name() + "\""
                 + (reassigned == 0 ? "" : " (" + reassigned + " transaction" + (reassigned == 1 ? "" : "s")
                         + " moved to " + FALLBACK_CATEGORY + ")"), watches);
 
-        return ResponseEntity.ok(Map.of(
+        return ChangeHeader.ok(Map.of(
                 "ok", true,
                 "transactionsReassignedTo", FALLBACK_CATEGORY,
                 "transactionsReassigned", reassigned
-        ));
+        ), changeId);
     }
 }

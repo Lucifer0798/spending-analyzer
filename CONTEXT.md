@@ -220,9 +220,14 @@ translate, so `isConstraintViolation` checks the code. Table and key names come 
 A category rename or delete watches every table the cascade reaches (transactions' `category`
 column only, memory, budgets, keyword rules, transfer pairs' previous categories), so one entry undoes
 it all. Category PATCH now validates everything before writing anything, so a bad color no longer
-leaves a rename half-applied. These endpoints don't return a `changeId` -- most return the entity,
-and wrapping it would change their shape -- so there's no inline Undo on Manage yet; History is
-on the same page.
+leaves a rename half-applied. The History id comes back in an `X-Change-Id` header
+(`ChangeHeader.ok`), not the body: most of these endpoints return the saved entity, and wrapping it
+would change their shape. `request` in `api.ts` copies the header onto the parsed body as
+`changeId` when the body doesn't already carry one (transaction writes put it in the body), so
+`changeIdOf(result)` works for both. `ManagePage.run` uses it to show `UndoNote` in a toast fixed to
+the bottom of the screen -- the page is long, and the banner at the top is often out of view. CORS
+exposes the header for cross-origin setups. A new keyword rule that categorized transactions at once
+gets no toast Undo: that categorizing isn't part of the rule's entry, so Undo would half-work.
 
 **Challenges are computed on read and never store progress.** `challenges` (V30) holds only the
 promise: category (null = all spending), `limit_amount` (0 = no spending), dates, account (null =

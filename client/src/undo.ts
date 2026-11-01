@@ -1,3 +1,9 @@
+/** The History entry a write returned (see `request` in api.ts), or null when it changed nothing. */
+export function changeIdOf(result: unknown): number | null {
+  const id = result && typeof result === "object" ? (result as { changeId?: unknown }).changeId : undefined;
+  return typeof id === "number" && Number.isFinite(id) ? id : null;
+}
+
 /** What an undo did, in words -- shared by Manage → History and the Undo notes beside each action. */
 export function describeUndo(r: { restored: number; skipped: number; removed: number }) {
   const parts: string[] = [];
