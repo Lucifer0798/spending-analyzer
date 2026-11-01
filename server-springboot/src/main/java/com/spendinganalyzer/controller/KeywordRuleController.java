@@ -72,8 +72,8 @@ public class KeywordRuleController {
         }
         var watch = changeLog.watch("keyword_rules", "keyword = :keyword", Map.of("keyword", keyword));
         var created = rules.create(keyword, category);
-        changeLog.recordSettings("keyword-rule", "Added the keyword rule \"" + keyword + "\" → " + category, watch);
-        return ResponseEntity.ok(created);
+        Long changeId = changeLog.recordSettings("keyword-rule", "Added the keyword rule \"" + keyword + "\" → " + category, watch);
+        return ChangeHeader.ok(created, changeId);
     }
 
     @DeleteMapping("/{id}")
@@ -84,9 +84,9 @@ public class KeywordRuleController {
             return ResponseEntity.status(404).body(new ErrorResponse("Rule not found."));
         }
         var rule = watch.before().get(0);
-        changeLog.recordSettings("keyword-rule",
+        Long changeId = changeLog.recordSettings("keyword-rule",
                 "Deleted the keyword rule \"" + rule.get("keyword") + "\" → " + rule.get("category"), watch);
-        return ResponseEntity.ok(Map.of("ok", true));
+        return ChangeHeader.ok(Map.of("ok", true), changeId);
     }
 
     /**

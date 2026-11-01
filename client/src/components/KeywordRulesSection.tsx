@@ -8,10 +8,13 @@ import {
   runCategorization,
 } from "../api";
 import type { KeywordRule, KeywordRulePreview, ReapplyRulesResult } from "../types";
+import { changeIdOf } from "../undo";
 
 interface Props {
   /** Category names to offer. */
   categories: string[];
+  /** Offers Undo for a History entry, in the page's toast (a plain notice when `id` is null). */
+  offerUndo: (id: number | null, text: string) => void;
 }
 
 /** The same normalisation the server applies, so the preview can tell it matches what's typed. */
@@ -24,7 +27,7 @@ function normalise(keyword: string) {
  * before the built-in rules. A new rule is applied straight away to whatever is still
  * uncategorized; categories already set are never changed by it.
  */
-export function KeywordRulesSection({ categories }: Props) {
+export function KeywordRulesSection({ categories, offerUndo }: Props) {
   const [rules, setRules] = useState<KeywordRule[]>([]);
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("");
@@ -59,14 +62,18 @@ export function KeywordRulesSection({ categories }: Props) {
     setError(null);
     setNotice(null);
     try {
-      await createKeywordRule(typed, category);
+      const created = await createKeywordRule(typed, category);
       // Fill in whatever is still uncategorized now, rather than waiting for the next import.
       const applied = await runCategorization();
-      setNotice(
-        applied.fromKeywordRules > 0
-          ? `Rule added — categorized ${applied.fromKeywordRules} transaction${applied.fromKeywordRules === 1 ? "" : "s"} with it.`
-          : "Rule added. It will apply to future imports."
-      );
+      if (applied.fromKeywordRules > 0) {
+        // No Undo here: it would take the rule away but not the categories it just filled in,
+        // which aren't part of its History entry.
+        setNotice(
+          `Rule added — categorized ${applied.fromKeywordRules} transaction${applied.fromKeywordRules === 1 ? "" : "s"} with it.`
+        );
+      } else {
+        offerUndo(changeIdOf(created), `Added the rule "${typed}" → ${category}. It will apply to future imports.`);
+      }
       setKeyword("");
       setCategory("");
       load();
@@ -81,8 +88,9 @@ export function KeywordRulesSection({ categories }: Props) {
     setError(null);
     setNotice(null);
     try {
-      await deleteKeywordRule(rule.id);
-      setNotice(
+      const result = await deleteKeywordRule(rule.id);
+      offerUndo(
+        changeIdOf(result),
         `Removed "${rule.keyword}". Transactions it already categorized keep their category until you re-apply rules below.`
       );
       load();

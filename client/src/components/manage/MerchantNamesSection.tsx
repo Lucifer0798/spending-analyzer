@@ -49,8 +49,9 @@ export function MerchantNamesSection({ run, refreshKey }: { run: Run; refreshKey
   const write = async (action: () => Promise<unknown>, message: string | undefined, after?: () => void) => {
     let ok = false;
     await run(async () => {
-      await action();
+      const result = await action();
       ok = true;
+      return result; // carries the History id, so the page can offer Undo
     }, message);
     if (ok) after?.();
   };

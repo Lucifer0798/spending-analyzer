@@ -161,8 +161,8 @@ public class BudgetController {
         Budget saved = budgets.upsert(
                 category, limit, escalationType, escalationValue, escalationFrequencyMonths, escalationStartMonth,
                 rolloverStartMonth, period);
-        changeLog.recordSettings("budget", (existed ? "Changed" : "Set") + " the budget for " + category, watch);
-        return ResponseEntity.ok(saved);
+        Long changeId = changeLog.recordSettings("budget", (existed ? "Changed" : "Set") + " the budget for " + category, watch);
+        return ChangeHeader.ok(saved, changeId);
     }
 
     @DeleteMapping("/budgets/{id}")
@@ -172,7 +172,7 @@ public class BudgetController {
         if (!budgets.deleteById(id)) {
             return ResponseEntity.status(404).body(new ErrorResponse("Budget not found."));
         }
-        changeLog.recordSettings("budget", "Removed the budget for " + watch.before().get(0).get("category"), watch);
-        return ResponseEntity.ok(Map.of("ok", true));
+        Long changeId = changeLog.recordSettings("budget", "Removed the budget for " + watch.before().get(0).get("category"), watch);
+        return ChangeHeader.ok(Map.of("ok", true), changeId);
     }
 }
