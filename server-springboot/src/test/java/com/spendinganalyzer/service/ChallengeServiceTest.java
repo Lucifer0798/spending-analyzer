@@ -178,6 +178,7 @@ class ChallengeServiceTest {
         assertThat(ChallengeController.defaultName(null, 0)).isEqualTo("No spending at all");
         assertThat(ChallengeController.defaultName("Shopping", 200)).isEqualTo("Under 200 on Shopping");
         assertThat(ChallengeController.defaultName(null, 49.5)).isEqualTo("Under 49.50 in total");
+        assertThat(ChallengeController.defaultName("Travel", 1_000_000_000)).isEqualTo("Under 1000000000 on Travel");
     }
 
     @Test
@@ -188,6 +189,7 @@ class ChallengeServiceTest {
         assertThat(api.create(with(ok, "endDate", "2027-10-07")).getStatusCode().value()).isEqualTo(400);
         assertThat(api.create(with(ok, "startDate", "October")).getStatusCode().value()).isEqualTo(400);
         assertThat(api.create(with(ok, "limitAmount", -1)).getStatusCode().value()).isEqualTo(400);
+        assertThat(api.create(with(ok, "limitAmount", 1e300)).getStatusCode().value()).isEqualTo(400);
         assertThat(api.create(with(ok, "category", "Nope")).getStatusCode().value()).isEqualTo(400);
         assertThat(api.create(with(ok, "category", "Income")).getStatusCode().value()).isEqualTo(400);
         assertThat(api.create(ok).getStatusCode().value()).isEqualTo(200);

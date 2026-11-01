@@ -18,10 +18,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -31,6 +32,8 @@ import java.util.Optional;
 public class ChallengeController {
 
     static final int MAX_NAME_LENGTH = 80;
+    /** Far beyond any real limit; keeps the amount a plain, well-formed number everywhere it's shown. */
+    static final double MAX_LIMIT = 1_000_000_000;
 
     private final ChallengeRepository challenges;
     private final ChallengeService service;
@@ -80,6 +83,7 @@ public class ChallengeController {
         if (limit == null || limit < 0 || !Double.isFinite(limit)) {
             return bad("limitAmount must be zero (no spending) or more.");
         }
+        if (limit > MAX_LIMIT) return bad("limitAmount can be at most a billion.");
         if (category != null) {
             Optional<Category> found = categories.findAll().stream().filter(c -> c.name().equals(category)).findFirst();
             if (found.isEmpty()) return bad("No category called \"" + category + "\".");
@@ -107,9 +111,15 @@ public class ChallengeController {
         return ChangeHeader.ok(Map.of("ok", true), changeId);
     }
 
-    /** "No spending on Dining & Coffee", "Under 200 on Shopping", "No spending at all". */
+    /**
+     * "No spending on Dining & Coffee", "Under 200 on Shopping", "No spending at all". Formatted via
+     * BigDecimal rather than a cast to long, which could truncate a (huge) value from the request.
+     */
     public static String defaultName(String category, double limit) {
-        String amount = limit == Math.rint(limit) ? String.valueOf((long) limit) : String.format(Locale.ROOT, "%.2f", limit);
+        BigDecimal value = BigDecimal.valueOf(limit);
+        String amount = value.stripTrailingZeros().scale() <= 0
+                ? value.setScale(0, RoundingMode.UNNECESSARY).toPlainString()
+                : value.setScale(2, RoundingMode.HALF_UP).toPlainString();
         if (limit == 0) return category == null ? "No spending at all" : "No spending on " + category;
         return "Under " + amount + (category == null ? " in total" : " on " + category);
     }
