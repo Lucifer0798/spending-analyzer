@@ -206,7 +206,7 @@ class MerchantNameServiceTest {
                 exported.goals(), exported.goalContributions(), exported.tags(), exported.transactionTags(),
                 exported.accountBalances(), exported.filterPresets(), exported.transactionReceipts(),
                 exported.netWorthTarget(), exported.keywordRules(), exported.transferPairs(),
-                exported.duplicateDismissals(), null, null);
+                exported.duplicateDismissals(), null, null, null);
         backups.restore(older);
         assertThat(names.findAll()).isEmpty();
         assertThat(names.dismissedStems()).isEmpty();

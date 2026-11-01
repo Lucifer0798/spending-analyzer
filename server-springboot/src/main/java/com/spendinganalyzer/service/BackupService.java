@@ -6,6 +6,7 @@ import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.BudgetRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.ChallengeRepository;
 import com.spendinganalyzer.repository.DuplicateDismissalRepository;
 import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.FilterPresetRepository;
@@ -56,6 +57,7 @@ public class BackupService {
     private final TransferPairRepository transferPairs;
     private final DuplicateDismissalRepository duplicateDismissals;
     private final MerchantNameRepository merchantNames;
+    private final ChallengeRepository challenges;
     private final ChangeLogService changeLog;
 
     public BackupService(
@@ -77,6 +79,7 @@ public class BackupService {
             TransferPairRepository transferPairs,
             DuplicateDismissalRepository duplicateDismissals,
             MerchantNameRepository merchantNames,
+            ChallengeRepository challenges,
             ChangeLogService changeLog
     ) {
         this.accounts = accounts;
@@ -97,6 +100,7 @@ public class BackupService {
         this.transferPairs = transferPairs;
         this.duplicateDismissals = duplicateDismissals;
         this.merchantNames = merchantNames;
+        this.challenges = challenges;
         this.changeLog = changeLog;
     }
 
@@ -117,7 +121,8 @@ public class BackupService {
             int keywordRules,
             int transferPairs,
             int duplicateDismissals,
-            int merchantNames
+            int merchantNames,
+            int challenges
     ) {}
 
     public BackupData export() {
@@ -142,7 +147,8 @@ public class BackupService {
                 transferPairs.findAll(),
                 duplicateDismissals.findAll(),
                 merchantNames.findAll(),
-                List.copyOf(new TreeSet<>(merchantNames.dismissedStems()))
+                List.copyOf(new TreeSet<>(merchantNames.dismissedStems())),
+                challenges.findAll()
         );
     }
 
@@ -171,6 +177,7 @@ public class BackupService {
         duplicateDismissals.restoreAll(data.duplicateDismissals());
         merchantNames.restoreAll(data.merchantNames());
         merchantNames.restoreDismissedStems(data.dismissedMerchantSuggestions());
+        challenges.restoreAll(data.challenges());
         // History describes the dataset being replaced; undoing any of it now would be nonsense.
         changeLog.clear();
         predictionsCache.deleteAll();
@@ -192,7 +199,8 @@ public class BackupService {
                 data.keywordRules() == null ? 0 : data.keywordRules().size(),
                 data.transferPairs() == null ? 0 : data.transferPairs().size(),
                 data.duplicateDismissals() == null ? 0 : data.duplicateDismissals().size(),
-                data.merchantNames() == null ? 0 : data.merchantNames().size()
+                data.merchantNames() == null ? 0 : data.merchantNames().size(),
+                data.challenges() == null ? 0 : data.challenges().size()
         );
     }
 }
