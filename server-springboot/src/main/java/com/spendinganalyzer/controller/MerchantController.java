@@ -90,9 +90,9 @@ public class MerchantController {
 
         var watch = changeLog.watch("merchant_categories", "merchant_key = :key", Map.of("key", merchantKey));
         repository.saveRule(merchantKey, category, min, max, MerchantCategory.SOURCE_USER);
-        changeLog.recordSettings("merchant-memory", "Merchant memory: " + merchantKey + " → " + category
+        Long changeId = changeLog.recordSettings("merchant-memory", "Merchant memory: " + merchantKey + " → " + category
                 + (min > 0 || max < MerchantCategory.UNBOUNDED ? " (for some amounts)" : ""), watch);
-        return ResponseEntity.ok(Map.of("ok", true, "merchants", repository.findByKey(merchantKey)));
+        return ChangeHeader.ok(Map.of("ok", true, "merchants", repository.findByKey(merchantKey)), changeId);
     }
 
     /** Forgets one merchant so it is asked about fresh on the next categorization run. */
@@ -104,19 +104,19 @@ public class MerchantController {
             return ResponseEntity.status(404).body(new ErrorResponse("Merchant not found."));
         }
         var rule = watch.before().get(0);
-        changeLog.recordSettings("merchant-memory",
+        Long changeId = changeLog.recordSettings("merchant-memory",
                 "Forgot " + rule.get("merchant_key") + " → " + rule.get("category") + " in merchant memory", watch);
-        return ResponseEntity.ok(Map.of("ok", true));
+        return ChangeHeader.ok(Map.of("ok", true), changeId);
     }
 
     @DeleteMapping("/merchants")
     @Transactional
-    public Map<String, Object> forgetAll() {
+    public ResponseEntity<?> forgetAll() {
         var watch = watchAll();
         int forgotten = repository.deleteAll();
-        changeLog.recordSettings("merchant-memory", "Forgot all of merchant memory (" + forgotten + " rule"
+        Long changeId = changeLog.recordSettings("merchant-memory", "Forgot all of merchant memory (" + forgotten + " rule"
                 + (forgotten == 1 ? "" : "s") + ")", watch);
-        return Map.of("ok", true, "forgotten", forgotten);
+        return ChangeHeader.ok(Map.of("ok", true, "forgotten", forgotten), changeId);
     }
 
     /**
@@ -143,10 +143,10 @@ public class MerchantController {
             var rules = importService.parse(file.getInputStream());
             var watch = watchAll();
             var result = importService.apply(rules, mode.equals("replace"));
-            changeLog.recordSettings("merchant-memory", (mode.equals("replace") ? "Replaced merchant memory with " : "Imported ")
+            Long changeId = changeLog.recordSettings("merchant-memory", (mode.equals("replace") ? "Replaced merchant memory with " : "Imported ")
                     + rules.size() + " merchant rule" + (rules.size() == 1 ? "" : "s")
                     + (file.getOriginalFilename() != null ? " from " + file.getOriginalFilename() : ""), watch);
-            return ResponseEntity.ok(result);
+            return ChangeHeader.ok(result, changeId);
         } catch (MerchantImportService.ImportException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "errors", e.errors));
         } catch (IOException e) {

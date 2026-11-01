@@ -61,10 +61,10 @@ public class MerchantNameController {
         }
         var watch = watch(keys);
         String stored = service.rename(keys, name);
-        changeLog.recordSettings("merchant-name", keys.size() == 1
+        Long changeId = changeLog.recordSettings("merchant-name", keys.size() == 1
                 ? "Named " + keys.get(0) + " \"" + stored + "\""
                 : "Merged " + keys.size() + " merchants as \"" + stored + "\"", watch);
-        return ResponseEntity.ok(Map.of("ok", true, "name", stored, "updated", keys.size()));
+        return ChangeHeader.ok(Map.of("ok", true, "name", stored, "updated", keys.size()), changeId);
     }
 
     /** Body: {@code {"keys": [...]}} -- each goes back to showing (and counting) as itself. */
@@ -75,10 +75,10 @@ public class MerchantNameController {
         if (keys == null) return badKeys();
         var watch = watch(keys);
         int cleared = service.clear(keys);
-        changeLog.recordSettings("merchant-name", keys.size() == 1
+        Long changeId = changeLog.recordSettings("merchant-name", keys.size() == 1
                 ? "Took the name off " + keys.get(0)
                 : "Took the names off " + keys.size() + " merchants", watch);
-        return ResponseEntity.ok(Map.of("ok", true, "cleared", cleared));
+        return ChangeHeader.ok(Map.of("ok", true, "cleared", cleared), changeId);
     }
 
     /** Body: {@code {"stem": "AMAZON"}} -- a suggestion's shared word, as listed. */
@@ -89,8 +89,8 @@ public class MerchantNameController {
         if (stem.isEmpty()) return ResponseEntity.badRequest().body(new ErrorResponse("stem is required."));
         var watch = changeLog.watch("merchant_suggestion_dismissals", "stem = :stem", Map.of("stem", stem));
         service.dismissSuggestion(stem);
-        changeLog.recordSettings("merchant-name", "Said merchants starting " + stem + " aren't one merchant", watch);
-        return ResponseEntity.ok(Map.of("ok", true));
+        Long changeId = changeLog.recordSettings("merchant-name", "Said merchants starting " + stem + " aren't one merchant", watch);
+        return ChangeHeader.ok(Map.of("ok", true), changeId);
     }
 
     /** The distinct, non-blank keys in the body, or null when there are none or too many. */

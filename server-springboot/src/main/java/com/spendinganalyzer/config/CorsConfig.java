@@ -33,7 +33,9 @@ public class CorsConfig {
                 registry.addMapping("/api/**")
                         .allowedOriginPatterns(allowedOrigins)
                         .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
-                        .allowedHeaders("*");
+                        .allowedHeaders("*")
+                        // So a cross-origin page can read which History entry a write created.
+                        .exposedHeaders("X-Change-Id");
             }
         };
     }

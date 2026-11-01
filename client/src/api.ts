@@ -131,7 +131,15 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
       body
     );
   }
-  return res.json() as Promise<T>;
+  const body = (await res.json()) as T;
+  // A write's History entry, for an Undo beside it. Transaction writes put it in the body; settings
+  // writes send it as a header, since their bodies are the saved thing itself. Either way the
+  // caller finds it as `changeId` (see changeIdOf).
+  const changeId = res.headers.get("X-Change-Id");
+  if (changeId && body && typeof body === "object" && !Array.isArray(body) && !("changeId" in body)) {
+    (body as Record<string, unknown>).changeId = Number(changeId);
+  }
+  return body;
 }
 
 /** Builds a query string, omitting null/undefined so "all accounts" means no filter. */

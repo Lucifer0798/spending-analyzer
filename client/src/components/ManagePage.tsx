@@ -23,6 +23,8 @@ import { BackupSection } from "./manage/BackupSection";
 import { BudgetsSection } from "./manage/BudgetsSection";
 import { CategoriesSection } from "./manage/CategoriesSection";
 import { HistorySection } from "./manage/HistorySection";
+import { UndoNote } from "./UndoNote";
+import { changeIdOf } from "../undo";
 import { MerchantMemorySection } from "./manage/MerchantMemorySection";
 import { MerchantNamesSection } from "./manage/MerchantNamesSection";
 import { RecurringOverridesSection } from "./manage/RecurringOverridesSection";
@@ -49,6 +51,9 @@ export function ManagePage({ onAccountsChanged }: Props) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The last recorded change, offered for undo in a toast that stays in view wherever on this long
+  // page it was made. A new change replaces it (each stays undoable from History below).
+  const [lastChange, setLastChange] = useState<{ id: number; text: string } | null>(null);
 
   const reload = async () => {
     const [accountsRes, categoriesRes, merchantsRes, budgetsRes, recurringOverridesRes, tagsRes] =
@@ -82,16 +87,26 @@ export function ManagePage({ onAccountsChanged }: Props) {
     setError(null);
     setNotice(null);
     try {
-      await action();
+      const result = await action();
       await reload();
       onAccountsChanged();
-      if (successMessage) setNotice(successMessage);
+      offerUndo(changeIdOf(result), successMessage ?? "Saved.", successMessage !== undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     }
   };
 
-  const banner: Banner = { setError, setNotice };
+  /** Undo when the write made a History entry; otherwise just the message, if there's one to show. */
+  const offerUndo = (id: number | null, text: string, showWithoutUndo = true) => {
+    if (id !== null) {
+      setNotice(null);
+      setLastChange({ id, text });
+    } else if (showWithoutUndo) {
+      setNotice(text);
+    }
+  };
+
+  const banner: Banner = { setError, setNotice, offerUndo: (id, text) => offerUndo(id, text) };
 
   // Budgeting income or transfers is meaningless — neither counts as spending anywhere else.
   const spendingCategories = categories.filter((c) => !c.is_income && !c.is_transfer);
@@ -129,7 +144,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
       {/* Fetches its own list; `categories` is a fresh array after every reload, so it follows the page. */}
       <MerchantNamesSection run={run} refreshKey={categories} />
 
-      <KeywordRulesSection categories={categories.map((c) => c.name)} />
+      <KeywordRulesSection categories={categories.map((c) => c.name)} offerUndo={banner.offerUndo} />
 
       <TransfersSection />
 
@@ -139,6 +154,22 @@ export function ManagePage({ onAccountsChanged }: Props) {
 
       {/* `categories` is a fresh array after every reload, so History re-fetches whenever the page does. */}
       <HistorySection run={run} banner={banner} refreshKey={categories} />
+
+      {lastChange && (
+        // Fixed to the bottom of the screen: the change may have been made far below the banner.
+        <div className="fixed inset-x-0 bottom-4 z-30 mx-auto w-[calc(100%-2rem)] max-w-xl rounded-lg shadow-lg [&>*]:mb-0">
+          <UndoNote
+            key={lastChange.id}
+            text={lastChange.text}
+            changeId={lastChange.id}
+            onUndone={() => {
+              reload().catch((e) => setError(e instanceof Error ? e.message : "Failed to reload."));
+              onAccountsChanged();
+            }}
+            onDismiss={() => setLastChange(null)}
+          />
+        </div>
+      )}
 
       <BackupSection reload={reload} onAccountsChanged={onAccountsChanged} banner={banner} />
     </div>
