@@ -908,7 +908,9 @@ explicitly in **Manage → Merchant memory**, which is also where you can forget
 small service worker (`client/public/sw.js`) make it installable — from the header's **Install
 app** button where the browser offers one (Chrome, Edge), or Share → **Add to Home Screen** on an
 iPhone. The worker caches only the app shell: the page (fetched from the network first, so a new
-version shows up on the next load) and the content-hashed build files. It never touches `/api`, so
+version shows up on the next load) and the content-hashed build files. Only the first page's code
+loads up front; the other pages follow in the background once the app is idle, so every tab still
+opens offline. It never touches `/api`, so
 nothing private sits in the browser's cache and there's no stale data to show; opened with the
 server out of reach, the app says so and offers **Try again** rather than a login screen that
 can't work. Installing needs HTTPS (or `localhost`), which the VM guide's Caddy provides. The
@@ -1018,6 +1020,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Smaller app download~~ — every page but Upload loads on demand (and in the background once
+  the app is idle), so the first load is about a third of the size; the service worker keeps them all
 - ~~Spending challenges~~ — no-spend or spend-under challenges for a category or everything, tracked
   day by day on the Dashboard with a streak, pace and what they saved against your usual
 - ~~Undo on Manage~~ — a change on the Manage page shows "Done — Undo" in a toast at the bottom of
