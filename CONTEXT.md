@@ -243,6 +243,14 @@ Create/delete are History entries; a new row's watch is `id > maxId()`, since AU
 grow. Category rename/delete cascade into challenges like budgets (delete removes them; undoing the
 delete brings them back).
 
+**Every page but Upload is a lazy chunk, prefetched when idle.** `App.tsx` keeps a `pageLoaders`
+map of `import()`s; each page is `lazy()` over its loader, and an effect calls every loader on
+`requestIdleCallback` once signed in, so the first screen needs only the 264 kB entry (81 kB gzip,
+down from one 866 kB file) while every tab is still fetched -- and cached by the service worker --
+for instant switches and offline use. Recharts lands in its own shared chunk with the chart pages.
+Pages render inside `PageBoundary` (keyed by tab): Suspense with "Loading…", and an error boundary
+offering Reload if a chunk can't be fetched (offline before it was cached, or a deploy replaced it).
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The
@@ -384,8 +392,11 @@ and a CURDEF that differs from the account's currency is refused in `UploadContr
 `vite-plugin-pwa`/Workbox: with no precache manifest to generate, the rules fit in one file.
 Navigations are network-first (cached copy stored under `/`, used only when the fetch throws);
 `/assets/*` are cache-first, since Vite hashes them; each fresh page load prunes cached assets the
-new `index.html` no longer references (a future lazy chunk would be pruned too and simply
-re-fetched). `/api` is never intercepted -- no private data in Cache Storage, nothing to clear on
+new build no longer uses. "Uses" walks references from `index.html` through each script
+(`assetPaths`): the page names `/assets/x`, the entry's preload list `assets/x`, and a chunk
+importing another `./x.js`. Pruning by `index.html` alone deleted every lazy page chunk on each load
+-- checked by running the worker's own `assetPaths` over a real `dist/` build, which first missed
+the two chunks with no shared dependencies (imported only as `./x.js`). `/api` is never intercepted -- no private data in Cache Storage, nothing to clear on
 sign-out. It registers only in production builds (`import.meta.env.PROD`). The manifest is
 `manifest.json`, not `.webmanifest`: Spring Boot's MIME table has no `webmanifest` entry, so it would
 be served as a generic binary. `SecurityConfig.SHELL` permits the manifest, `sw.js`, `/icons/**`

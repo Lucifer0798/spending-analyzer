@@ -7,7 +7,9 @@
 //   - Page loads go to the network first, so a new deploy shows up on the next load; the cached
 //     copy is only the fallback for when the server can't be reached.
 //   - /assets/* are content-hashed by Vite, so a cached file never goes stale: cache first. Each
-//     fresh page load prunes the files that page no longer references, so old builds don't pile up.
+//     fresh page load prunes the files the new build no longer uses -- following references from
+//     the page into its scripts, since every page but the first is a chunk only scripts name -- so
+//     old builds don't pile up.
 //
 // Bump VERSION only to force every cache to be thrown away (a change to this file is picked up by
 // the browser on its own).
@@ -79,11 +81,39 @@ async function asset(request) {
   return response;
 }
 
-/** Drops cached build files the current page no longer references. */
+/**
+ * Drops cached build files the current build no longer uses. "Uses" follows references through the
+ * JS too, not just the page: each page past the first is a chunk named only inside the entry script,
+ * and pruning by the page alone would throw those away on every load (and break them offline).
+ */
 async function pruneAssets(html) {
-  const referenced = new Set(html.match(/\/assets\/[^"'\s)]+/g) ?? []);
+  const referenced = new Set();
+  const pending = [...assetPaths(html)];
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (referenced.has(path)) continue;
+    referenced.add(path);
+    if (!path.endsWith(".js")) continue;
+    try {
+      const response = await asset(new Request(path));
+      if (response.ok) pending.push(...assetPaths(await response.clone().text()));
+    } catch {
+      // Can't read it now: keep what's cached rather than guess.
+      return;
+    }
+  }
   const cache = await caches.open(ASSET_CACHE);
   for (const request of await cache.keys()) {
     if (!referenced.has(new URL(request.url).pathname)) await cache.delete(request);
   }
+}
+
+/**
+ * Every /assets/ file a page or script names: the page as "/assets/x", the entry script's preload
+ * list as "assets/x", and one chunk importing another (both in /assets/) as "./x.js".
+ */
+function assetPaths(text) {
+  return (text.match(/\/?assets\/[^"'`\s)]+|\.\/[\w.-]+\.(?:js|css)/g) ?? []).map((p) =>
+    p.startsWith("./") ? `/assets/${p.slice(2)}` : p.startsWith("/") ? p : `/${p}`
+  );
 }

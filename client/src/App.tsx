@@ -1,13 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, useCallback, useEffect, useState } from "react";
 import { UploadPage } from "./components/UploadPage";
-import { Dashboard } from "./components/Dashboard";
-import { TransactionsTable } from "./components/TransactionsTable";
-import { RecurringPage } from "./components/RecurringPage";
-import { GoalsPage } from "./components/GoalsPage";
-import { NetWorthPage } from "./components/NetWorthPage";
-import { YearReviewPage } from "./components/YearReviewPage";
-import { CategoryDetailPage } from "./components/CategoryDetailPage";
-import { ManagePage } from "./components/ManagePage";
+import { PageBoundary } from "./components/PageBoundary";
 import { DateRangePicker } from "./components/DateRangePicker";
 import { LoginScreen } from "./components/LoginScreen";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -38,6 +31,29 @@ import type {
 } from "./types";
 import { ALL_TIME } from "./types";
 import { dayMonth } from "./dates";
+
+// Every page but Upload (the first one shown) is its own download, fetched when it's first opened
+// -- or sooner, in the background once the app is idle (see the prefetch effect below). The charts
+// library only comes with the pages that draw charts. Each loader is kept so the prefetch and the
+// lazy component share one request.
+const pageLoaders = {
+  dashboard: () => import("./components/Dashboard"),
+  transactions: () => import("./components/TransactionsTable"),
+  recurring: () => import("./components/RecurringPage"),
+  goals: () => import("./components/GoalsPage"),
+  netWorth: () => import("./components/NetWorthPage"),
+  year: () => import("./components/YearReviewPage"),
+  category: () => import("./components/CategoryDetailPage"),
+  manage: () => import("./components/ManagePage"),
+};
+const Dashboard = lazy(() => pageLoaders.dashboard().then((m) => ({ default: m.Dashboard })));
+const TransactionsTable = lazy(() => pageLoaders.transactions().then((m) => ({ default: m.TransactionsTable })));
+const RecurringPage = lazy(() => pageLoaders.recurring().then((m) => ({ default: m.RecurringPage })));
+const GoalsPage = lazy(() => pageLoaders.goals().then((m) => ({ default: m.GoalsPage })));
+const NetWorthPage = lazy(() => pageLoaders.netWorth().then((m) => ({ default: m.NetWorthPage })));
+const YearReviewPage = lazy(() => pageLoaders.year().then((m) => ({ default: m.YearReviewPage })));
+const CategoryDetailPage = lazy(() => pageLoaders.category().then((m) => ({ default: m.CategoryDetailPage })));
+const ManagePage = lazy(() => pageLoaders.manage().then((m) => ({ default: m.ManagePage })));
 
 /**
  * What a page is handed when another page opens it -- a merchant to search for, a review panel to
@@ -136,6 +152,21 @@ function App() {
   const loadAccounts = useCallback(() => {
     if (!signedIn) return;
     fetchAccounts().then((r) => setAccounts(r.accounts)).catch(() => setAccounts([]));
+  }, [signedIn]);
+
+  // Once signed in and the first page is up, fetch the other pages' code while the browser is idle:
+  // tab switches are then instant, and the service worker has every page cached for offline use.
+  useEffect(() => {
+    if (!signedIn) return;
+    const prefetch = () => {
+      for (const load of Object.values(pageLoaders)) load().catch(() => {});
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(prefetch, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(prefetch, 2000);
+    return () => clearTimeout(timer);
   }, [signedIn]);
 
   useEffect(() => {
@@ -385,6 +416,7 @@ function App() {
       </header>
 
       <main key={refreshKey}>
+        <PageBoundary key={tab}>
         {tab === "upload" && (
           <UploadPage
             // An alert can pick an account while Upload is already open; remounting is what makes
@@ -446,6 +478,7 @@ function App() {
         {tab === "goals" && <GoalsPage />}
         {tab === "net-worth" && <NetWorthPage showCashFlow={handoff.showCashFlow} />}
         {tab === "manage" && <ManagePage onAccountsChanged={loadAccounts} />}
+        </PageBoundary>
       </main>
     </div>
   );
