@@ -182,7 +182,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 672 tests
+  src/test/                 674 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -324,7 +324,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
 | `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50; `batchId` keeps only pairs with a side from that upload) |
 | `GET` `POST` `DELETE` | `/transfers` | Matched and dismissed pairs; `/transfers/confirm` and `/transfers/dismiss` take `{"pairs": [{"debit_id", "credit_id"}]}`; `DELETE /transfers/{id}` undoes one |
-| `GET` `POST` `DELETE` | `/challenges` | Every spending challenge with how it's going; `POST {"category", "limitAmount", "startDate", "endDate", "accountId"}` starts one (limit 0 = no spending, category null = all spending), `DELETE /challenges/{id}` removes one |
+| `GET` `POST` `DELETE` | `/challenges` | Every spending challenge with how it's going; `POST {"category", "limitAmount", "startDate", "endDate", "accountId"}` starts one (limit 0 = no spending, category null = all spending), `DELETE /challenges/{id}` removes one; `GET /challenges/alerts` lists those over pace, or broken or kept in the last three days |
 | `GET` `POST` | `/merchant-names` | Every merchant with its name and look-alikes worth merging; `POST {"keys": [...], "name": "Amazon"}` names one or merges several, `/merchant-names/clear` takes names off, `/merchant-names/suggestions/dismiss` turns a suggestion down |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
 | `DELETE` | `/reset` | Delete all transactions and their receipts (keeps accounts and categories) |
@@ -852,6 +852,9 @@ every time, so importing a late statement can still break (or keep) one; while t
 transaction is older than today, the card says so. Any spend over the limit — any at all, for a
 no-spend one — marks it **Broken**; finishing within it marks it **Kept**. Starting and deleting
 one are in History, and renaming or deleting a category carries its challenges along, like budgets.
+The header's alerts menu mentions them too: a cap that's **over pace** while it runs, and one that
+**broke** or was **kept** in the last three days — the kept ones in green, and when that's all there
+is, the button shows a green ★ "update" instead of a warning. Each opens the Dashboard at the card.
 
 **Merchants can have a name, and spellings can be merged.** **Manage → Merchant names** lists every
 merchant with how often it appears. Give one a name (`AMZN MKTP US` → "Amazon") and top merchants,
@@ -943,7 +946,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (672).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (674).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1020,6 +1023,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Challenges in alerts~~ — a cap over pace, or a challenge broken or kept in the last three days,
+  shows in the header's alerts menu (kept in green) and opens the Challenges card
 - ~~Smaller app download~~ — every page but Upload loads on demand (and in the background once
   the app is idle), so the first load is about a third of the size; the service worker keeps them all
 - ~~Spending challenges~~ — no-spend or spend-under challenges for a category or everything, tracked

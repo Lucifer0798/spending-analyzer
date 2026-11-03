@@ -30,6 +30,8 @@ interface Props {
   onOpenMerchant: (merchant: string) => void;
   onOpenDay: (date: string) => void;
   onOpenCategory: (category: string) => void;
+  /** Scroll to the Challenges card -- read once at mount (an alert opened the Dashboard). */
+  showChallenges?: boolean;
 }
 
 const BLUE = "#2a78d6";
@@ -206,7 +208,7 @@ function groupTotals(categoryTotals: CategoryTotal[], groupByCategory: Record<st
   return Array.from(byGroup, ([category, v]) => ({ category, total: v.total, count: v.count }));
 }
 
-export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenCategory }: Props) {
+export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenCategory, showChallenges = false }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -372,7 +374,7 @@ export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenC
       <ComparisonCard accountId={accountId} range={range} />
 
       {/* Shows every challenge whatever the filters -- each carries its own dates and account. */}
-      <ChallengesCard accountId={accountId} />
+      <ChallengesCard accountId={accountId} focus={showChallenges} />
 
       {/* Renders nothing until at least one budget is set, so the dashboard is unchanged
           for anyone not using them. */}

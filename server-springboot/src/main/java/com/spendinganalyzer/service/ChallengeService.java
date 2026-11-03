@@ -48,10 +48,22 @@ public class ChallengeService {
      * @param saved          against your usual spend before it started; null with nothing to compare
      * @param dataThrough    the newest transaction on record in its scope -- spend after it may just
      *                       not be imported yet
+     * @param brokenOn       the day spend first went over the limit; null unless broken
      */
     public record Progress(Challenge challenge, boolean applicable, String currency, Status status, double spent,
                            int daysTotal, int daysElapsed, int streak, Boolean onPace, Double remaining,
-                           Double saved, String dataThrough, List<Day> days) {}
+                           Double saved, String dataThrough, List<Day> days, String brokenOn) {}
+
+    /**
+     * Something about a challenge worth the header's alerts menu: a running cap ahead of pace, or one
+     * that broke or was kept in the last {@link #RECENT_DAYS} days.
+     */
+    public enum AlertKind { OFF_PACE, BROKEN, KEPT }
+
+    public record Alert(AlertKind kind, Progress progress) {}
+
+    /** How long "just broke" and "just kept" stay in the alerts menu -- news, not a standing reminder. */
+    static final int RECENT_DAYS = 3;
 
     private final ChallengeRepository challenges;
     private final StatsService stats;
@@ -73,6 +85,27 @@ public class ChallengeService {
         return challenges.findAll().stream().map(this::progress).toList();
     }
 
+    /** What the alerts menu shows: off pace first, then broken, then kept. */
+    public List<Alert> alerts() {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate recent = today.minusDays(RECENT_DAYS);
+        List<Progress> progress = all();
+        List<Alert> alerts = new ArrayList<>();
+        for (AlertKind kind : AlertKind.values()) {
+            for (Progress p : progress) {
+                if (!p.applicable()) continue;
+                boolean show = switch (kind) {
+                    case OFF_PACE -> p.status() == Status.ACTIVE && Boolean.FALSE.equals(p.onPace());
+                    case BROKEN -> p.status() == Status.BROKEN && !LocalDate.parse(p.brokenOn()).isBefore(recent);
+                    case KEPT -> p.status() == Status.COMPLETED
+                            && !LocalDate.parse(p.challenge().endDate()).isBefore(recent);
+                };
+                if (show) alerts.add(new Alert(kind, p));
+            }
+        }
+        return alerts;
+    }
+
     public Progress progress(Challenge c) {
         LocalDate today = LocalDate.now(clock);
         LocalDate start = LocalDate.parse(c.startDate());
@@ -82,7 +115,7 @@ public class ChallengeService {
         String currency = stats.resolveCurrency(c.accountId());
         if (currency == null) {
             return new Progress(c, false, null, today.isBefore(start) ? Status.UPCOMING : Status.ACTIVE, 0,
-                    daysTotal, 0, 0, null, null, null, null, List.of());
+                    daysTotal, 0, 0, null, null, null, null, List.of(), null);
         }
         String dataThrough = stats.availableRange(c.accountId()).to();
 
@@ -110,6 +143,18 @@ public class ChallengeService {
 
         // A cent of slack, so rounding never breaks a challenge that was kept.
         boolean broken = spent > c.limitAmount() + 0.005;
+        String brokenOn = null;
+        if (broken) {
+            double running = 0;
+            for (Day d : days) {
+                if (d.spent() == null) break;
+                running += d.spent();
+                if (running > c.limitAmount() + 0.005) {
+                    brokenOn = d.date();
+                    break;
+                }
+            }
+        }
         Status status = broken ? Status.BROKEN
                 : today.isBefore(start) ? Status.UPCOMING
                 : today.isAfter(end) ? Status.COMPLETED
@@ -123,7 +168,7 @@ public class ChallengeService {
         }
 
         return new Progress(c, true, currency, status, spent, daysTotal, daysElapsed, streak, onPace, remaining,
-                saved(c, start, currency, daysElapsed, spent), dataThrough, days);
+                saved(c, start, currency, daysElapsed, spent), dataThrough, days, brokenOn);
     }
 
     private Double saved(Challenge c, LocalDate start, String currency, int daysElapsed, double spent) {

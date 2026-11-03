@@ -931,4 +931,12 @@ export interface ChallengeProgress {
   dataThrough: string | null;
   /** One per day; spent is null for days still to come. */
   days: { date: string; spent: number | null }[];
+  /** The day spend first went over the limit; null unless broken. */
+  brokenOn: string | null;
+}
+
+/** A challenge worth the header's alerts menu: over pace, or broken or kept in the last few days. */
+export interface ChallengeAlert {
+  kind: "OFF_PACE" | "BROKEN" | "KEPT";
+  progress: ChallengeProgress;
 }

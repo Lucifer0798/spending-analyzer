@@ -155,6 +155,33 @@ class ChallengeServiceTest {
     }
 
     @Test
+    @DisplayName("broken on is the day spend first went over the limit")
+    void brokenOn() {
+        spend("2026-10-02", "DEPARTMENT STORE", 60, "Shopping");
+        spend("2026-10-10", "BOOK SHOP", 50, "Shopping");
+        assertThat(challenge("Shopping", 100, "2026-10-01", "2026-10-31").brokenOn()).isEqualTo("2026-10-10");
+        assertThat(challenge("Shopping", 200, "2026-10-01", "2026-10-31").brokenOn()).isNull();
+    }
+
+    @Test
+    @DisplayName("alerts: a running cap ahead of pace, then one broken or kept in the last three days -- older news isn't")
+    void alerts() {
+        spend("2026-10-10", "BOOK SHOP", 110, "Shopping");
+        spend("2026-10-11", "CORNER CAFE", 4.5, "Dining & Coffee");
+        spend("2026-10-10", "CINEMA", 12, "Entertainment");
+        challenges.create("Shopping cap", "Shopping", 200, "2026-10-01", "2026-10-31", Account.DEFAULT_ID);        // ahead of pace
+        challenges.create("Shopping roomy", "Shopping", 1000, "2026-10-01", "2026-10-31", Account.DEFAULT_ID);     // on pace
+        challenges.create("No cafes", "Dining & Coffee", 0, "2026-10-08", "2026-10-21", Account.DEFAULT_ID);       // broke 10-11
+        challenges.create("No cinema", "Entertainment", 0, "2026-10-08", "2026-10-21", Account.DEFAULT_ID);        // broke 10-10: too long ago
+        challenges.create("Quiet week", "Travel", 0, "2026-10-05", "2026-10-11", Account.DEFAULT_ID);              // kept, ended 10-11
+        challenges.create("Quiet September", "Travel", 0, "2026-09-01", "2026-09-07", Account.DEFAULT_ID);         // kept long ago
+        challenges.create("Later", "Travel", 0, "2026-10-20", "2026-10-27", Account.DEFAULT_ID);                   // not started
+
+        assertThat(service.alerts()).extracting(a -> a.kind() + " " + a.progress().challenge().name())
+                .containsExactly("OFF_PACE Shopping cap", "BROKEN No cafes", "KEPT Quiet week");
+    }
+
+    @Test
     @DisplayName("creating checks its input and names it if no name is given; deleting it -- and creating it -- can be undone")
     void createDeleteAndHistory() {
         Map<String, Object> body = new HashMap<>(Map.of("category", "Dining & Coffee", "limitAmount", 0,

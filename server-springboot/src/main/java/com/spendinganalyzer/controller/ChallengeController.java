@@ -56,6 +56,12 @@ public class ChallengeController {
         return Map.of("challenges", service.all());
     }
 
+    /** For the header's alerts menu -- see {@link ChallengeService#alerts}. */
+    @GetMapping("/alerts")
+    public Map<String, Object> alerts() {
+        return Map.of("alerts", service.alerts());
+    }
+
     /**
      * Body: {@code {"category": "Dining & Coffee" | null, "limitAmount": 0, "startDate": "2026-11-01",
      * "endDate": "2026-11-14", "accountId": null, "name": optional}} -- a limit of 0 is "no spending".
