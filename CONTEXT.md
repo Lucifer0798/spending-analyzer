@@ -242,6 +242,12 @@ applicable" rather than mixing. The card shows every challenge regardless of the
 Create/delete are History entries; a new row's watch is `id > maxId()`, since AUTOINCREMENT ids only
 grow. Category rename/delete cascade into challenges like budgets (delete removes them; undoing the
 delete brings them back).
+`ChallengeService.alerts()` feeds the header menu: OFF_PACE (a running cap with `onPace` false),
+then BROKEN and KEPT only while recent -- `brokenOn` (the first day the running total passed the
+limit) or the end date within `RECENT_DAYS` (3) -- so a broken challenge is news, not a month of
+nagging. Kept items use a new AlertsMenu tone, `good` (green dot); a menu of only good items shows ★
+"update" in green instead of ⚠ "alert". The click hands off `showChallenges`: the Dashboard's card
+scrolls itself into view once loaded, with finished ones shown, since broken and kept sit there.
 
 **Every page but Upload is a lazy chunk, prefetched when idle.** `App.tsx` keeps a `pageLoaders`
 map of `import()`s; each page is `lazy()` over its loader, and an effect calls every loader on

@@ -13,6 +13,7 @@ import type {
   CategoryDrilldown,
   DailySpend,
   CategoryDetail,
+  ChallengeAlert,
   ChallengeProgress,
   ComparisonResponse,
   DateBounds,
@@ -949,6 +950,11 @@ export function createChallenge(body: {
   name?: string;
 }) {
   return request<ChallengeProgress>("/challenges", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Challenges over pace, or broken or kept in the last few days -- for the alerts menu. */
+export function fetchChallengeAlerts() {
+  return request<{ alerts: ChallengeAlert[] }>("/challenges/alerts");
 }
 
 export function deleteChallenge(id: number) {

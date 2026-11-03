@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createChallenge, deleteChallenge, fetchCategories, fetchChallenges } from "../api";
 import type { ChallengeProgress, ChallengeStatus } from "../types";
 import { currency } from "../format";
@@ -7,6 +7,8 @@ import { addDays, dayMonth, todayIso } from "../dates";
 interface Props {
   /** New challenges are scoped to the dashboard's account filter (null: every account). */
   accountId: number | null;
+  /** Scroll here with finished ones shown -- read once at mount (a challenge alert was clicked). */
+  focus?: boolean;
 }
 
 const LENGTHS = [
@@ -104,7 +106,7 @@ function ChallengeRow({ p, onDelete }: { p: ChallengeProgress; onDelete: () => v
                   (p.status === "BROKEN"
                     ? " — over the limit"
                     : ` · ${currency(p.remaining ?? 0, 0, cur)} left` +
-                      (p.status === "ACTIVE" ? (p.onPace ? " · on pace" : " · ahead of pace") : ""))}
+                      (p.status === "ACTIVE" ? (p.onPace ? " · on pace" : " · over pace") : ""))}
               {p.saved !== null && p.saved > 0 && (
                 <span className="text-emerald-700 dark:text-emerald-400">
                   {" "}
@@ -129,11 +131,14 @@ function ChallengeRow({ p, onDelete }: { p: ChallengeProgress; onDelete: () => v
  * Short spending challenges -- "no Dining & Coffee for two weeks", "under $200 on Shopping this
  * month" -- tracked day by day from your transactions. Collapses to one line when there are none.
  */
-export function ChallengesCard({ accountId }: Props) {
+export function ChallengesCard({ accountId, focus = false }: Props) {
   const [items, setItems] = useState<ChallengeProgress[] | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
-  const [showFinished, setShowFinished] = useState(false);
+  // A just-broken or just-kept challenge sits under "finished", so arriving from its alert shows them.
+  const [showFinished, setShowFinished] = useState(focus);
+  const sectionRef = useRef<HTMLElement>(null);
+  const loaded = items !== null;
   const [kind, setKind] = useState<"none" | "cap">("none");
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
@@ -147,6 +152,10 @@ export function ChallengesCard({ accountId }: Props) {
       .catch(() => setItems(null));
   };
   useEffect(load, []);
+  // Once the list is in (the card is empty until then), bring it into view for an alert's click.
+  useEffect(() => {
+    if (focus && loaded) sectionRef.current?.scrollIntoView({ block: "start" });
+  }, [focus, loaded]);
   useEffect(() => {
     fetchCategories()
       .then((r) => setCategories(r.detailed.filter((c) => !c.is_income && !c.is_transfer).map((c) => c.name)))
@@ -193,7 +202,7 @@ export function ChallengesCard({ accountId }: Props) {
   const fieldClass = "rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900";
 
   return (
-    <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+    <section ref={sectionRef} className="mb-6 scroll-mt-20 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Challenges</h2>
         {!open && (

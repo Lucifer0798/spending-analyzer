@@ -12,6 +12,7 @@ import {
   fetchBudgets,
   fetchAccountFreshness,
   fetchCashFlow,
+  fetchChallengeAlerts,
   fetchDuplicateCharges,
   fetchDateBounds,
   logout,
@@ -24,6 +25,7 @@ import type {
   AuthStatus,
   BudgetSummary,
   CashFlowForecast,
+  ChallengeAlert,
   DateBounds,
   DateRangeValue,
   DuplicateChargeGroup,
@@ -31,6 +33,7 @@ import type {
 } from "./types";
 import { ALL_TIME } from "./types";
 import { dayMonth } from "./dates";
+import { currency } from "./format";
 
 // Every page but Upload (the first one shown) is its own download, fetched when it's first opened
 // -- or sooner, in the background once the app is idle (see the prefetch effect below). The charts
@@ -78,6 +81,8 @@ interface Handoff {
   showCashFlow?: boolean;
   /** Upload: preselect this account (a statement-due alert). */
   uploadAccountId?: number;
+  /** Dashboard: scroll to the Challenges card, finished ones shown (a challenge alert). */
+  showChallenges?: boolean;
 }
 
 // "category" is reached by drilling into a Dashboard bar, so it has no button in TABS.
@@ -216,8 +221,16 @@ function App() {
     fetchDuplicateCharges(accountId).then((r) => setDuplicates(r.groups)).catch(() => setDuplicates([]));
   }, [accountId, refreshKey, signedIn, tab]);
 
+  // Drives the challenge alerts: a cap over pace, one just broken, one just kept. Challenges
+  // carry their own account, so this doesn't follow the filter.
+  const [challengeAlerts, setChallengeAlerts] = useState<ChallengeAlert[]>([]);
+  useEffect(() => {
+    if (!signedIn) return;
+    fetchChallengeAlerts().then((r) => setChallengeAlerts(r.alerts)).catch(() => setChallengeAlerts([]));
+  }, [refreshKey, signedIn, tab]);
+
   // Serious first: money already overspent or about to run out; then things to check -- charges
-  // that look taken twice, statements to import.
+  // that look taken twice, statements to import, challenges slipping -- and good news last.
   const alerts: AlertItem[] = [
     ...(overBudget.length > 0
       ? [
@@ -255,6 +268,25 @@ function App() {
       detail: `Newest transaction ${a.daysSinceTransaction} days ago`,
       onSelect: () => go("upload", { uploadAccountId: a.accountId }),
     })),
+    ...challengeAlerts.map(({ kind, progress: p }) => {
+      const c = p.challenge;
+      const cur = p.currency ?? "USD";
+      const of = `${currency(p.spent, 0, cur)} of ${currency(c.limitAmount, 0, cur)}`;
+      return {
+        key: `challenge-${kind}-${c.id}`,
+        tone: kind === "KEPT" ? ("good" as const) : ("nudge" as const),
+        title: kind === "OFF_PACE" ? `"${c.name}" is over pace` : kind === "BROKEN" ? `"${c.name}" broke` : `Kept "${c.name}"`,
+        detail:
+          kind === "OFF_PACE"
+            ? `${of}, ${p.daysTotal - p.daysElapsed} days to go`
+            : kind === "BROKEN"
+              ? `${c.limitAmount === 0 ? `${currency(p.spent, 2, cur)} spent` : of} — over on ${dayMonth(p.brokenOn!)}`
+              : p.saved !== null && p.saved > 0
+                ? `≈${currency(p.saved, 0, cur)} saved vs your usual`
+                : `${dayMonth(c.startDate)}–${dayMonth(c.endDate)}`,
+        onSelect: () => go("dashboard", { showChallenges: true }),
+      };
+    }),
   ];
 
   const openMerchant = (merchant: string) => go("transactions", { search: merchant });
@@ -448,6 +480,7 @@ function App() {
             onOpenMerchant={openMerchant}
             onOpenDay={openDay}
             onOpenCategory={openCategory}
+            showChallenges={handoff.showChallenges}
           />
         )}
         {tab === "category" && handoff.openedCategory && (
