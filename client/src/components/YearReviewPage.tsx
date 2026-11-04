@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchYearReview } from "../api";
+import { RenameMerchant } from "./RenameMerchant";
 import type { CategoryComparison, YearReview } from "../types";
 import { currency } from "../format";
 
@@ -84,6 +85,8 @@ export function YearReviewPage({ accountId, onOpenMerchant }: Props) {
   const [year, setYear] = useState<number | null>(null);
   const [review, setReview] = useState<YearReview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after a merchant is renamed here, to load the review again under the new name.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     fetchYearReview(accountId, year)
@@ -92,7 +95,7 @@ export function YearReviewPage({ accountId, onOpenMerchant }: Props) {
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load the year in review."));
-  }, [accountId, year]);
+  }, [accountId, year, version]);
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -249,14 +252,17 @@ export function YearReviewPage({ accountId, onOpenMerchant }: Props) {
           ) : (
             <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
               {review.topMerchants.map((m) => (
-                <li key={m.merchant} className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-sm">
-                  <button
-                    onClick={() => onOpenMerchant(m.merchant)}
-                    title="Show this merchant's transactions"
-                    className="truncate text-left text-slate-800 hover:text-indigo-600 hover:underline dark:text-slate-200 dark:hover:text-indigo-400"
-                  >
-                    {m.merchant}
-                  </button>
+                <li key={m.keys.join("|")} className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-sm">
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+                    <button
+                      onClick={() => onOpenMerchant(m.merchant)}
+                      title="Show this merchant's transactions"
+                      className="truncate text-left text-slate-800 hover:text-indigo-600 hover:underline dark:text-slate-200 dark:hover:text-indigo-400"
+                    >
+                      {m.merchant}
+                    </button>
+                    <RenameMerchant keys={m.keys} label={m.merchant} named={m.named} onRenamed={() => setVersion((v) => v + 1)} />
+                  </span>
                   <span className="text-right">
                     <span className="font-medium text-slate-900 dark:text-slate-100">{currency(m.total, 0, cur)}</span>
                     <span className="ml-2 text-xs text-slate-500">{m.count} visit{m.count === 1 ? "" : "s"}</span>

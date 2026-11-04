@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { clearRecurringOverride, fetchRecurring, fetchRecurringIncome, saveRecurringOverride } from "../api";
+import { RenameMerchant } from "./RenameMerchant";
 import type { DateRangeValue, RecurringIncomeResponse, RecurringResponse, RecurringSeries } from "../types";
 import { currency, currencyPrecise } from "../format";
 import { SubscriptionAudit } from "./SubscriptionAudit";
@@ -133,6 +134,12 @@ function RecurringIncomeSection({ accountId, range }: Props) {
       .finally(() => setLoading(false));
   }, [accountId, range]);
 
+  // After a rename here: fetch again without the "Finding…" placeholder, which would unmount the
+  // row -- and the Undo beside it.
+  const refresh = () => {
+    fetchRecurringIncome(accountId, range).then(setData).catch(() => {});
+  };
+
   if (loading) {
     return <p className="mt-10 text-sm text-slate-500">Finding recurring income…</p>;
   }
@@ -195,7 +202,10 @@ function RecurringIncomeSection({ accountId, range }: Props) {
                 {series.map((r) => (
                   <tr key={r.merchant}>
                     <td className="px-4 py-2">
-                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.name}</div>
+                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {r.name}{" "}
+                        <RenameMerchant keys={[r.merchant]} label={r.name} named={r.name !== r.merchant} onRenamed={refresh} />
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
                       {CADENCE_LABELS[r.cadence] ?? r.cadence}
@@ -254,6 +264,11 @@ function RecurringChargesSection({ accountId, range }: Props) {
   };
 
   useEffect(load, [accountId, range]);
+
+  // After a rename here: fetch again quietly, keeping the table (and the Undo in it) on screen.
+  const refresh = () => {
+    fetchRecurring(accountId, range).then(setData).catch(() => {});
+  };
 
   if (loading) {
     return <p className="mt-6 text-sm text-slate-500">Finding recurring charges…</p>;
@@ -328,7 +343,10 @@ function RecurringChargesSection({ accountId, range }: Props) {
                 {series.map((r) => (
                   <tr key={r.merchant}>
                     <td className="px-4 py-2">
-                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.name}</div>
+                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {r.name}{" "}
+                        <RenameMerchant keys={[r.merchant]} label={r.name} named={r.name !== r.merchant} onRenamed={refresh} />
+                      </div>
                       {r.category && <div className="text-xs text-slate-500">{r.category}</div>}
                       <PriceChangeNote series={r} currencyCode={cur} />
                     </td>

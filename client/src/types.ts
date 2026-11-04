@@ -421,6 +421,10 @@ export interface MerchantTotal {
   lastDate: string;
   /** Where most of this merchant's spend was categorized, by amount. */
   topCategory: string;
+  /** The merchant keys behind this row -- one, or several merged under one name. */
+  keys: string[];
+  /** Whether `merchant` is a name rather than the key itself. */
+  named: boolean;
 }
 
 export interface TopMerchantsResponse {
