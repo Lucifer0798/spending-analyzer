@@ -257,6 +257,14 @@ for instant switches and offline use. Recharts lands in its own shared chunk wit
 Pages render inside `PageBoundary` (keyed by tab): Suspense with "Loading…", and an error boundary
 offering Reload if a chunk can't be fetched (offline before it was cached, or a deploy replaced it).
 
+**Renaming in place uses the same endpoint as Manage, with the row's keys.** `MerchantTotal` now
+carries `keys` (every merchant key the row stands for -- several once merged) and `named`, so a top
+merchants or Year row renames its whole group and stays merged; a Recurring row is one series, one
+key (`merchant`), so renaming it there can move it out of a merged group -- intended, since it's
+that series. `RenameMerchant` keeps its Undo in its own state, so rows are keyed by `keys` (which a
+rename doesn't change) rather than the label, and the Recurring sections reload with a quiet
+`refresh` -- their `load` swaps the table for "Finding…", which would unmount the row and its Undo.
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The

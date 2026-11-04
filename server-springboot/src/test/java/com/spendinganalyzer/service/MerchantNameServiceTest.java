@@ -79,6 +79,11 @@ class MerchantNameServiceTest {
         assertThat(amazon.count()).isEqualTo(4);
         assertThat(amazon.firstDate()).isEqualTo("2026-03-02");
         assertThat(amazon.lastDate()).isEqualTo("2026-03-20");
+        // The keys behind the row, so renaming it from there renames them all.
+        assertThat(amazon.keys()).containsExactly("AMAZON MKTP US", "AMAZON.COM", "AMZN MKTP US");
+        assertThat(amazon.named()).isTrue();
+        assertThat(totals.get(1).keys()).containsExactly("CORNER CAFE");
+        assertThat(totals.get(1).named()).isFalse();
 
         // Taking one name off splits that spelling back out.
         service.clear(List.of("AMAZON MKTP US"));

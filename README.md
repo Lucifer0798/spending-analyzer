@@ -866,7 +866,9 @@ differently, the latest correction). Recurring keeps merged spellings as separat
 two spellings can be two subscriptions, but shows the name. The section also suggests look-alikes
 that start with the same distinctive word (`AMAZON.COM`, `AMAZON MKTP`) — never merged until you say
 so, and "Not the same" stops one being offered again. Descriptions are never changed, and a reset
-keeps names, as it keeps merchant memory.
+keeps names, as it keeps merchant memory. You don't have to go to Manage to name one: a small ✎ beside a merchant
+in the Dashboard's top merchants, the Year page and both Recurring tables renames it on the spot
+(a merged group is renamed as a whole), with Undo right there and an entry in History.
 
 **Merchant memory keys on a cleaned-up merchant name.** Store numbers and order references vary
 per visit (`WHOLE FOODS MARKET #123`, `AMAZON.COM*AB123`), so they're stripped before matching.
@@ -1023,6 +1025,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Rename from where you see it~~ — a ✎ beside merchants on top merchants, the Year page and
+  Recurring names them in place, with Undo beside it
 - ~~Challenges in alerts~~ — a cap over pace, or a challenge broken or kept in the last three days,
   shows in the header's alerts menu (kept in green) and opens the Challenges card
 - ~~Smaller app download~~ — every page but Upload loads on demand (and in the background once

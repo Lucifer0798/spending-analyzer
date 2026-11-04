@@ -3,6 +3,7 @@ import { fetchTopMerchants } from "../api";
 import type { DateRangeValue, TopMerchantsResponse } from "../types";
 import { currency, currencyPrecise } from "../format";
 import { dayMonthYear } from "../dates";
+import { RenameMerchant } from "./RenameMerchant";
 
 interface Props {
   accountId: number | null;
@@ -21,11 +22,13 @@ const EXPANDED = 25;
 export function TopMerchantsCard({ accountId, range, onOpenMerchant }: Props) {
   const [response, setResponse] = useState<TopMerchantsResponse | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Bumped after a rename here, to fetch the list again under the new name.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     // Always fetch the expanded length: toggling "show more" then needs no second request.
     fetchTopMerchants(accountId, range, EXPANDED).then(setResponse).catch(() => setResponse(null));
-  }, [accountId, range]);
+  }, [accountId, range, version]);
 
   if (!response?.applicable || !response.currency || response.merchants.length === 0) return null;
 
@@ -44,15 +47,19 @@ export function TopMerchantsCard({ accountId, range, onOpenMerchant }: Props) {
 
       <ul className="space-y-2.5">
         {shown.map((m) => (
-          <li key={m.merchant}>
+          // Keyed by its keys, which a rename doesn't change -- so the Undo beside it survives the reload.
+          <li key={m.keys.join("|")}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-              <button
-                onClick={() => onOpenMerchant(m.merchant)}
-                title="Show this merchant's transactions"
-                className="truncate text-left font-medium text-slate-800 hover:text-indigo-600 hover:underline dark:text-slate-200 dark:hover:text-indigo-400"
-              >
-                {m.merchant}
-              </button>
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+                <button
+                  onClick={() => onOpenMerchant(m.merchant)}
+                  title="Show this merchant's transactions"
+                  className="truncate text-left font-medium text-slate-800 hover:text-indigo-600 hover:underline dark:text-slate-200 dark:hover:text-indigo-400"
+                >
+                  {m.merchant}
+                </button>
+                <RenameMerchant keys={m.keys} label={m.merchant} named={m.named} onRenamed={() => setVersion((v) => v + 1)} />
+              </span>
               <span className="font-semibold text-slate-900 dark:text-slate-100">{currency(m.total, 0, cur)}</span>
             </div>
             <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">

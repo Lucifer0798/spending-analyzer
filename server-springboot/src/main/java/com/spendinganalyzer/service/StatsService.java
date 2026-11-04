@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -347,11 +348,14 @@ public class StatsService {
             String first;
             String last;
             final Map<String, Double> byCategory = new HashMap<>();
+            final Set<String> keys = new TreeSet<>();
         }
         MerchantNameRepository.Names names = merchantNames.load();
         Map<String, Acc> byMerchant = new HashMap<>();
         for (Row row : rows) {
-            Acc acc = byMerchant.computeIfAbsent(names.label(MerchantNormalizer.normalize(row.description())), k -> new Acc());
+            String key = MerchantNormalizer.normalize(row.description());
+            Acc acc = byMerchant.computeIfAbsent(names.label(key), k -> new Acc());
+            acc.keys.add(key);
             acc.total += row.amount();
             acc.count++;
             if (acc.first == null || row.date().compareTo(acc.first) < 0) acc.first = row.date();
@@ -367,7 +371,8 @@ public class StatsService {
                     .map(Map.Entry::getKey)
                     .orElse("Uncategorized");
             totals.add(new MerchantTotal(entry.getKey(), Money.round2(acc.total), acc.count,
-                    Money.round2(acc.total / acc.count), acc.first, acc.last, topCategory));
+                    Money.round2(acc.total / acc.count), acc.first, acc.last, topCategory,
+                    List.copyOf(acc.keys), names.byKey().containsKey(acc.keys.iterator().next())));
         }
         totals.sort(Comparator.comparingDouble(MerchantTotal::total).reversed()
                 .thenComparing(MerchantTotal::merchant));

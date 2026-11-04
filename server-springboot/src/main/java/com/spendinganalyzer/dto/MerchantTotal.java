@@ -1,5 +1,7 @@
 package com.spendinganalyzer.dto;
 
+import java.util.List;
+
 /**
  * Spend at one merchant, keyed by {@code MerchantNormalizer} so every branch of a chain and every
  * order reference counts as the same place -- the same key merchant memory and recurring detection use.
@@ -17,5 +19,9 @@ public record MerchantTotal(
         double averageAmount,
         String firstDate,
         String lastDate,
-        String topCategory
+        String topCategory,
+        /** The merchant keys behind this row -- one, or several merged under one name -- for renaming it. */
+        List<String> keys,
+        /** Whether it has a name, rather than showing its key. */
+        boolean named
 ) {}
