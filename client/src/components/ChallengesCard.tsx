@@ -3,6 +3,8 @@ import { createChallenge, deleteChallenge, fetchCategories, fetchChallenges } fr
 import type { ChallengeProgress, ChallengeStatus } from "../types";
 import { currency } from "../format";
 import { addDays, dayMonth, todayIso } from "../dates";
+import { changeIdOf } from "../undo";
+import { UndoNote } from "./UndoNote";
 
 interface Props {
   /** New challenges are scoped to the dashboard's account filter (null: every account). */
@@ -138,6 +140,10 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
   // A just-broken or just-kept challenge sits under "finished", so arriving from its alert shows them.
   const [showFinished, setShowFinished] = useState(focus);
   const sectionRef = useRef<HTMLElement>(null);
+  // The last challenge started or deleted here, offered for undo. One at a time, like the other
+  // pages: a new change replaces it, and each stays undoable from Manage → History.
+  const [lastChange, setLastChange] = useState<{ id: number; text: string } | null>(null);
+  const offerUndo = (id: number | null, text: string) => setLastChange(id === null ? null : { id, text });
   const loaded = items !== null;
   const [kind, setKind] = useState<"none" | "cap">("none");
   const [category, setCategory] = useState("");
@@ -178,7 +184,8 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await createChallenge({ category: category || null, limitAmount: limit, startDate, endDate, accountId });
+      const created = await createChallenge({ category: category || null, limitAmount: limit, startDate, endDate, accountId });
+      offerUndo(changeIdOf(created), `Started "${created.challenge.name}"`);
       setOpen(false);
       setAmount("");
       load();
@@ -192,7 +199,7 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
   const remove = async (p: ChallengeProgress) => {
     if (!confirm(`Delete the challenge "${p.challenge.name}"?`)) return;
     try {
-      await deleteChallenge(p.challenge.id);
+      offerUndo(changeIdOf(await deleteChallenge(p.challenge.id)), `Deleted "${p.challenge.name}"`);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't delete that.");
@@ -278,6 +285,18 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
         </div>
       )}
       {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+      {lastChange && (
+        <div className="mt-3 [&>*]:mb-0">
+          <UndoNote
+            key={lastChange.id}
+            text={lastChange.text}
+            changeId={lastChange.id}
+            onUndone={load}
+            onDismiss={() => setLastChange(null)}
+          />
+        </div>
+      )}
 
       {current.length > 0 && (
         <ul className="mt-1 divide-y divide-slate-100 dark:divide-slate-800">
