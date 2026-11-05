@@ -239,7 +239,8 @@ the limit's share of the days so far. "Saved" compares to the scope's average da
 days before the start, null when that window has no spend. All accounts in mixed currencies is "not
 applicable" rather than mixing. The card shows every challenge regardless of the Dashboard's filters
 (each carries its own dates and account) and starts new ones today, scoped to the account filter.
-Create/delete are History entries; a new row's watch is `id > maxId()`, since AUTOINCREMENT ids only
+Create/delete are History entries, offered for undo in the card (`UndoNote`, using the id from
+`X-Change-Id`); a new row's watch is `id > maxId()`, since AUTOINCREMENT ids only
 grow. Category rename/delete cascade into challenges like budgets (delete removes them; undoing the
 delete brings them back).
 `ChallengeService.alerts()` feeds the header menu: OFF_PACE (a running cap with `onPace` false),

@@ -850,8 +850,8 @@ roughly what it saved against your usual: the average daily spend in that scope 
 before it started, times the days so far, minus what you spent. It's worked out from transactions
 every time, so importing a late statement can still break (or keep) one; while the newest
 transaction is older than today, the card says so. Any spend over the limit — any at all, for a
-no-spend one — marks it **Broken**; finishing within it marks it **Kept**. Starting and deleting
-one are in History, and renaming or deleting a category carries its challenges along, like budgets.
+no-spend one — marks it **Broken**; finishing within it marks it **Kept**. Starting or deleting one
+offers **Undo** right in the card and is in History too, and renaming or deleting a category carries its challenges along, like budgets.
 The header's alerts menu mentions them too: a cap that's **over pace** while it runs, and one that
 **broke** or was **kept** in the last three days — the kept ones in green, and when that's all there
 is, the button shows a green ★ "update" instead of a warning. Each opens the Dashboard at the card.
@@ -1025,6 +1025,7 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Undo on the Dashboard~~ — starting or deleting a challenge offers Undo right in the card
 - ~~Rename from where you see it~~ — a ✎ beside merchants on top merchants, the Year page and
   Recurring names them in place, with Undo beside it
 - ~~Challenges in alerts~~ — a cap over pace, or a challenge broken or kept in the last three days,
