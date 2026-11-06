@@ -132,6 +132,12 @@ public class BudgetRepository {
         return findByCategory(category).orElseThrow();
     }
 
+    /** Categories whose budget was first set after {@code date} -- it can't speak for time before then. */
+    public List<String> categoriesCreatedAfter(String date) {
+        return jdbc.queryForList("SELECT category FROM budgets WHERE date(created_at) > :date",
+                new MapSqlParameterSource("date", date), String.class);
+    }
+
     public boolean deleteById(long id) {
         return jdbc.update("DELETE FROM budgets WHERE id = :id",
                 new MapSqlParameterSource("id", id)) > 0;

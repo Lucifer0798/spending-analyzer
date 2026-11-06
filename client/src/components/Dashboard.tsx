@@ -18,6 +18,7 @@ import { ExportLink } from "./ExportLink";
 import { AnomaliesCard } from "./AnomaliesCard";
 import { BudgetsCard } from "./BudgetsCard";
 import { ChallengesCard } from "./ChallengesCard";
+import { MonthlySummaryCard } from "./MonthlySummaryCard";
 import { BudgetVsIncomeCard } from "./BudgetVsIncomeCard";
 import { ComparisonCard } from "./ComparisonCard";
 import { TopMerchantsCard } from "./TopMerchantsCard";
@@ -32,6 +33,8 @@ interface Props {
   onOpenCategory: (category: string) => void;
   /** Scroll to the Challenges card -- read once at mount (an alert opened the Dashboard). */
   showChallenges?: boolean;
+  /** Narrows the shared date filter (the monthly summary's "Look at October"). */
+  onOpenRange: (range: DateRangeValue) => void;
 }
 
 const BLUE = "#2a78d6";
@@ -208,7 +211,7 @@ function groupTotals(categoryTotals: CategoryTotal[], groupByCategory: Record<st
   return Array.from(byGroup, ([category, v]) => ({ category, total: v.total, count: v.count }));
 }
 
-export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenCategory, showChallenges = false }: Props) {
+export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenCategory, showChallenges = false, onOpenRange }: Props) {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [predictions, setPredictions] = useState<PredictionsPayload | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -344,6 +347,9 @@ export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenC
           {refreshing ? "Generating…" : "Generate predictions"}
         </button>
       </div>
+
+      {/* Renders nothing without spend last month, or once dismissed until the next month ends. */}
+      <MonthlySummaryCard accountId={accountId} onOpenRange={onOpenRange} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile

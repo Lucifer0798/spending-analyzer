@@ -481,6 +481,7 @@ function App() {
             onOpenDay={openDay}
             onOpenCategory={openCategory}
             showChallenges={handoff.showChallenges}
+            onOpenRange={setRange}
           />
         )}
         {tab === "category" && handoff.openedCategory && (
