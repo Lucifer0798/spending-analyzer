@@ -32,6 +32,11 @@ export function monthYear(month: string) {
   });
 }
 
+/** "October", from a "2026-10" month key. */
+export function monthName(month: string) {
+  return new Date(`${month}-01${AT_MIDNIGHT_UTC}`).toLocaleDateString(undefined, { month: "long", timeZone: "UTC" });
+}
+
 /** The ISO date `days` after (or, negative, before) `iso`. */
 export function addDays(iso: string, days: number) {
   const d = new Date(`${iso}${AT_MIDNIGHT_UTC}`);

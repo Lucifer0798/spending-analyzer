@@ -18,6 +18,7 @@ there's no hosted database and no account to sign up for.
 | **Categorize** | Sorts transactions into categories with built-in rules, and remembers every merchant you correct |
 | **Multiple accounts** | Keep a current account and a credit card separate, or view everything together |
 | **Transfers** | Spots money moved between your own accounts so it isn't counted as spending or income |
+| **Monthly summary** | "How October went" at the top of the Dashboard: the total against the month before, the biggest changes, budgets and challenges kept |
 | **Spending challenges** | "No eating out for two weeks" or "under $200 on Shopping this month", tracked day by day on the Dashboard |
 | **Merchant names** | Rename `AMZN MKTP US*2K4` to "Amazon" and merge its other spellings, so reports count it once |
 | **Recurring charges** | Finds subscriptions and regular bills, with an annual cost and next expected date |
@@ -182,7 +183,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 674 tests
+  src/test/                 681 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -324,6 +325,7 @@ All endpoints live under `/api`.
 | `GET` `POST` `DELETE` | `/keyword-rules` | Your keyword rules — list, add, remove; `/keyword-rules/preview?keyword=` shows what a keyword would match first |
 | `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50; `batchId` keeps only pairs with a side from that upload) |
 | `GET` `POST` `DELETE` | `/transfers` | Matched and dismissed pairs; `/transfers/confirm` and `/transfers/dismiss` take `{"pairs": [{"debit_id", "credit_id"}]}`; `DELETE /transfers/{id}` undoes one |
+| `GET` | `/monthly-summary` | How the last complete month went (`accountId`): total against the month before, biggest category rise and fall, budgets and challenges kept |
 | `GET` `POST` `DELETE` | `/challenges` | Every spending challenge with how it's going; `POST {"category", "limitAmount", "startDate", "endDate", "accountId"}` starts one (limit 0 = no spending, category null = all spending), `DELETE /challenges/{id}` removes one; `GET /challenges/alerts` lists those over pace, or broken or kept in the last three days |
 | `GET` `POST` | `/merchant-names` | Every merchant with its name and look-alikes worth merging; `POST {"keys": [...], "name": "Amazon"}` names one or merges several, `/merchant-names/clear` takes names off, `/merchant-names/suggestions/dismiss` turns a suggestion down |
 | `POST` | `/merchants/import` | Load merchant rules from a CSV — `mode=merge` (default) or `mode=replace`; all or nothing |
@@ -841,6 +843,15 @@ months of the year actually have transactions, because a year imported from Marc
 differently from a full one — and when comparing against the year before, it warns if the two
 years have different amounts of data, since part of any difference is then just coverage.
 
+**The Dashboard opens with how last month went.** Once a month has ended, a card shows what you
+spent against the month before, the category that rose most and the one that fell most, how many
+monthly budgets were kept (naming any overspent) and which challenges ended kept or broken. **Look
+at October** sets the date filter to that month; × hides the card until the next month ends (per
+browser, like the theme). It follows the account filter but not the date filter. It says when its
+numbers are shaky: if nothing newer than part-way through the month is imported, or if your
+transactions start part-way through the month before. A budget set after the month ended isn't
+counted, and neither are weekly or quarterly ones, which don't measure that month.
+
 **Spending challenges are a short promise, checked against what you actually spent.** The
 Dashboard's **Challenges** card starts one from today: *no spending* on a category (or on anything),
 or *spend under* an amount, for a week, two weeks, 30 days or the rest of the month. Each shows a
@@ -948,7 +959,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (674).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (681).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1025,6 +1036,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Monthly summary~~ — "How October went" at the top of the Dashboard: total against the month
+  before, biggest changes, budgets and challenges kept, and a warning when the data is thin
 - ~~Undo on the Dashboard~~ — starting or deleting a challenge offers Undo right in the card
 - ~~Rename from where you see it~~ — a ✎ beside merchants on top merchants, the Year page and
   Recurring names them in place, with Undo beside it

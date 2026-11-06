@@ -266,6 +266,17 @@ that series. `RenameMerchant` keeps its Undo in its own state, so rows are keyed
 rename doesn't change) rather than the label, and the Recurring sections reload with a quiet
 `refresh` -- their `load` swaps the table for "Finding…", which would unmount the row and its Undo.
 
+**The monthly summary is computed on read and hedges rather than asserts.** `MonthlySummaryService`
+takes the last complete calendar month by `Clock`, follows the account filter and ignores the date
+filter. It reuses `computeCategoryTotals`, `BudgetService.progress(month)` and `ChallengeService.all()`
+and stores nothing. `newestTransaction` is set when the latest spend on record is before the month's
+end (the month may not be fully imported -- a rent not yet imported reads as a big "drop"), and
+`dataStarts` when the record begins more than `START_SLACK_DAYS` into the month before. Budgets count
+only if monthly and created by the month's end, via `budgets.created_at`; `restoreAll` doesn't carry
+that column, so after a backup restore budgets count as new and drop off the line until next month
+-- a missing line, not a wrong one. Challenges count by end date and ignore the account filter, as the
+card does. Dismissal is `localStorage` (one month key), a per-browser convenience like the theme.
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The

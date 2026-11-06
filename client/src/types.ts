@@ -944,3 +944,39 @@ export interface ChallengeAlert {
   kind: "OFF_PACE" | "BROKEN" | "KEPT";
   progress: ChallengeProgress;
 }
+
+/** How the last complete month went. Everything but `available` is empty when it's false. */
+export interface MonthlySummary {
+  /** False with no spend that month, or across accounts in more than one currency. */
+  available: boolean;
+  month: string | null;
+  monthStart: string | null;
+  monthEnd: string | null;
+  previousMonth: string | null;
+  currency: string | null;
+  total: number;
+  /** Null, like the two changes, with no spend the month before. */
+  previousTotal: number | null;
+  change: number | null;
+  changePercent: number | null;
+  biggestRise: MonthlyCategoryChange | null;
+  biggestFall: MonthlyCategoryChange | null;
+  /** Monthly budgets that existed when the month ended. */
+  budgetsKept: number;
+  budgetsTotal: number;
+  budgetsOver: string[];
+  /** Challenges that ended in the month. */
+  challengesKept: number;
+  challengesBroken: number;
+  /** Set when nothing newer is on record, so the month may not be fully imported. */
+  newestTransaction: string | null;
+  /** Set when transactions begin part-way through the month before, so it may read low. */
+  dataStarts: string | null;
+}
+
+export interface MonthlyCategoryChange {
+  category: string;
+  total: number;
+  previous: number;
+  change: number;
+}

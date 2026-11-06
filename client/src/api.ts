@@ -36,6 +36,7 @@ import type {
   MerchantNamesResponse,
   MerchantsResponse,
   MoneyFlow,
+  MonthlySummary,
   NetWorthResponse,
   PredictionsResponse,
   RecurringAction,
@@ -933,6 +934,11 @@ export function dismissMerchantSuggestion(stem: string) {
     method: "POST",
     body: JSON.stringify({ stem }),
   });
+}
+
+/** How the last complete month went, for one account or all of them. */
+export function fetchMonthlySummary(accountId: number | null) {
+  return request<MonthlySummary>(`/monthly-summary${qs({ accountId })}`);
 }
 
 /** Every spending challenge with how it's going, newest start first. */
