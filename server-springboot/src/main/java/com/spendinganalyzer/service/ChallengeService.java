@@ -141,20 +141,20 @@ public class ChallengeService {
         int streak = 0;
         for (int i = daysElapsed - 1; i >= 0 && days.get(i).spent() == 0; i--) streak++;
 
-        // A cent of slack, so rounding never breaks a challenge that was kept.
-        boolean broken = spent > c.limitAmount() + 0.005;
+        // Broken is the day the running total first passes the limit -- with a cent of slack, so
+        // rounding never breaks a challenge that was kept. One calculation for both, so a broken
+        // challenge always has the day it broke (the alerts menu reads it).
         String brokenOn = null;
-        if (broken) {
-            double running = 0;
-            for (Day d : days) {
-                if (d.spent() == null) break;
-                running += d.spent();
-                if (running > c.limitAmount() + 0.005) {
-                    brokenOn = d.date();
-                    break;
-                }
+        double running = 0;
+        for (Day d : days) {
+            if (d.spent() == null) break;
+            running += d.spent();
+            if (running > c.limitAmount() + 0.005) {
+                brokenOn = d.date();
+                break;
             }
         }
+        boolean broken = brokenOn != null;
         Status status = broken ? Status.BROKEN
                 : today.isBefore(start) ? Status.UPCOMING
                 : today.isAfter(end) ? Status.COMPLETED

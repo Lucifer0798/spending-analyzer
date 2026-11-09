@@ -44,23 +44,17 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(page(request));
+    event.respondWith(page(request, event));
   } else if (url.pathname.startsWith("/assets/")) {
     event.respondWith(asset(request));
   }
   // Anything else (icons, the manifest) goes to the network as normal.
 });
 
-async function page(request) {
+async function page(request, event) {
+  let response;
   try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const copy = response.clone();
-      const cache = await caches.open(SHELL_CACHE);
-      await cache.put(SHELL_URL, copy.clone());
-      await pruneAssets(await copy.text());
-    }
-    return response;
+    response = await fetch(request);
   } catch {
     const cached = await caches.match(SHELL_URL);
     return cached ?? new Response("Spending Analyzer can't reach its server.", {
@@ -68,6 +62,21 @@ async function page(request) {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
+  // Cache the page and prune old build files after answering, not before: pruning reads every
+  // script the build names, which on the first load of a new build means downloading all of them --
+  // the page shouldn't wait for that, and a failure in it shouldn't turn a good response into the
+  // offline one. waitUntil keeps the worker alive until it's done.
+  if (response.ok) {
+    const copy = response.clone();
+    event.waitUntil(
+      (async () => {
+        const cache = await caches.open(SHELL_CACHE);
+        await cache.put(SHELL_URL, copy.clone());
+        await pruneAssets(await copy.text());
+      })().catch(() => {})
+    );
+  }
+  return response;
 }
 
 async function asset(request) {

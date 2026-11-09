@@ -422,7 +422,11 @@ new build no longer uses. "Uses" walks references from `index.html` through each
 (`assetPaths`): the page names `/assets/x`, the entry's preload list `assets/x`, and a chunk
 importing another `./x.js`. Pruning by `index.html` alone deleted every lazy page chunk on each load
 -- checked by running the worker's own `assetPaths` over a real `dist/` build, which first missed
-the two chunks with no shared dependencies (imported only as `./x.js`). `/api` is never intercepted -- no private data in Cache Storage, nothing to clear on
+the two chunks with no shared dependencies (imported only as `./x.js`). Pruning (and caching the page) runs after
+the navigation is answered, under `event.waitUntil`: it reads every chunk, which on a new build's
+first load means downloading them all, and awaiting it first held the page back until the whole app
+had arrived -- found in review, proved with a Node harness running the worker against hanging
+downloads. `/api` is never intercepted -- no private data in Cache Storage, nothing to clear on
 sign-out. It registers only in production builds (`import.meta.env.PROD`). The manifest is
 `manifest.json`, not `.webmanifest`: Spring Boot's MIME table has no `webmanifest` entry, so it would
 be served as a generic binary. `SecurityConfig.SHELL` permits the manifest, `sw.js`, `/icons/**`
