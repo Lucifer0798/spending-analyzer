@@ -46,14 +46,9 @@ export function MerchantNamesSection({ run, refreshKey }: { run: Run; refreshKey
 
   /** `run`, then `after` only if the write went through -- on failure the banner shows why, and
    *  what was typed stays put to try again. */
-  const write = async (action: () => Promise<unknown>, message: string | undefined, after?: () => void) => {
-    let ok = false;
-    await run(async () => {
-      const result = await action();
-      ok = true;
-      return result; // carries the History id, so the page can offer Undo
-    }, message);
-    if (ok) after?.();
+  const write = async (action: () => Promise<object>, message: string | undefined, after?: () => void) => {
+    // Every write here answers with an object, so undefined can only mean it failed.
+    if ((await run(action, message)) !== undefined) after?.();
   };
 
   const draftOf = (m: MerchantNameEntry) => drafts[m.key] ?? m.name ?? "";

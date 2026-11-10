@@ -91,8 +91,10 @@ export function ManagePage({ onAccountsChanged }: Props) {
       await reload();
       onAccountsChanged();
       offerUndo(changeIdOf(result), successMessage ?? "Saved.", successMessage !== undefined);
+      return result;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
+      return undefined;
     }
   };
 

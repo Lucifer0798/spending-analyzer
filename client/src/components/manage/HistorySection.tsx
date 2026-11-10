@@ -40,12 +40,9 @@ export function HistorySection({ run, banner, refreshKey }: { run: Run; banner: 
 
   const undo = async (e: HistoryEntry) => {
     setBusy(e.id);
-    // Only set once the undo succeeded -- on failure `run` has already put the error in the banner.
-    let message: string | null = null;
-    await run(async () => {
-      message = describeUndo(await undoChange(e.id));
-    });
-    if (message) banner.setNotice(message);
+    // Only once the undo went through -- on failure `run` has already put the error in the banner.
+    const result = await run(() => undoChange(e.id));
+    if (result) banner.setNotice(describeUndo(result));
     setBusy(null);
     load();
   };
