@@ -29,7 +29,8 @@ public class BudgetRepository {
             rs.getString("escalation_start_month"),
             rs.getString("rollover_start_month"),
             rs.getString("period"),
-            rs.getString("updated_at")
+            rs.getString("updated_at"),
+            rs.getString("created_at")
     );
 
     private static Double nullableDouble(ResultSet rs, String column) throws java.sql.SQLException {
@@ -159,18 +160,21 @@ public class BudgetRepository {
                         .addValue("escalationStartMonth", b.escalationStartMonth())
                         .addValue("rolloverStartMonth", b.rolloverStartMonth())
                         .addValue("period", b.period())
-                        .addValue("updatedAt", b.updatedAt()))
+                        .addValue("updatedAt", b.updatedAt())
+                        .addValue("createdAt", b.createdAt()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
                 INSERT INTO budgets (
                   id, category, monthly_limit,
                   escalation_type, escalation_value, escalation_frequency_months, escalation_start_month,
-                  rollover_start_month, period, updated_at
+                  rollover_start_month, period, updated_at, created_at
                 ) VALUES (
                   :id, :category, :limit,
                   :escalationType, :escalationValue, :escalationFrequencyMonths, :escalationStartMonth,
-                  :rolloverStartMonth, :period, :updatedAt
+                  :rolloverStartMonth, :period, :updatedAt,
+                  -- A backup from before created_at was included has none: "now", as it always was.
+                  COALESCE(:createdAt, datetime('now'))
                 )
                 """, params);
     }
