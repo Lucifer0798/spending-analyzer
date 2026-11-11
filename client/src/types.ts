@@ -520,6 +520,8 @@ export interface Budget {
   /** YYYY-MM rollover starts accumulating from, or null when unused budget doesn't carry forward. */
   rollover_start_month: string | null;
   updated_at: string;
+  /** When it was first set -- the monthly summary counts a budget only for months it existed in. */
+  created_at: string;
 }
 
 /** "near" is 80% or more of the target; "over" is past it. */

@@ -28,7 +28,13 @@ public record Budget(
         @JsonProperty("escalation_start_month") String escalationStartMonth,
         @JsonProperty("rollover_start_month") String rolloverStartMonth,
         String period,
-        @JsonProperty("updated_at") String updatedAt
+        @JsonProperty("updated_at") String updatedAt,
+        /**
+         * When the budget was first set. Carried through backups so the monthly summary can still
+         * tell a budget that was in force from one set afterwards; null in a backup from before it
+         * was included, which restores as "now".
+         */
+        @JsonProperty("created_at") String createdAt
 ) {
     public static final String MONTHLY = "monthly";
     public static final String WEEKLY = "weekly";

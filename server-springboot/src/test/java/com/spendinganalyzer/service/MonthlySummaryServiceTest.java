@@ -1,5 +1,6 @@
 package com.spendinganalyzer.service;
 
+import com.spendinganalyzer.dto.BackupData;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.Budget;
 import com.spendinganalyzer.model.ParsedTransaction;
@@ -39,6 +40,7 @@ class MonthlySummaryServiceTest {
     @Autowired private TransactionRepository transactions;
     @Autowired private AccountRepository accounts;
     @Autowired private NamedParameterJdbcTemplate jdbc;
+    @Autowired private BackupService backups;
 
     private MonthlySummaryService service;
 
@@ -131,6 +133,34 @@ class MonthlySummaryServiceTest {
         assertThat(s.budgetsTotal()).isEqualTo(2);
         assertThat(s.budgetsKept()).isEqualTo(1);
         assertThat(s.budgetsOver()).containsExactly("Groceries");
+    }
+
+    @Test
+    @DisplayName("a budget's created date survives a backup restore, so it still counts; a backup without it restores as new")
+    void budgetDatesSurviveRestore() {
+        spend("2026-10-10", 150, "Groceries");
+        budget("Groceries", 100, Budget.MONTHLY, "2026-01-01 09:00:00");
+        assertThat(october().budgetsTotal()).isEqualTo(1);
+
+        BackupData exported = backups.export();
+        assertThat(exported.budgets()).extracting(Budget::createdAt).containsExactly("2026-01-01 09:00:00");
+        backups.restore(exported);
+        assertThat(october().budgetsTotal()).isEqualTo(1);
+        assertThat(october().budgetsOver()).containsExactly("Groceries");
+
+        // From before created dates were backed up: restores as set "now", so October can't claim it.
+        BackupData older = new BackupData(exported.version(), exported.exportedAt(), exported.accounts(), exported.categories(),
+                exported.transactions(), exported.merchantCategories(),
+                exported.budgets().stream().map(b -> new Budget(b.id(), b.category(), b.monthlyLimit(), b.escalationType(),
+                        b.escalationValue(), b.escalationFrequencyMonths(), b.escalationStartMonth(), b.rolloverStartMonth(),
+                        b.period(), b.updatedAt(), null)).toList(),
+                exported.recurringOverrides(), exported.goals(), exported.goalContributions(), exported.tags(),
+                exported.transactionTags(), exported.accountBalances(), exported.filterPresets(), exported.transactionReceipts(),
+                exported.netWorthTarget(), exported.keywordRules(), exported.transferPairs(), exported.duplicateDismissals(),
+                exported.merchantNames(), exported.dismissedMerchantSuggestions(), exported.challenges());
+        backups.restore(older);
+        assertThat(budgets.findByCategory("Groceries")).isPresent();
+        assertThat(october().budgetsTotal()).isZero();
     }
 
     @Test
