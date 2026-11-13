@@ -15,6 +15,7 @@ import type {
   CategoryDetail,
   ChallengeAlert,
   ChallengeProgress,
+  ChallengeTemplate,
   ComparisonResponse,
   DateBounds,
   DateRangeValue,
@@ -961,6 +962,11 @@ export function createChallenge(body: {
 /** Challenges over pace, or broken or kept in the last few days -- for the alerts menu. */
 export function fetchChallengeAlerts() {
   return request<{ alerts: ChallengeAlert[] }>("/challenges/alerts");
+}
+
+/** Challenge ideas from the account's own spending -- see ChallengeTemplateService. */
+export function fetchChallengeTemplates(accountId: number | null) {
+  return request<{ templates: ChallengeTemplate[] }>(`/challenges/templates${qs({ accountId })}`);
 }
 
 export function deleteChallenge(id: number) {

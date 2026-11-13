@@ -7,6 +7,7 @@ import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.ChallengeRepository;
 import com.spendinganalyzer.service.ChallengeService;
+import com.spendinganalyzer.service.ChallengeTemplateService;
 import com.spendinganalyzer.service.ChangeLogService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -40,20 +42,28 @@ public class ChallengeController {
     private final CategoryRepository categories;
     private final AccountRepository accounts;
     private final ChangeLogService changeLog;
+    private final ChallengeTemplateService templates;
 
     public ChallengeController(ChallengeRepository challenges, ChallengeService service, CategoryRepository categories,
-                               AccountRepository accounts, ChangeLogService changeLog) {
+                               AccountRepository accounts, ChangeLogService changeLog, ChallengeTemplateService templates) {
         this.challenges = challenges;
         this.service = service;
         this.categories = categories;
         this.accounts = accounts;
         this.changeLog = changeLog;
+        this.templates = templates;
     }
 
     /** Every challenge with how it's going, newest start first. */
     @GetMapping
     public Map<String, Object> list() {
         return Map.of("challenges", service.all());
+    }
+
+    /** Ready-made challenges from the account's own spending -- see {@link ChallengeTemplateService}. */
+    @GetMapping("/templates")
+    public Map<String, Object> templates(@RequestParam(required = false) Long accountId) {
+        return Map.of("templates", templates.templates(accountId));
     }
 
     /** For the header's alerts menu -- see {@link ChallengeService#alerts}. */
