@@ -247,7 +247,9 @@ export function MerchantMemorySection({
                     ...(ruleMax.trim() ? { max_amount: Number(ruleMax) } : {}),
                   }),
                 `Rule saved for ${ruleMerchant.trim().toUpperCase()}.`
-              ).then(() => {
+              ).then((done) => {
+                // Cleared only once it went through: a refused rule stays in the form to fix.
+                if (done === undefined) return;
                 setRuleMerchant("");
                 setRuleMin("");
                 setRuleMax("");

@@ -111,8 +111,9 @@ export function AccountsSection({
         <button
           disabled={!newAccountName.trim()}
           onClick={() =>
-            run(() => createAccount(newAccountName.trim(), newAccountType, newAccountCurrency)).then(() =>
-              setNewAccountName("")
+            // Cleared only once it went through: after a refusal, the name is still there to fix.
+            run(() => createAccount(newAccountName.trim(), newAccountType, newAccountCurrency)).then(
+              (done) => done !== undefined && setNewAccountName("")
             )
           }
           className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
