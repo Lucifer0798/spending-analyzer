@@ -982,3 +982,19 @@ export interface MonthlyCategoryChange {
   previous: number;
   change: number;
 }
+
+/** A ready-made challenge worked out from your own spending, to fill the form with. */
+export interface ChallengeTemplate {
+  key: string;
+  title: string;
+  /** null for all spending. */
+  category: string | null;
+  /** 0 for no spending. */
+  limitAmount: number;
+  /** How long it runs, starting today: 7, 14 or 30. */
+  days: number;
+  /** What the scope usually costs over those days. */
+  usual: number;
+  /** What it's worked out from, to show beside it. */
+  basis: string;
+}

@@ -280,6 +280,15 @@ line; a backup from before that has none and restores its budgets as new, droppi
 until next month -- a missing line, not a wrong one. Challenges count by end date and ignore the account filter, as the
 card does. Dismissal is `localStorage` (one month key), a per-browser convenience like the theme.
 
+**Challenge ideas skip what isn't a choice.** `ChallengeTemplateService` looks at the 90 days up to
+the newest spend on record (not today, so a lagging import doesn't shrink every habit). The two
+category ideas -- a no-spend week (most-frequent category, >= 8 purchases averaging <= 60) and
+halving for 30 days (biggest category with >= 6 purchases) -- count only charges from merchants
+recurring detection does *not* recognise over the year to that date. The first version didn't, and
+on real data its top idea was "No Subscriptions for a week". The cheaper fortnight (85% of a usual two
+weeks) counts everything. Categories with a running or upcoming challenge are skipped. Picking an idea
+fills the form; its title becomes the name only if it's started unchanged.
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The

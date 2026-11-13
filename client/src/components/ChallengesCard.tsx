@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createChallenge, deleteChallenge, fetchCategories, fetchChallenges } from "../api";
-import type { ChallengeProgress, ChallengeStatus } from "../types";
+import { createChallenge, deleteChallenge, fetchCategories, fetchChallengeTemplates, fetchChallenges } from "../api";
+import type { ChallengeProgress, ChallengeStatus, ChallengeTemplate } from "../types";
 import { currency } from "../format";
 import { addDays, dayMonth, todayIso } from "../dates";
 import { changeIdOf } from "../undo";
@@ -149,6 +149,9 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [length, setLength] = useState<number>(14);
+  // Ideas from your own spending, fetched when the form opens; the one picked fills the fields.
+  const [templates, setTemplates] = useState<ChallengeTemplate[]>([]);
+  const [picked, setPicked] = useState<ChallengeTemplate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,12 +166,34 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
     if (focus && loaded) sectionRef.current?.scrollIntoView({ block: "start" });
   }, [focus, loaded]);
   useEffect(() => {
+    if (!open) return;
+    fetchChallengeTemplates(accountId)
+      .then((r) => setTemplates(r.templates))
+      .catch(() => setTemplates([]));
+  }, [open, accountId]);
+  useEffect(() => {
     fetchCategories()
       .then((r) => setCategories(r.detailed.filter((c) => !c.is_income && !c.is_transfer).map((c) => c.name)))
       .catch(() => setCategories([]));
   }, []);
 
   if (items === null) return null;
+
+  const apply = (t: ChallengeTemplate) => {
+    setKind(t.limitAmount === 0 ? "none" : "cap");
+    setAmount(t.limitAmount === 0 ? "" : String(t.limitAmount));
+    setCategory(t.category ?? "");
+    setLength(t.days);
+    setPicked(t);
+  };
+  // The picked idea's title names the challenge only if it's started as suggested; once a field is
+  // changed, the server's default name ("Under 150 on Shopping") describes it better.
+  const pickedUnchanged =
+    picked !== null &&
+    kind === (picked.limitAmount === 0 ? "none" : "cap") &&
+    (picked.limitAmount === 0 || Number(amount) === picked.limitAmount) &&
+    category === (picked.category ?? "") &&
+    length === picked.days;
 
   const current = items.filter((p) => p.status === "ACTIVE" || p.status === "UPCOMING");
   const finished = items.filter((p) => p.status === "COMPLETED" || p.status === "BROKEN");
@@ -184,7 +209,15 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const created = await createChallenge({ category: category || null, limitAmount: limit, startDate, endDate, accountId });
+      const created = await createChallenge({
+        category: category || null,
+        limitAmount: limit,
+        startDate,
+        endDate,
+        accountId,
+        name: pickedUnchanged ? picked!.title : undefined,
+      });
+      setPicked(null);
       offerUndo(changeIdOf(created), `Started "${created.challenge.name}"`);
       setOpen(false);
       setAmount("");
@@ -230,6 +263,29 @@ export function ChallengesCard({ accountId, focus = false }: Props) {
 
       {open && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-3 text-sm dark:bg-slate-900">
+          {templates.length > 0 && (
+            <div className="w-full">
+              <p className="text-xs text-slate-500">Ideas from your last three months:</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {templates.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => apply(t)}
+                    title={t.basis}
+                    aria-pressed={picked?.key === t.key}
+                    className={`rounded-full border px-2.5 py-0.5 text-xs ${
+                      picked?.key === t.key
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300"
+                        : "border-slate-300 text-slate-700 hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {t.title}
+                  </button>
+                ))}
+              </div>
+              {picked && <p className="mt-1 text-xs text-slate-500">{picked.basis}. Adjust anything below, then Start.</p>}
+            </div>
+          )}
           <select aria-label="Kind of challenge" value={kind} onChange={(e) => setKind(e.target.value as "none" | "cap")} className={fieldClass}>
             <option value="none">No spending on</option>
             <option value="cap">Spend under</option>
