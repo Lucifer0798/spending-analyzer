@@ -172,7 +172,9 @@ it restores as none) and cleared by reset.
 `ManagePage` still loads everything the sections display together (`reload`), owns `run` (do the
 write, reload, call `onAccountsChanged`, set the notice or error; it resolves to the write's result,
 or undefined if anything failed, so callers read that instead of setting a variable from inside the
-action -- oxlint's `react(immutability)` flags that) and the single error/notice banner,
+action -- oxlint's `react(immutability)` flags that). Forms clear their fields only when it resolved to
+something (`.then((done) => done !== undefined && ...)`): before that, a refused save -- "already
+exists" -- showed the error and wiped what had been typed and the single error/notice banner,
 and passes those down; each section in `components/manage/` keeps its own form drafts (the budget
 drafts, the new account/category fields, the merchant rule form, file-import progress). The two
 file imports don't fit `run` -- a rejected merchant file lists per-row errors in its own section --

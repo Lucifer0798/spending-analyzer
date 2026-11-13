@@ -145,7 +145,8 @@ export function CategoriesSection({ categories, run }: { categories: CategoryDet
                 is_income: newCategoryKind === "income",
                 is_transfer: newCategoryKind === "transfer",
               })
-            ).then(() => setNewCategoryName(""))
+              // Cleared only once it went through: "already exists" leaves the name to fix.
+            ).then((done) => done !== undefined && setNewCategoryName(""))
           }
           className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
         >

@@ -198,7 +198,9 @@ export function BudgetsSection({
                         <button
                           disabled={!saved}
                           onClick={() =>
-                            run(() => deleteBudget(saved!.id), `Budget cleared for ${c.name}.`).then(() => {
+                            run(() => deleteBudget(saved!.id), `Budget cleared for ${c.name}.`).then((done) => {
+                              // A clear that failed leaves the budget -- and its drafts -- as they were.
+                              if (done === undefined) return;
                               // Drop every draft too, or the inputs keep showing the old numbers.
                               setBudgetDrafts((d) => ({ ...d, [c.name]: "" }));
                               setEscalationDrafts((d) => ({
