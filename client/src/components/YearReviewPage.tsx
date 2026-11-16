@@ -15,6 +15,20 @@ const MUTED = "#898781";
 const GRID = "#e1e0d9";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** "Jan–Oct" for a run of months, else "Jan, Mar, Apr". */
+function monthSpan(months: number[]) {
+  const contiguous = months.every((m, i) => i === 0 || m === months[i - 1] + 1);
+  if (months.length > 2 && contiguous) return `${MONTH_LABELS[months[0] - 1]}–${MONTH_LABELS[months[months.length - 1] - 1]}`;
+  return months.map((m) => MONTH_LABELS[m - 1]).join(", ");
+}
+
+/** "+12%" / "−8%" of `previous`; "" when there's nothing to measure against. */
+function percentChange(now: number, previous: number) {
+  if (previous === 0) return "";
+  const p = Math.round(((now - previous) / previous) * 100);
+  return p === 0 ? " (no change)" : ` (${p > 0 ? "+" : "−"}${Math.abs(p)}%)`;
+}
+
 function monthLabel(key: string) {
   const [year, month] = key.split("-").map(Number);
   return `${MONTH_LABELS[month - 1]} ${year}`;
@@ -181,6 +195,12 @@ export function YearReviewPage({ accountId, onOpenMerchant }: Props) {
           {review.biggestMonth && (
             <span className="text-xs text-slate-500">
               Biggest month: {monthLabel(review.biggestMonth.month)} · {currency(review.biggestMonth.total, 0, cur)} spent
+              {review.quietestMonth && (
+                <>
+                  {" "}
+                  · Quietest: {monthLabel(review.quietestMonth.month)} · {currency(review.quietestMonth.total, 0, cur)}
+                </>
+              )}
             </span>
           )}
         </div>
@@ -274,16 +294,56 @@ export function YearReviewPage({ accountId, onOpenMerchant }: Props) {
         </div>
       </div>
 
-      {review.previousYear !== null && review.categoryChanges.length > 0 && (
+      {review.previousYear !== null && review.comparison === null && (
+        <p className="mt-6 text-sm text-slate-500">
+          {review.year} and {review.previousYear} have no month of data in common, so there's nothing like for like to
+          compare.
+        </p>
+      )}
+
+      {review.previousYear !== null && review.comparison !== null && (
         <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Compared with {review.previousYear}</h2>
-          {review.previousYearMonthsWithData !== review.monthsWithData && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-              {review.previousYear} has {review.previousYearMonthsWithData} month
-              {review.previousYearMonthsWithData === 1 ? "" : "s"} of data and {review.year} has{" "}
-              {review.monthsWithData}, so some of this difference is just coverage.
+          {review.comparison.likeForLike && (
+            <p className="mt-1 text-xs text-slate-500">
+              Like for like: {monthSpan(review.comparison.months)} of both years — the months each has data for.
             </p>
           )}
+          {(() => {
+            const c = review.comparison!;
+            const prev = review.previousYear;
+            return (
+              <ul className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700 sm:grid-cols-3 dark:text-slate-300">
+                <li>
+                  <span className="block text-xs text-slate-500">Spent</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{currency(c.spend, 0, cur)}</span>
+                  <span className={c.spend > c.previousSpend ? "text-amber-700 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}>
+                    {percentChange(c.spend, c.previousSpend)}
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    {currency(c.previousSpend, 0, cur)} in {prev}
+                  </span>
+                </li>
+                <li>
+                  <span className="block text-xs text-slate-500">Income</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{currency(c.income, 0, cur)}</span>
+                  {percentChange(c.income, c.previousIncome)}
+                  <span className="block text-xs text-slate-500">
+                    {currency(c.previousIncome, 0, cur)} in {prev}
+                  </span>
+                </li>
+                <li>
+                  <span className="block text-xs text-slate-500">Saved</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{currency(c.saved, 0, cur)}</span>
+                  {c.savingsRate !== null && <span className="text-slate-500"> ({Math.round(c.savingsRate)}% of income)</span>}
+                  <span className="block text-xs text-slate-500">
+                    {currency(c.previousSaved, 0, cur)} in {prev}
+                    {c.previousSavingsRate !== null && ` (${Math.round(c.previousSavingsRate)}%)`}
+                  </span>
+                </li>
+              </ul>
+            );
+          })()}
           <div className="mt-3 grid grid-cols-1 gap-x-8 md:grid-cols-2">
             <div>
               <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">Spent more on</h3>
