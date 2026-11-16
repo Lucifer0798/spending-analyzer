@@ -183,7 +183,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 687 tests
+  src/test/                 690 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -840,8 +840,11 @@ the merchant fixes that: a name search finds every description that is that merc
 **Year** tab ignores the date filter (the year is the range) but follows the account filter, and
 like every other total it declines to add up accounts in different currencies. It says how many
 months of the year actually have transactions, because a year imported from March reads very
-differently from a full one — and when comparing against the year before, it warns if the two
-years have different amounts of data, since part of any difference is then just coverage.
+differently from a full one. Against the year before it compares like for like: only the months
+both years have data for (saying which, e.g. "Jul–Sep of both years"), so a year to date isn't set
+against a full twelve months — spent, income and saved side by side, then the categories that went
+up and down. Next to the biggest month it shows the quietest, leaving out a month only partly
+imported so far.
 
 **The Dashboard opens with how last month went.** Once a month has ended, a card shows what you
 spent against the month before, the category that rose most and the one that fell most, how many
@@ -963,7 +966,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (687).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (690).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1040,6 +1043,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Year page like for like~~ — the Year page compares against last year over the months both
+  years have, with spent, income and saved side by side, and names the quietest month
 - ~~Challenge templates~~ — the challenge form suggests ready-made challenges from your last three
   months of spending, leaving out subscriptions and other regular charges
 - ~~Monthly summary~~ — "How October went" at the top of the Dashboard: total against the month

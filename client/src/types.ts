@@ -458,13 +458,32 @@ export interface YearReview {
   /** Always January to December. */
   months: YearReviewMonth[];
   biggestMonth: MonthlyTotal | null;
+  /** Least spend, leaving out a month only partly on record; null with fewer than two to pick from. */
+  quietestMonth: MonthlyTotal | null;
   topCategories: { category: string; total: number; count: number; sharePercent: number }[];
   topMerchants: MerchantTotal[];
   /** year - 1 when it has data; otherwise null and categoryChanges is empty. */
   previousYear: number | null;
   previousYearMonthsWithData: number;
-  /** Biggest increase first. */
+  /** Biggest increase first -- over `comparison.months` only. */
   categoryChanges: CategoryComparison[];
+  /** Both years over the months both have data for; null without a previous year or a month in common. */
+  comparison: YearComparison | null;
+}
+
+export interface YearComparison {
+  /** Month numbers, 1-12. */
+  months: number[];
+  /** True when those are fewer months than one of the years has. */
+  likeForLike: boolean;
+  spend: number;
+  previousSpend: number;
+  income: number;
+  previousIncome: number;
+  saved: number;
+  previousSaved: number;
+  savingsRate: number | null;
+  previousSavingsRate: number | null;
 }
 
 export interface CategoryComparison {

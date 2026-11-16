@@ -291,6 +291,14 @@ on real data its top idea was "No Subscriptions for a week". The cheaper fortnig
 weeks) counts everything. Categories with a running or upcoming challenge are skipped. Picking an idea
 fills the form; its title becomes the name only if it's started unchanged.
 
+**The Year page compares like for like.** `YearReviewService` takes the month numbers each year has
+data for (any income or spend) and compares only those both have: category changes are summed month
+by month over them (one category query per shared month per year), and `YearComparison` carries
+spent, income, saved and savings rate for both, plus `likeForLike` when that's fewer months than
+one of the years has. No month in common means no comparison (null), not a misleading one.
+`quietestMonth` leaves out a month only partly on record -- the newest, unless the record ends on
+its last day, and the first, when the record starts after day 7 -- and needs two candidates.
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The

@@ -2,6 +2,7 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.CategoryComparison;
 import com.spendinganalyzer.dto.MerchantTotal;
+import com.spendinganalyzer.dto.MonthlyTotal;
 import com.spendinganalyzer.dto.YearReview;
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.repository.AccountRepository;
@@ -146,5 +147,70 @@ class YearReviewServiceTest {
 
         assertThat(review.applicable()).isFalse();
         assertThat(review.availableYears()).containsExactly(2026);
+    }
+
+    @Test
+    @DisplayName("a part year is compared with the same months of the year before, categories and totals alike")
+    void likeForLike() {
+        // 2025: all twelve months. 2026: January to March only.
+        for (int m = 1; m <= 12; m++) {
+            seed(income("2025-%02d-01".formatted(m), 3000), spend("2025-%02d-10".formatted(m), "SUPERMARKET", 400, "Groceries"));
+        }
+        seed(spend("2025-06-15", "AIRLINE", 900, "Travel"));   // outside the shared months: not compared
+        for (int m = 1; m <= 3; m++) {
+            seed(income("2026-%02d-01".formatted(m), 3200), spend("2026-%02d-10".formatted(m), "SUPERMARKET", 500, "Groceries"));
+        }
+
+        YearReview review = service.review(1L, 2026);
+
+        YearReview.YearComparison c = review.comparison();
+        assertThat(c.months()).containsExactly(1, 2, 3);
+        assertThat(c.likeForLike()).isTrue();
+        assertThat(c.spend()).isEqualTo(1500);
+        assertThat(c.previousSpend()).isEqualTo(1200);   // January-March 2025, not the whole 5,700
+        assertThat(c.income()).isEqualTo(9600);
+        assertThat(c.previousIncome()).isEqualTo(9000);
+        assertThat(c.saved()).isEqualTo(8100);
+        assertThat(c.previousSaved()).isEqualTo(7800);
+        assertThat(c.savingsRate()).isEqualTo(84.38);
+        assertThat(c.previousSavingsRate()).isEqualTo(86.67);
+        assertThat(review.categoryChanges()).extracting(CategoryComparison::category).containsExactly("Groceries");
+        assertThat(review.categoryChanges().get(0)).isEqualTo(new CategoryComparison("Groceries", 1500, 1200, 300, 25.0));
+    }
+
+    @Test
+    @DisplayName("two years with the same months compare whole; with no month in common there's nothing to compare")
+    void coverage() {
+        for (int m = 1; m <= 3; m++) {
+            seed(spend("2025-%02d-10".formatted(m), "SUPERMARKET", 100, "Groceries"),
+                    spend("2026-%02d-10".formatted(m), "SUPERMARKET", 150, "Groceries"));
+        }
+        YearReview.YearComparison same = service.review(1L, 2026).comparison();
+        assertThat(same.months()).containsExactly(1, 2, 3);
+        assertThat(same.likeForLike()).isFalse();
+
+        transactions.resetAll();
+        seed(spend("2025-01-10", "SUPERMARKET", 100, "Groceries"), spend("2026-06-10", "SUPERMARKET", 150, "Groceries"));
+        YearReview apart = service.review(1L, 2026);
+        assertThat(apart.previousYear()).isEqualTo(2025);
+        assertThat(apart.comparison()).isNull();
+        assertThat(apart.categoryChanges()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the quietest month leaves out one only partly on record, at either end")
+    void quietestMonth() {
+        seed(spend("2026-01-20", "SUPERMARKET", 50, "Groceries"),    // the record starts on the 20th: partial
+                spend("2026-02-10", "SUPERMARKET", 300, "Groceries"),
+                spend("2026-03-10", "SUPERMARKET", 200, "Groceries"),
+                spend("2026-04-10", "SUPERMARKET", 400, "Groceries"),
+                spend("2026-05-03", "SUPERMARKET", 20, "Groceries"));   // ends on 3 May: partial
+
+        assertThat(service.review(1L, 2026).quietestMonth()).isEqualTo(new MonthlyTotal("2026-03", 200));
+        assertThat(service.review(1L, 2026).biggestMonth()).isEqualTo(new MonthlyTotal("2026-04", 400));
+
+        // A record that ends on the month's last day covers it.
+        seed(spend("2026-05-31", "SUPERMARKET", 1, "Groceries"));
+        assertThat(service.review(1L, 2026).quietestMonth()).isEqualTo(new MonthlyTotal("2026-05", 21));
     }
 }
