@@ -3,12 +3,14 @@ package com.spendinganalyzer.repository;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.service.AmountSearch;
 import com.spendinganalyzer.service.MerchantNormalizer;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -253,22 +255,43 @@ public class TransactionRepository {
      * searching "Amazon" finds "AMZN MKTP US*2K4" once that's been named Amazon. The key is
      * computed in Java ({@link MerchantNormalizer}), so those descriptions are worked out here and
      * matched exactly; that only runs when some name matches.
+     *
+     * <p>A term that's an amount -- {@code 42.50}, {@code >200}, {@code 10-20} -- matches charges by
+     * amount too; see {@link AmountSearch}. Comparisons are amounts only; an exact amount or a range
+     * still matches descriptions as well, since a number may be a store or reference number.
      */
     private void appendSearchFilter(StringBuilder sql, MapSqlParameterSource params, String search) {
         if (search != null && !search.isBlank()) {
-            String escaped = search.trim()
-                    .replace("\\", "\\\\")
-                    .replace("%", "\\%")
-                    .replace("_", "\\_");
-            String pattern = "%" + escaped + "%";
-            params.addValue("search", pattern);
-            List<String> named = descriptionsOfMerchantsNamedLike(pattern);
-            if (named.isEmpty()) {
-                sql.append(" AND t.description LIKE :search ESCAPE '\\'");
-            } else {
-                sql.append(" AND (t.description LIKE :search ESCAPE '\\' OR t.description IN (:namedDescriptions))");
-                params.addValue("namedDescriptions", named);
+            List<String> anyOf = new ArrayList<>();
+            Optional<AmountSearch> amount = AmountSearch.parse(search);
+            if (amount.isEmpty() || amount.get().alsoText()) {
+                String escaped = search.trim()
+                        .replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_");
+                String pattern = "%" + escaped + "%";
+                params.addValue("search", pattern);
+                anyOf.add("t.description LIKE :search ESCAPE '\\'");
+                List<String> named = descriptionsOfMerchantsNamedLike(pattern);
+                if (!named.isEmpty()) {
+                    anyOf.add("t.description IN (:namedDescriptions)");
+                    params.addValue("namedDescriptions", named);
+                }
             }
+            amount.ifPresent(a -> {
+                // In whole cents, so 42.5 and 42.50 are the same charge and no float comparison drifts.
+                List<String> bounds = new ArrayList<>();
+                if (a.minCents() != null) {
+                    bounds.add("CAST(ROUND(t.amount * 100) AS INTEGER) >= :minCents");
+                    params.addValue("minCents", a.minCents());
+                }
+                if (a.maxCents() != null) {
+                    bounds.add("CAST(ROUND(t.amount * 100) AS INTEGER) <= :maxCents");
+                    params.addValue("maxCents", a.maxCents());
+                }
+                anyOf.add("(" + String.join(" AND ", bounds) + ")");
+            });
+            sql.append(" AND (").append(String.join(" OR ", anyOf)).append(")");
         }
     }
 

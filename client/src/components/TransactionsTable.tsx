@@ -171,7 +171,10 @@ export function TransactionsTable({
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search descriptions…"
+            placeholder="Search descriptions or amounts…"
+            // Read on the server: an amount also matches charges by amount (see AmountSearch).
+            title="Text, or an amount: 42.50 · >200 · <20 · 10-50"
+            aria-label="Search descriptions or amounts"
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
           />
           <select

@@ -299,6 +299,14 @@ one of the years has. No month in common means no comparison (null), not a misle
 `quietestMonth` leaves out a month only partly on record -- the newest, unless the record ends on
 its last day, and the first, when the record starts after day 7 -- and needs two candidates.
 
+**Search reads amounts on the server.** `AmountSearch.parse` turns `42.50` / `$42.5` / `1,200` /
+`.99` (exact), `>200` / `>=` / `<` / `<=` (one bound) and `10-20` / `10..20` / `10 – 20` (inclusive,
+either order) into bounds in whole cents via BigDecimal -- no float drift, no narrowing cast. Bounds
+compare `CAST(ROUND(t.amount * 100) AS INTEGER)`, the full statement amount, not a split share.
+Comparisons are amounts only; an exact amount or a range is ORed with the usual description and
+merchant-name match, because a plain number is often a store or reference number. Because it lives
+in `appendSearchFilter`, the list, its count, CSV export and filter presets all get it.
+
 **Look-alike suggestions are deliberately narrow.** Keys are grouped by their first word (split on
 anything not a letter or digit) when it's at least four characters, not all digits, and not a
 processor or boilerplate prefix (`PAYPAL`, `SQUARE`, `ONLINE`, `POS`, ...; `GENERIC_STEMS`). The
