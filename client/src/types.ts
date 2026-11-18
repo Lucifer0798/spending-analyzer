@@ -142,6 +142,8 @@ export interface UncategorizedMerchant {
   examples: string[];
   /** Send these to bulkCategorize to answer the whole group. */
   transaction_ids: number[];
+  /** The merchant's name if it has one, else `merchant` (the key memory learns). */
+  name: string;
 }
 
 export type MerchantImportMode = "merge" | "replace";
@@ -876,6 +878,8 @@ export interface SubscriptionAuditResponse {
 export interface DuplicateChargeGroup {
   /** The merchant's name if it has one, else the cleaned-up key merchant memory uses. */
   merchant: string;
+  /** That key -- for naming the merchant from the review. */
+  key: string;
   accountId: number;
   amount: number;
   /** Oldest first. */

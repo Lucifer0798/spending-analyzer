@@ -45,8 +45,11 @@ public class DuplicateChargeService {
     /** Seen on this many distinct days, the same merchant and amount is a habit, not a mistake. */
     static final int HABIT_DAYS = 4;
 
-    /** @param merchant the merchant's name if it has one, else its key -- grouping is always by key */
-    public record Group(String merchant, long accountId, double amount, List<Transaction> transactions) {}
+    /**
+     * @param merchant the merchant's name if it has one, else its key -- grouping is always by key
+     * @param key      that key, for naming the merchant from the review
+     */
+    public record Group(String merchant, long accountId, double amount, List<Transaction> transactions, String key) {}
 
     private record Row(long id, long accountId, String merchant, long cents, LocalDate date) {}
 
@@ -112,7 +115,7 @@ public class DuplicateChargeService {
                 .sorted(Comparator.comparing((List<Row> c) -> c.get(c.size() - 1).date()).reversed()
                         .thenComparing(c -> c.get(0).id(), Comparator.reverseOrder()))
                 .map(c -> new Group(names.label(c.get(0).merchant()), c.get(0).accountId(), c.get(0).cents() / 100.0,
-                        c.stream().map(r -> byId.get(r.id())).toList()))
+                        c.stream().map(r -> byId.get(r.id())).toList(), c.get(0).merchant()))
                 .toList();
     }
 

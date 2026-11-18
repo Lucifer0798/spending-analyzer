@@ -14,6 +14,8 @@ import java.util.List;
  * @param total        the sum of the amounts, unsigned; {@code debits}/{@code credits} say
  *                     which direction they went
  * @param transactionIds what to send to {@code PATCH /transactions/bulk-category}
+ * @param name         the merchant's name if it has one, else {@code merchant} -- for showing it;
+ *                     grouping and what memory learns stay on the key
  */
 public record UncategorizedMerchant(
         String merchant,
@@ -25,5 +27,6 @@ public record UncategorizedMerchant(
         @JsonProperty("first_date") String firstDate,
         @JsonProperty("last_date") String lastDate,
         List<String> examples,
-        @JsonProperty("transaction_ids") List<Long> transactionIds
+        @JsonProperty("transaction_ids") List<Long> transactionIds,
+        String name
 ) {}
