@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchBudgets, fetchCategories, fetchCategoryDetail } from "../api";
+import { RenameMerchant } from "./RenameMerchant";
 import type { CategoryDrilldown, DateRangeValue } from "../types";
 import { currency, currencyPrecise } from "../format";
 import { dayMonthYear } from "../dates";
@@ -44,6 +45,8 @@ export function CategoryDetailPage({ category, accountId, range, onBack, onOpenM
   const [categoryColor, setCategoryColor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [monthlyBudget, setMonthlyBudget] = useState<number | null>(null);
+  // Bumped after a merchant is renamed here, to load the page again under the new name.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     fetchCategoryDetail(category, accountId, range)
@@ -52,7 +55,7 @@ export function CategoryDetailPage({ category, accountId, range, onBack, onOpenM
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load this category."));
-  }, [category, accountId, range]);
+  }, [category, accountId, range, version]);
 
   useEffect(() => {
     fetchCategories()
@@ -176,14 +179,18 @@ export function CategoryDetailPage({ category, accountId, range, onBack, onOpenM
           ) : (
             <ul className="mt-3 space-y-2">
               {detail.topMerchants.map((m) => (
-                <li key={m.merchant}>
+                // Keyed by its keys, which a rename doesn't change -- so the Undo beside it survives the reload.
+                <li key={m.keys.join("|")}>
                   <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <button
-                      onClick={() => onOpenMerchant(m.merchant)}
-                      className="truncate text-left text-slate-800 hover:text-indigo-600 hover:underline dark:text-slate-200 dark:hover:text-indigo-400"
-                    >
-                      {m.merchant}
-                    </button>
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+                      <button
+                        onClick={() => onOpenMerchant(m.merchant)}
+                        className="truncate text-left text-slate-800 hover:text-indigo-600 hover:underline dark:text-slate-200 dark:hover:text-indigo-400"
+                      >
+                        {m.merchant}
+                      </button>
+                      <RenameMerchant keys={m.keys} label={m.merchant} named={m.named} onRenamed={() => setVersion((v) => v + 1)} />
+                    </span>
                     <span className="font-medium text-slate-900 dark:text-slate-100">{currency(m.total, 0, cur)}</span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">

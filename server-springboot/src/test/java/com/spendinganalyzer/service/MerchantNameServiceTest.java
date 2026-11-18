@@ -7,6 +7,7 @@ import com.spendinganalyzer.dto.BackupData;
 import com.spendinganalyzer.dto.DateRange;
 import com.spendinganalyzer.dto.MerchantTotal;
 import com.spendinganalyzer.dto.RecurringSeries;
+import com.spendinganalyzer.dto.UncategorizedMerchant;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.ParsedTransaction;
 import com.spendinganalyzer.model.Transaction;
@@ -41,6 +42,7 @@ class MerchantNameServiceTest {
     @Autowired private TransactionRepository transactions;
     @Autowired private TransactionController transactionsApi;
     @Autowired private BackupService backups;
+    @Autowired private UncategorizedReviewService uncategorized;
 
     private void seed(ParsedTransaction... rows) {
         transactions.insertBatch(List.of(rows), "merchant-names-test", Account.DEFAULT_ID);
@@ -130,6 +132,21 @@ class MerchantNameServiceTest {
         service.rename(List.of("AMZN MKTP US"), "Amazon");
 
         assertThat(duplicates.find(Account.DEFAULT_ID)).extracting(DuplicateChargeService.Group::merchant).containsExactly("Amazon");
+        // ...and carries its key, so it can be renamed from the review.
+        assertThat(duplicates.find(Account.DEFAULT_ID)).extracting(DuplicateChargeService.Group::key).containsExactly("AMZN MKTP US");
+    }
+
+    @Test
+    @DisplayName("the uncategorized review shows a merchant's name, but groups and teaches memory by its key")
+    void uncategorizedShowsName() {
+        transactions.insertBatch(List.of(new ParsedTransaction("2026-03-02", "AMZN MKTP US*2K4", 30, "debit", null)),
+                "merchant-names-test", Account.DEFAULT_ID);
+        assertThat(uncategorized.merchants(Account.DEFAULT_ID)).extracting(UncategorizedMerchant::name).containsExactly("AMZN MKTP US");
+
+        service.rename(List.of("AMZN MKTP US"), "Amazon");
+        UncategorizedMerchant row = uncategorized.merchants(Account.DEFAULT_ID).get(0);
+        assertThat(row.merchant()).isEqualTo("AMZN MKTP US");
+        assertThat(row.name()).isEqualTo("Amazon");
     }
 
     @Test

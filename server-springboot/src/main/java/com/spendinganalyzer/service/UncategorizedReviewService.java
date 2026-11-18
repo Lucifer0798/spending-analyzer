@@ -2,6 +2,7 @@ package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.dto.UncategorizedMerchant;
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 
@@ -34,9 +35,11 @@ public class UncategorizedReviewService {
     private static final String KEY_SEPARATOR = String.valueOf((char) 0);
 
     private final TransactionRepository transactions;
+    private final MerchantNameRepository merchantNames;
 
-    public UncategorizedReviewService(TransactionRepository transactions) {
+    public UncategorizedReviewService(TransactionRepository transactions, MerchantNameRepository merchantNames) {
         this.transactions = transactions;
+        this.merchantNames = merchantNames;
     }
 
     /** Most transactions first -- clearing those empties the queue fastest -- then biggest total. */
@@ -72,11 +75,12 @@ public class UncategorizedReviewService {
             g.ids.add(t.id());
         }
 
+        MerchantNameRepository.Names names = merchantNames.load();
         List<UncategorizedMerchant> result = new ArrayList<>();
         for (Group g : groups.values()) {
             result.add(new UncategorizedMerchant(g.merchant, g.currency, g.ids.size(),
                     Math.round(g.total * 100.0) / 100.0, g.debits, g.credits, g.first, g.last,
-                    List.copyOf(g.examples), List.copyOf(g.ids)));
+                    List.copyOf(g.examples), List.copyOf(g.ids), names.label(g.merchant)));
         }
         result.sort(Comparator.comparingInt(UncategorizedMerchant::count).reversed()
                 .thenComparing(Comparator.comparingDouble(UncategorizedMerchant::total).reversed())

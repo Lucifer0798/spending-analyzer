@@ -183,7 +183,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 694 tests
+  src/test/                 695 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -885,7 +885,8 @@ two spellings can be two subscriptions, but shows the name. The section also sug
 that start with the same distinctive word (`AMAZON.COM`, `AMAZON MKTP`) — never merged until you say
 so, and "Not the same" stops one being offered again. Descriptions are never changed, and a reset
 keeps names, as it keeps merchant memory. You don't have to go to Manage to name one: a small ✎ beside a merchant
-in the Dashboard's top merchants, the Year page and both Recurring tables renames it on the spot
+in the Dashboard's top merchants, a category's page, the Year page, both Recurring tables, the
+uncategorized review and the double-charge review renames it on the spot
 (a merged group is renamed as a whole), with Undo right there and an entry in History.
 
 **Merchant memory keys on a cleaned-up merchant name.** Store numbers and order references vary
@@ -966,7 +967,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (694).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (695).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1043,6 +1044,8 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Rename in more places~~ — the ✎ is also on a category's top merchants, the uncategorized review
+  and the double-charge review
 - ~~Search by amount~~ — the Transactions search box finds charges by amount too: `42.50`,
   `>200`, `<20` or `10-50`, in exports and saved presets as well
 - ~~Year page like for like~~ — the Year page compares against last year over the months both

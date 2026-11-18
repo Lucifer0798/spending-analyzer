@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { bulkCategorize, fetchUncategorizedMerchants } from "../api";
+import { RenameMerchant } from "./RenameMerchant";
 import type { UncategorizedMerchant } from "../types";
 import { currencyPrecise } from "../format";
 import { UndoNote } from "./UndoNote";
@@ -75,7 +76,7 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
     try {
       const r = await bulkCategorize(g.transaction_ids, category);
       setLastChangeId(r.changeId);
-      setLastDone(`${g.merchant} → ${category} (${r.updated} transaction${r.updated === 1 ? "" : "s"}); remembered for next time.`);
+      setLastDone(`${g.name} → ${category} (${r.updated} transaction${r.updated === 1 ? "" : "s"}); remembered for next time.`);
       load();
       onChanged();
     } catch (e) {
@@ -134,7 +135,10 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
               return (
                 <li key={key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{g.merchant}</p>
+                    <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {g.name}{" "}
+                      <RenameMerchant keys={[g.merchant]} label={g.name} named={g.name !== g.merchant} onRenamed={load} />
+                    </p>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       {g.count} transaction{g.count === 1 ? "" : "s"} · {currencyPrecise(g.total, g.currency)}
                       {g.credits > 0 && g.debits > 0
@@ -155,7 +159,7 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
                     <select
                       value={choices[key] ?? ""}
                       onChange={(e) => setChoices((c) => ({ ...c, [key]: e.target.value }))}
-                      aria-label={`Category for ${g.merchant}`}
+                      aria-label={`Category for ${g.name}`}
                       className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
                     >
                       <option value="">Choose…</option>

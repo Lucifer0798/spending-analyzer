@@ -268,7 +268,10 @@ merchants or Year row renames its whole group and stays merged; a Recurring row 
 key (`merchant`), so renaming it there can move it out of a merged group -- intended, since it's
 that series. `RenameMerchant` keeps its Undo in its own state, so rows are keyed by `keys` (which a
 rename doesn't change) rather than the label, and the Recurring sections reload with a quiet
-`refresh` -- their `load` swaps the table for "Finding…", which would unmount the row and its Undo.
+`refresh` -- their `load` swaps the table for "Finding…", which would unmount the row and its Undo. The category page,
+uncategorized review and double-charge review have it too: `UncategorizedMerchant` gained `name` (its
+`merchant` stays the key memory learns) and `DuplicateChargeService.Group` gained `key` (its
+`merchant` was already the label); both rename that one key.
 
 **The monthly summary is computed on read and hedges rather than asserts.** `MonthlySummaryService`
 takes the last complete calendar month by `Clock`, follows the account filter and ignores the date
