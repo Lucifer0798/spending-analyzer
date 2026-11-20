@@ -183,7 +183,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 695 tests
+  src/test/                 696 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -841,7 +841,7 @@ the merchant fixes that: a name search finds every description that is that merc
 like every other total it declines to add up accounts in different currencies. It says how many
 months of the year actually have transactions, because a year imported from March reads very
 differently from a full one. Against the year before it compares like for like: only the months
-both years have data for (saying which, e.g. "Jul–Sep of both years"), so a year to date isn't set
+both years have fully imported (saying which, e.g. "Jul–Sep of both years"), so a year to date isn't set
 against a full twelve months — spent, income and saved side by side, then the categories that went
 up and down. Next to the biggest month it shows the quietest, leaving out a month only partly
 imported so far.
@@ -967,7 +967,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (695).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (696).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed

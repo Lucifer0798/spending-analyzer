@@ -29,6 +29,8 @@ public class YearReviewService {
     static final int TOP_N = 5;
     /** A record starting within this many days of a month's start covers that month. */
     static final int START_SLACK_DAYS = 6;
+    /** ...and one ending within this many days of a month's end: statements rarely close on the 31st. */
+    static final int END_SLACK_DAYS = 3;
 
     private final StatsService stats;
 
@@ -98,10 +100,16 @@ public class YearReviewService {
             previousMonthsWithData = monthsWithData(previousIncome, previousSpend);
 
             // Like for like: only the months both years have data for, so an October-to-date year
-            // isn't set against a full twelve months.
+            // isn't set against a full twelve months -- and not a month only partly on record in
+            // either, so 27 days of this October aren't set against all 31 of last October's.
             Set<Integer> thisMonths = monthNumbers(incomeByMonth, spendByMonth);
             Set<Integer> thoseMonths = monthNumbers(previousIncome, previousSpend);
-            List<Integer> shared = thisMonths.stream().filter(thoseMonths::contains).sorted().toList();
+            Set<String> partial = partialMonths(accountId);
+            int y = year;
+            List<Integer> shared = thisMonths.stream()
+                    .filter(m -> thoseMonths.contains(m)
+                            && !partial.contains(monthKey(y, m)) && !partial.contains(monthKey(previousYear, m)))
+                    .sorted().toList();
             if (!shared.isEmpty()) {
                 changes = categoryChanges(accountId, year, previousYear, shared);
                 comparison = comparison(shared, shared.size() < Math.max(thisMonths.size(), thoseMonths.size()),
@@ -160,16 +168,7 @@ public class YearReviewService {
      * when it starts more than {@link #START_SLACK_DAYS} days in. Null with fewer than two left.
      */
     private MonthlyTotal quietest(Long accountId, int year, Map<String, Double> spendByMonth) {
-        DateRange onRecord = stats.availableRange(accountId);
-        Set<String> partial = new HashSet<>();
-        if (onRecord.to() != null) {
-            LocalDate last = LocalDate.parse(onRecord.to());
-            if (!last.equals(YearMonth.from(last).atEndOfMonth())) partial.add(YearMonth.from(last).toString());
-        }
-        if (onRecord.from() != null) {
-            LocalDate first = LocalDate.parse(onRecord.from());
-            if (first.getDayOfMonth() > START_SLACK_DAYS + 1) partial.add(YearMonth.from(first).toString());
-        }
+        Set<String> partial = partialMonths(accountId);
         List<MonthlyTotal> candidates = new ArrayList<>();
         for (int m = 1; m <= 12; m++) {
             String key = monthKey(year, m);
@@ -178,6 +177,28 @@ public class YearReviewService {
         }
         if (candidates.size() < 2) return null;
         return candidates.stream().min(Comparator.comparingDouble(MonthlyTotal::total)).orElseThrow();
+    }
+
+    /**
+     * The "YYYY-MM" months only partly on record, judged from every transaction (income included):
+     * the one the record ends in, when it ends more than {@link #END_SLACK_DAYS} days before that
+     * month's end, and the one it starts in, when it starts more than {@link #START_SLACK_DAYS} days
+     * in. A month like that can't stand as a whole month -- not the quietest, not compared.
+     */
+    private Set<String> partialMonths(Long accountId) {
+        DateRange onRecord = stats.recordRange(accountId);
+        Set<String> partial = new HashSet<>();
+        if (onRecord.to() != null) {
+            LocalDate last = LocalDate.parse(onRecord.to());
+            if (last.isBefore(YearMonth.from(last).atEndOfMonth().minusDays(END_SLACK_DAYS))) {
+                partial.add(YearMonth.from(last).toString());
+            }
+        }
+        if (onRecord.from() != null) {
+            LocalDate first = LocalDate.parse(onRecord.from());
+            if (first.getDayOfMonth() > START_SLACK_DAYS + 1) partial.add(YearMonth.from(first).toString());
+        }
+        return partial;
     }
 
     /** Month numbers (1-12) with any income or spend. */

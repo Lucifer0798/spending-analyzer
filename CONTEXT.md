@@ -299,8 +299,12 @@ data for (any income or spend) and compares only those both have: category chang
 by month over them (one category query per shared month per year), and `YearComparison` carries
 spent, income, saved and savings rate for both, plus `likeForLike` when that's fewer months than
 one of the years has. No month in common means no comparison (null), not a misleading one.
-`quietestMonth` leaves out a month only partly on record -- the newest, unless the record ends on
-its last day, and the first, when the record starts after day 7 -- and needs two candidates.
+A month only partly on record is left out of both the comparison and `quietestMonth`: judged from
+every transaction (`StatsService.recordRange`, income included -- `availableRange` is spend only),
+it's the month the record ends in unless that's within 3 days of its end, and the one it starts in
+when that's after day 7. Without that, 27 days of this October were set against all of last October
+-- a rent not yet imported read as a big drop (found in review round three). `quietestMonth` needs
+two candidates.
 
 **Search reads amounts on the server.** `AmountSearch.parse` turns `42.50` / `$42.5` / `1,200` /
 `.99` (exact), `>200` / `>=` / `<` / `<=` (one bound) and `10-20` / `10..20` / `10 – 20` (inclusive,
