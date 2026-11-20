@@ -283,6 +283,18 @@ public class StatsService {
         return series;
     }
 
+    /**
+     * Earliest and latest date of any transaction at all -- income and transfers too -- for judging
+     * how much of a month is on record. {@link #availableRange} is spend only.
+     */
+    public DateRange recordRange(Long accountId) {
+        String sql = "SELECT MIN(t.date) AS min_date, MAX(t.date) AS max_date FROM transactions t"
+                + (accountId != null ? " WHERE t.account_id = :accountId" : "");
+        return jdbc.query(sql, new MapSqlParameterSource("accountId", accountId), (rs, rowNum) ->
+                        new DateRange(rs.getString("min_date"), rs.getString("max_date")))
+                .stream().findFirst().orElse(DateRange.ALL);
+    }
+
     /** Earliest and latest transaction dates on record, so the UI can bound its pickers. */
     public DateRange availableRange(Long accountId) {
         String sql = "SELECT MIN(t.date) AS min_date, MAX(t.date) AS max_date "

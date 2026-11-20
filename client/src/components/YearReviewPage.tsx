@@ -296,8 +296,8 @@ export function YearReviewPage({ accountId, onOpenMerchant }: Props) {
 
       {review.previousYear !== null && review.comparison === null && (
         <p className="mt-6 text-sm text-slate-500">
-          {review.year} and {review.previousYear} have no month of data in common, so there's nothing like for like to
-          compare.
+          {review.year} and {review.previousYear} have no fully imported month in common, so there's nothing like for
+          like to compare.
         </p>
       )}
 

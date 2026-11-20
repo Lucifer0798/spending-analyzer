@@ -92,7 +92,8 @@ class YearReviewServiceTest {
     void comparesWithPreviousYear() {
         seed(
                 spend("2025-05-01", "SHOP", 100, "Shopping"), spend("2025-05-02", "AIRLINE", 800, "Travel"),
-                spend("2026-05-01", "SHOP", 400, "Shopping"), spend("2026-05-02", "AIRLINE", 200, "Travel"));
+                spend("2026-05-01", "SHOP", 400, "Shopping"), spend("2026-05-02", "AIRLINE", 200, "Travel"),
+                income("2026-05-31", 1));   // the record runs to the month's end, so May is whole
 
         YearReview review = service.review(1L, 2026);
 
@@ -164,27 +165,52 @@ class YearReviewServiceTest {
         YearReview review = service.review(1L, 2026);
 
         YearReview.YearComparison c = review.comparison();
-        assertThat(c.months()).containsExactly(1, 2, 3);
+        // 2026's record ends on 10 March, so March is only partly in: January and February are compared.
+        assertThat(c.months()).containsExactly(1, 2);
         assertThat(c.likeForLike()).isTrue();
-        assertThat(c.spend()).isEqualTo(1500);
-        assertThat(c.previousSpend()).isEqualTo(1200);   // January-March 2025, not the whole 5,700
-        assertThat(c.income()).isEqualTo(9600);
-        assertThat(c.previousIncome()).isEqualTo(9000);
-        assertThat(c.saved()).isEqualTo(8100);
-        assertThat(c.previousSaved()).isEqualTo(7800);
+        assertThat(c.spend()).isEqualTo(1000);
+        assertThat(c.previousSpend()).isEqualTo(800);   // January-February 2025, not the whole 5,700
+        assertThat(c.income()).isEqualTo(6400);
+        assertThat(c.previousIncome()).isEqualTo(6000);
+        assertThat(c.saved()).isEqualTo(5400);
+        assertThat(c.previousSaved()).isEqualTo(5200);
         assertThat(c.savingsRate()).isEqualTo(84.38);
         assertThat(c.previousSavingsRate()).isEqualTo(86.67);
         assertThat(review.categoryChanges()).extracting(CategoryComparison::category).containsExactly("Groceries");
-        assertThat(review.categoryChanges().get(0)).isEqualTo(new CategoryComparison("Groceries", 1500, 1200, 300, 25.0));
+        assertThat(review.categoryChanges().get(0)).isEqualTo(new CategoryComparison("Groceries", 1000, 800, 200, 25.0));
+    }
+
+    @Test
+    @DisplayName("a month only partly on record isn't compared: ten days of this March aren't set against all of last March")
+    void leavesOutPartialMonth() {
+        for (int m = 1; m <= 12; m++) {
+            seed(spend("2025-%02d-02".formatted(m), "SUPERMARKET", 400, "Groceries"),
+                    spend("2025-%02d-28".formatted(m), "LANDLORD", 1000, "Rent/Mortgage"));
+        }
+        seed(spend("2026-01-10", "SUPERMARKET", 500, "Groceries"), spend("2026-01-28", "LANDLORD", 1000, "Rent/Mortgage"),
+                spend("2026-02-10", "SUPERMARKET", 500, "Groceries"), spend("2026-02-28", "LANDLORD", 1000, "Rent/Mortgage"),
+                spend("2026-03-10", "SUPERMARKET", 500, "Groceries"));   // the record ends 10 March: rent not in yet
+
+        YearReview review = service.review(1L, 2026);
+
+        assertThat(review.comparison().months()).containsExactly(1, 2);
+        assertThat(review.comparison().likeForLike()).isTrue();
+        assertThat(review.comparison().spend()).isEqualTo(3000);
+        assertThat(review.comparison().previousSpend()).isEqualTo(2800);
+        // Rent didn't "drop": March isn't in the comparison at all.
+        assertThat(review.categoryChanges()).extracting(CategoryComparison::category, CategoryComparison::changeAmount)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("Groceries", 200.0),
+                        org.assertj.core.groups.Tuple.tuple("Rent/Mortgage", 0.0));
     }
 
     @Test
     @DisplayName("two years with the same months compare whole; with no month in common there's nothing to compare")
     void coverage() {
         for (int m = 1; m <= 3; m++) {
-            seed(spend("2025-%02d-10".formatted(m), "SUPERMARKET", 100, "Groceries"),
-                    spend("2026-%02d-10".formatted(m), "SUPERMARKET", 150, "Groceries"));
+            seed(spend("2025-%02d-01".formatted(m), "SUPERMARKET", 100, "Groceries"),
+                    spend("2026-%02d-01".formatted(m), "SUPERMARKET", 150, "Groceries"));
         }
+        seed(income("2026-03-31", 1));   // the record runs to March's end
         YearReview.YearComparison same = service.review(1L, 2026).comparison();
         assertThat(same.months()).containsExactly(1, 2, 3);
         assertThat(same.likeForLike()).isFalse();
