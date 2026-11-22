@@ -306,6 +306,15 @@ when that's after day 7. Without that, 27 days of this October were set against 
 -- a rent not yet imported read as a big drop (found in review round three). `quietestMonth` needs
 two candidates.
 
+**A transaction's own note is separate from `split_note`.** `note` (V31) is free text on any
+transaction; `split_note` belongs to a split and is cleared with it. PATCH `note` is trimmed, blank
+or null clears it, over `MAX_NOTE_LENGTH` (500) is a 400; an edit without the key leaves it alone.
+It is part of `sameStored`, so a note change is recorded in History (as "Noted …" / "Removed the
+note on …" when it's the only change) and Undo restores it via `overwrite`; undoing a delete brings
+it back through `insertWithId`. Searched beside the description in `appendSearchFilter`. The CSV
+puts `note` last so sheets built on column positions still line up. A backup from before V31 has no
+`note` field and restores as none. Any future rebuild of `transactions` must copy `note` too.
+
 **Search reads amounts on the server.** `AmountSearch.parse` turns `42.50` / `$42.5` / `1,200` /
 `.99` (exact), `>200` / `>=` / `<` / `<=` (one bound) and `10-20` / `10..20` / `10 – 20` (inclusive,
 either order) into bounds in whole cents via BigDecimal -- no float drift, no narrowing cast. Bounds

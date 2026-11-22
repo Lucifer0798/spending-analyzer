@@ -55,7 +55,7 @@ class CategorizationServiceTest {
 
     private static Transaction tx(long id, String description, String type) {
         return new Transaction(id, "2026-05-01", description, 10.0, type,
-                null, null, "batch", "2026-05-01", 1L, "Default", "USD", null, null, null);
+                null, null, "batch", "2026-05-01", 1L, "Default", "USD", null, null, null, null);
     }
 
     /** A catch-all rule, which is what memory held before amount bands existed. */
@@ -148,7 +148,7 @@ class CategorizationServiceTest {
     @DisplayName("naming an upload counts its rows on their own, and older rows categorized alongside as 'earlier'")
     void countsOneUploadSeparately() {
         Transaction older = new Transaction(9, "2026-04-01", "SUPERMARKET 12", 10.0, "debit",
-                null, null, "older-upload", "2026-04-01", 1L, "Default", "USD", null, null, null);
+                null, null, "older-upload", "2026-04-01", 1L, "Default", "USD", null, null, null, null);
         when(transactions.findUncategorized()).thenReturn(List.of(
                 tx(1, "NEW CORNER CAFE 123"),
                 tx(2, "ZQX HOLDINGS 4471"),

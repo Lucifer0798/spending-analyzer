@@ -37,6 +37,9 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api")
 public class TransactionController {
+    /** Plenty for a reminder to yourself; a guard on the request, not a product limit. */
+    public static final int MAX_NOTE_LENGTH = 500;
+
 
     private static final List<String> TYPES = List.of("debit", "credit");
     private static final Set<String> RECEIPT_CONTENT_TYPES = Set.of(
@@ -277,17 +280,31 @@ public class TransactionController {
             changedAnything = true;
         }
 
+        // containsKey: present-and-blank clears the note, absent leaves it alone.
+        if (body.containsKey("note")) {
+            String note = asTrimmedString(body.get("note"));
+            if (note != null && note.length() > MAX_NOTE_LENGTH) {
+                return ResponseEntity.badRequest().body(new ErrorResponse("note can be at most " + MAX_NOTE_LENGTH + " characters."));
+            }
+            repository.updateNote(id, note == null || note.isEmpty() ? null : note);
+            changedAnything = true;
+        }
+
         if (!changedAnything) {
             return ResponseEntity.badRequest().body(new ErrorResponse(
-                    "Nothing to update. Supply at least one of: category, date, description, amount, type, split_share, split_note."));
+                    "Nothing to update. Supply at least one of: category, date, description, amount, type, split_share, split_note, note."));
         }
 
         Transaction updated = repository.findById(id).orElseThrow();
         boolean onlyCategory = category != null && date == null && description == null && amount == null && type == null
-                && !body.containsKey("split_share") && !body.containsKey("split_note");
+                && !body.containsKey("split_share") && !body.containsKey("split_note") && !body.containsKey("note");
+        boolean onlyNote = body.containsKey("note") && category == null && date == null && description == null
+                && amount == null && type == null && !body.containsKey("split_share") && !body.containsKey("split_note");
         Long changeId = changeLog.recordEdit(onlyCategory ? "category" : "edit",
                 onlyCategory
                         ? "\"" + existing.get().description() + "\" → " + category
+                        : onlyNote
+                        ? (updated.note() == null ? "Removed the note on \"" : "Noted \"") + existing.get().description() + "\""
                         : "Edited \"" + existing.get().description() + "\"",
                 List.of(existing.get()), List.of(updated), memoryChanges);
         Map<String, Object> response = new LinkedHashMap<>();

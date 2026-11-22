@@ -51,7 +51,8 @@ public class TransactionRepository {
             rs.getString("account_currency"),
             nullableDouble(rs, "split_share"),
             rs.getString("split_note"),
-            rs.getString("external_id")
+            rs.getString("external_id"),
+            rs.getString("note")
     );
 
     private static Double nullableDouble(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
@@ -272,6 +273,7 @@ public class TransactionRepository {
                 String pattern = "%" + escaped + "%";
                 params.addValue("search", pattern);
                 anyOf.add("t.description LIKE :search ESCAPE '\\'");
+                anyOf.add("t.note LIKE :search ESCAPE '\\'");
                 List<String> named = descriptionsOfMerchantsNamedLike(pattern);
                 if (!named.isEmpty()) {
                     anyOf.add("t.description IN (:namedDescriptions)");
@@ -465,10 +467,10 @@ public class TransactionRepository {
         jdbc.update("""
                 INSERT INTO transactions
                   (id, date, description, amount, type, category, category_source, upload_batch_id, created_at,
-                   account_id, split_share, split_note, external_id)
+                   account_id, split_share, split_note, external_id, note)
                 VALUES
                   (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt,
-                   :accountId, :splitShare, :splitNote, :externalId)
+                   :accountId, :splitShare, :splitNote, :externalId, :note)
                 """, storedColumns(t));
     }
 
@@ -477,7 +479,7 @@ public class TransactionRepository {
         jdbc.update("""
                 UPDATE transactions SET date = :date, description = :description, amount = :amount, type = :type,
                   category = :category, category_source = :categorySource, account_id = :accountId,
-                  split_share = :splitShare, split_note = :splitNote
+                  split_share = :splitShare, split_note = :splitNote, note = :note
                 WHERE id = :id
                 """, storedColumns(t));
     }
@@ -502,7 +504,8 @@ public class TransactionRepository {
                 .addValue("accountId", t.accountId())
                 .addValue("splitShare", t.splitShare())
                 .addValue("splitNote", t.splitNote())
-                .addValue("externalId", t.externalId());
+                .addValue("externalId", t.externalId())
+                .addValue("note", t.note());
     }
 
     /**
@@ -528,17 +531,24 @@ public class TransactionRepository {
                         .addValue("accountId", t.accountId())
                         .addValue("splitShare", t.splitShare())
                         .addValue("splitNote", t.splitNote())
-                        .addValue("externalId", t.externalId()))
+                        .addValue("externalId", t.externalId())
+                        .addValue("note", t.note()))
                 .toArray(MapSqlParameterSource[]::new);
 
         jdbc.batchUpdate("""
                 INSERT INTO transactions
                   (id, date, description, amount, type, category, category_source, upload_batch_id, created_at,
-                   account_id, split_share, split_note, external_id)
+                   account_id, split_share, split_note, external_id, note)
                 VALUES
                   (:id, :date, :description, :amount, :type, :category, :categorySource, :batchId, :createdAt,
-                   :accountId, :splitShare, :splitNote, :externalId)
+                   :accountId, :splitShare, :splitNote, :externalId, :note)
                 """, params);
+    }
+
+    /** Sets the free-text note, or clears it with null. */
+    public boolean updateNote(long id, String note) {
+        return jdbc.update("UPDATE transactions SET note = :note WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", id).addValue("note", note)) > 0;
     }
 
     /**
