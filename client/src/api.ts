@@ -261,6 +261,8 @@ export function updateTransaction(
     type?: "debit" | "credit";
     split_share?: number | null;
     split_note?: string | null;
+    /** Your own note; blank or null removes it. */
+    note?: string | null;
   }
 ) {
   // changeId: the History entry, for an Undo beside the edit -- null when nothing changed.

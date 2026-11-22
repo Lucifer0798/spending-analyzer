@@ -27,7 +27,7 @@ class CsvExportServiceTest {
             String date, String description, double amount, String type, String category, String account) {
         return new Transaction(
                 1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD",
-                null, null, null);
+                null, null, null, null);
     }
 
     private static Transaction splitTransaction(
@@ -35,7 +35,7 @@ class CsvExportServiceTest {
             String account, Double splitShare, String splitNote) {
         return new Transaction(
                 1L, date, description, amount, type, category, "ai", "batch", "2026-08-01", 1L, account, "USD",
-                splitShare, splitNote, null);
+                splitShare, splitNote, null, null);
     }
 
     /** Reads an export back the way a spreadsheet would, so escaping is exercised rather than assumed. */
@@ -122,6 +122,19 @@ class CsvExportServiceTest {
         assertThat(row.get("your_share")).isEqualTo("30.0");
         assertThat(row.get("signed_your_share")).isEqualTo("-30.0");
         assertThat(row.get("split_note")).isEqualTo("Split 3 ways with Alex and Sam");
+    }
+
+    @Test
+    @DisplayName("your own note goes in the last column, blank when there isn't one")
+    void noteColumn() throws IOException {
+        Transaction plain = transaction("2026-06-01", "SHOES", 60.00, "debit", "Shopping", "Visa");
+        Transaction noted = new Transaction(2L, "2026-06-02", "SHOES", 60.00, "debit", "Shopping", "ai", "batch",
+                "2026-08-01", 1L, "Visa", "USD", null, null, null, "returned, refund pending");
+
+        List<CSVRecord> rows = parse(service.transactions(List.of(plain, noted)));
+        assertThat(rows.get(0).get("note")).isEmpty();
+        assertThat(rows.get(1).get("note")).isEqualTo("returned, refund pending");
+        assertThat(rows.get(1).get(rows.get(1).size() - 1)).isEqualTo("returned, refund pending");
     }
 
     @Test

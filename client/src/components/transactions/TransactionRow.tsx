@@ -6,9 +6,11 @@ import {
   receiptUrl,
   removeTransactionTag,
   setTransactionSplit,
+  updateTransaction,
   updateTransactionCategory,
   uploadTransactionReceipt,
 } from "../../api";
+import { useState } from "react";
 import type { TransactionWithTags } from "../../types";
 import { currencyPrecise } from "../../format";
 import { CARD_CELL, CARD_ROW } from "./layout";
@@ -52,6 +54,24 @@ export function TransactionRow({
   offerUndo,
   setError,
 }: Props) {
+  // The note being written, or null when the note isn't open for editing.
+  const [noteDraft, setNoteDraft] = useState<string | null>(null);
+
+  const handleSaveNote = async () => {
+    if (noteDraft === null) return;
+    const note = noteDraft.trim();
+    setNoteDraft(null);
+    if (note === (t.note ?? "")) return;
+    onPatch({ note: note || null });
+    try {
+      const r = await updateTransaction(t.id, { note });
+      offerUndo(r.changeId, note ? `Noted "${t.description}"` : `Removed the note on "${t.description}"`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save the note.");
+      onReload();
+    }
+  };
+
   const handleAddTag = async () => {
     const name = tagDraft.trim();
     if (!name) return;
@@ -165,6 +185,37 @@ export function TransactionRow({
       </td>
       <td className={`${CARD_CELL} col-start-2 row-start-1 text-sm font-medium text-slate-800 md:font-normal dark:text-slate-200`}>
         {t.description}
+        {noteDraft !== null ? (
+          <div className="mt-1 flex items-center gap-1">
+            <input
+              autoFocus
+              value={noteDraft}
+              maxLength={500}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveNote();
+                if (e.key === "Escape") setNoteDraft(null);
+              }}
+              aria-label={`Note on ${t.description}`}
+              placeholder="e.g. returned the shoes"
+              className="w-full max-w-xs rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs font-normal dark:border-slate-700 dark:bg-slate-900"
+            />
+            <button onClick={handleSaveNote} className="text-xs font-normal text-indigo-600 hover:underline dark:text-indigo-400">
+              Save
+            </button>
+            <button onClick={() => setNoteDraft(null)} className="text-xs font-normal text-slate-500 hover:underline">
+              Cancel
+            </button>
+          </div>
+        ) : t.note ? (
+          <button
+            onClick={() => setNoteDraft(t.note ?? "")}
+            title="Edit the note"
+            className="mt-0.5 block max-w-xs whitespace-pre-wrap break-words text-left text-xs font-normal italic text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400"
+          >
+            {t.note}
+          </button>
+        ) : null}
       </td>
       {showAccountColumn && (
         <td className="hidden whitespace-nowrap px-4 py-2 text-xs text-slate-500 md:table-cell">{t.account_name}</td>
@@ -283,6 +334,15 @@ export function TransactionRow({
               }}
             />
           </label>
+        )}
+        {!t.note && noteDraft === null && (
+          <button
+            onClick={() => setNoteDraft("")}
+            title="Add a note of your own"
+            className="ml-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            + Note
+          </button>
         )}
         <button
           onClick={onEdit}

@@ -429,6 +429,7 @@ public class ChangeLogService {
                 && Objects.equals(a.categorySource(), b.categorySource())
                 && a.accountId() == b.accountId()
                 && Objects.equals(a.splitShare(), b.splitShare())
-                && Objects.equals(a.splitNote(), b.splitNote());
+                && Objects.equals(a.splitNote(), b.splitNote())
+                && Objects.equals(a.note(), b.note());
     }
 }

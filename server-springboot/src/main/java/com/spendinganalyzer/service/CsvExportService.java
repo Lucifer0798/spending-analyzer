@@ -68,13 +68,15 @@ public class CsvExportService {
      * actually responsible for: the split share when the transaction has one, the full amount
      * otherwise — the same fallback the dashboard's totals use, so a spreadsheet SUM over
      * {@code signed_your_share} matches what the app already shows for "spend."
-     * {@code split_note} is blank for an unsplit transaction, same as an unset category.
+     * {@code split_note} is blank for an unsplit transaction, same as an unset category, and
+     * {@code note} -- your own note on the transaction -- is blank when there isn't one. It comes
+     * last so that a sheet built on the earlier columns' positions still lines up.
      */
     public byte[] transactions(List<Transaction> transactions) {
         String[] header = {
                 "date", "description", "category", "type",
                 "amount", "signed_amount", "your_share", "signed_your_share", "split_note",
-                "account", "currency", "category_source"
+                "account", "currency", "category_source", "note"
         };
         return toCsv(header, printer -> {
             for (Transaction t : transactions) {
@@ -92,7 +94,8 @@ public class CsvExportService {
                         t.splitNote() == null ? "" : t.splitNote(),
                         t.accountName() == null ? "" : t.accountName(),
                         t.accountCurrency() == null ? "" : t.accountCurrency(),
-                        t.categorySource() == null ? "" : t.categorySource()
+                        t.categorySource() == null ? "" : t.categorySource(),
+                        t.note() == null ? "" : t.note()
                 );
             }
         });

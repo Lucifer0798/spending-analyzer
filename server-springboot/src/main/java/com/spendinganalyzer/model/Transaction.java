@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param splitNote   who the rest belongs to; null whenever {@code splitShare} is.
  * @param externalId  the bank's own ID for the transaction (an OFX FITID), when the file it came
  *                    from had one -- what lets a re-import recognise it exactly. Null otherwise.
+ * @param note        a free-text note of your own; null for none. Null too in a backup from before
+ *                    notes existed, which restores as no note.
  */
 public record Transaction(
         long id,
@@ -24,5 +26,6 @@ public record Transaction(
         @JsonProperty("account_currency") String accountCurrency,
         @JsonProperty("split_share") Double splitShare,
         @JsonProperty("split_note") String splitNote,
-        @JsonProperty("external_id") String externalId
+        @JsonProperty("external_id") String externalId,
+        String note
 ) {}

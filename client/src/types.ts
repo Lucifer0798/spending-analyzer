@@ -19,6 +19,8 @@ export interface Transaction {
   split_note: string | null;
   /** The bank's own ID for it (an OFX FITID) when it came from an OFX/QFX file; null otherwise. */
   external_id: string | null;
+  /** Your own free-text note on it ("returned the shoes"); null for none. Found by the search box. */
+  note: string | null;
 }
 
 /** A transaction as the list endpoint returns it, with its tags attached. */
