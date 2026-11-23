@@ -200,7 +200,7 @@ deploy/backup/              Nightly backup of a deployed instance to a Windows P
 
 ## Tech stack
 
-**Backend** — Java 21 (built and shipped on 25), Spring Boot 4.1, Spring Security for the
+**Backend** — Java 21 (built and shipped on 25), Spring Boot 4.2, Spring Security for the
 password gate, SQLite (`sqlite-jdbc`), Flyway for schema migrations,
 and Apache Commons CSV and Apache POI for file parsing. No external APIs: categorization and
 forecasting are plain Java in `RuleBasedCategorizer` and `ForecastService`.
