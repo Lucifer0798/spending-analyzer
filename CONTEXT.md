@@ -271,7 +271,11 @@ rename doesn't change) rather than the label, and the Recurring sections reload 
 `refresh` -- their `load` swaps the table for "Finding…", which would unmount the row and its Undo. The category page,
 uncategorized review and double-charge review have it too: `UncategorizedMerchant` gained `name` (its
 `merchant` stays the key memory learns) and `DuplicateChargeService.Group` gained `key` (its
-`merchant` was already the label); both rename that one key.
+`merchant` was already the label); both rename that one key. Never put the ✎ inside a `truncate`
+element: it clips the ✎, its Undo and the rename box along with the name (review round four found
+the uncategorized review's ✎ unreachable on a phone). Truncate a span holding only the name, capped
+at `max-w-[calc(100%-1.75rem)]` so the ✎ fits beside it. Both review lists' text column is
+`grow basis-48`, not `flex-1` (basis 0, so it never wrapped and was squeezed to ~90 px on a phone).
 
 **The monthly summary is computed on read and hedges rather than asserts.** `MonthlySummaryService`
 takes the last complete calendar month by `Clock`, follows the account filter and ignores the date

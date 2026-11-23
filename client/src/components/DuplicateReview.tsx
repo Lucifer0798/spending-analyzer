@@ -80,7 +80,7 @@ export function DuplicateReview({ accountId, onShow, refreshKey, initiallyOpen =
               const cur = g.transactions[0]?.account_currency ?? "USD";
               return (
                 <li key={key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 grow basis-48">
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                       {g.transactions.length}× {currencyPrecise(g.amount, cur)} at {g.merchant}{" "}
                       <RenameMerchant keys={[g.key]} label={g.merchant} named={g.merchant !== g.key} onRenamed={load} />
