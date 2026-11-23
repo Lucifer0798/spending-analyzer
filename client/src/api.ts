@@ -50,6 +50,8 @@ import type {
   TopMerchantsResponse,
   Transaction,
   TransactionWithTags,
+  RefundPairView,
+  RefundSuggestionsResponse,
   TransferPairView,
   TransferSuggestionsResponse,
   UncategorizedMerchant,
@@ -880,6 +882,40 @@ export function dismissTransfers(pairs: PairRef[]) {
 /** Undoes a confirmation (restoring both categories) or forgets a dismissal. */
 export function undoTransferPair(id: number) {
   return request<{ ok: true; restored: number }>(`/transfers/${id}`, { method: "DELETE" });
+}
+
+// --- refunds ------------------------------------------------------------------
+
+/** Credits that look like refunds of earlier purchases, newest refund first. */
+export function fetchRefundSuggestions(limit = 50) {
+  return request<RefundSuggestionsResponse>(`/refunds/suggestions${qs({ limit })}`);
+}
+
+export function fetchRefundPairs() {
+  return request<{ confirmed: RefundPairView[]; dismissed: RefundPairView[] }>("/refunds");
+}
+
+type RefundRef = { purchaseId: number; refundId: number };
+
+/** Takes each refund off its purchase; pairs that no longer qualify come back in `skipped`. */
+export function confirmRefunds(pairs: RefundRef[]) {
+  return request<{ confirmed: number; skipped: (RefundRef & { reason: string })[] }>("/refunds/confirm", {
+    method: "POST",
+    body: JSON.stringify({ pairs }),
+  });
+}
+
+/** "Not a refund of this" -- stops the pair being suggested again. Changes no transaction. */
+export function dismissRefunds(pairs: RefundRef[]) {
+  return request<{ dismissed: number }>("/refunds/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ pairs }),
+  });
+}
+
+/** Unpairs a confirmed refund, or forgets a dismissal. */
+export function undoRefundPair(id: number) {
+  return request<{ ok: true }>(`/refunds/${id}`, { method: "DELETE" });
 }
 
 /** Income sources against spending categories for the range -- see MoneyFlow. */

@@ -244,6 +244,19 @@ export function TransactionRow({
             </button>
           )}
         </div>
+        {t.refunded != null && (
+          <div className="mt-0.5 text-right text-[10px] font-normal text-teal-600 dark:text-teal-400" title="Paired with a refund under Manage → Refunds">
+            {currencyPrecise(t.refunded, t.account_currency ?? undefined)} refunded
+          </div>
+        )}
+        {t.refund_for != null && (
+          <div
+            className="mt-0.5 max-w-[10rem] truncate text-right text-[10px] font-normal text-teal-600 dark:text-teal-400"
+            title={`Refund of "${t.refund_for}" -- not counted as income`}
+          >
+            refund · {t.refund_for}
+          </div>
+        )}
       </td>
       <td className={`${CARD_CELL} col-span-2 col-start-2 row-start-3 text-sm`}>
         {t.category && colorByCategory[t.category] && (

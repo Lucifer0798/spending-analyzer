@@ -400,14 +400,18 @@ public class TransactionRepository {
         return jdbc.query(sql, new MapSqlParameterSource("accountId", accountId), ROW_MAPPER);
     }
 
-    /** All debit rows in spend categories (income and transfers excluded), for recurring detection. */
+    /**
+     * All debit rows in spend categories (income and transfers excluded), for recurring detection.
+     * A purchase refunded in full isn't spending, so it's left out; one refunded in part comes back
+     * at its full amount -- these are rows, not totals.
+     */
     public List<Transaction> findSpendingTransactions(Long accountId, DateRange range) {
         StringBuilder sql = new StringBuilder(SELECT_WITH_ACCOUNT).append("""
                  LEFT JOIN categories c ON c.name = t.category
                  WHERE t.type = 'debit'
                    AND COALESCE(c.is_income, 0) = 0
                    AND COALESCE(c.is_transfer, 0) = 0
-                """);
+                """).append("   AND ").append(RefundPairRepository.NOT_FULLY_REFUNDED);
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (accountId != null) {
             sql.append(" AND t.account_id = :accountId");
@@ -425,13 +429,16 @@ public class TransactionRepository {
         return jdbc.query(sql.toString(), params, ROW_MAPPER);
     }
 
-    /** All credit rows in income categories, the mirror of {@link #findSpendingTransactions} for detecting recurring income. */
+    /**
+     * All credit rows in income categories, the mirror of {@link #findSpendingTransactions} for
+     * detecting recurring income. A confirmed refund is money back, not income, so it's left out.
+     */
     public List<Transaction> findIncomeTransactions(Long accountId, DateRange range) {
         StringBuilder sql = new StringBuilder(SELECT_WITH_ACCOUNT).append("""
                  LEFT JOIN categories c ON c.name = t.category
                  WHERE t.type = 'credit'
                    AND COALESCE(c.is_income, 0) = 1
-                """);
+                """).append("   AND ").append(RefundPairRepository.NOT_A_REFUND);
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (accountId != null) {
             sql.append(" AND t.account_id = :accountId");

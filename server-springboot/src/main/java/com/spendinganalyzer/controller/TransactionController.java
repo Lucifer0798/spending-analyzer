@@ -13,6 +13,7 @@ import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
 import com.spendinganalyzer.service.ChangeLogService;
 import com.spendinganalyzer.service.MerchantNormalizer;
@@ -51,6 +52,7 @@ public class TransactionController {
     private final TagRepository tagRepository;
     private final TransactionReceiptRepository receiptRepository;
     private final TransferPairRepository transferPairRepository;
+    private final RefundPairRepository refundPairRepository;
     private final DuplicateDismissalRepository duplicateDismissalRepository;
     private final ChangeLogService changeLog;
 
@@ -61,6 +63,7 @@ public class TransactionController {
             TagRepository tagRepository,
             TransactionReceiptRepository receiptRepository,
             TransferPairRepository transferPairRepository,
+            RefundPairRepository refundPairRepository,
             DuplicateDismissalRepository duplicateDismissalRepository,
             ChangeLogService changeLog
     ) {
@@ -70,6 +73,7 @@ public class TransactionController {
         this.tagRepository = tagRepository;
         this.receiptRepository = receiptRepository;
         this.transferPairRepository = transferPairRepository;
+        this.refundPairRepository = refundPairRepository;
         this.duplicateDismissalRepository = duplicateDismissalRepository;
         this.changeLog = changeLog;
     }
@@ -96,8 +100,11 @@ public class TransactionController {
         List<Long> ids = transactions.stream().map(Transaction::id).toList();
         Map<Long, List<String>> tagsById = tagRepository.namesByTransactionId(ids);
         Set<Long> withReceipts = receiptRepository.transactionIdsWithReceipts(ids);
+        Map<Long, Double> refunded = refundPairRepository.refundedByPurchase(ids);
+        Map<Long, String> refundFor = refundPairRepository.refundedPurchaseDescriptions(ids);
         return transactions.stream()
-                .map(t -> new TransactionWithTags(t, tagsById.getOrDefault(t.id(), List.of()), withReceipts.contains(t.id())))
+                .map(t -> new TransactionWithTags(t, tagsById.getOrDefault(t.id(), List.of()), withReceipts.contains(t.id()),
+                        refunded.get(t.id()), refundFor.get(t.id())))
                 .toList();
     }
 
@@ -330,6 +337,8 @@ public class TransactionController {
         receiptRepository.delete(id);
         // A pair with one half gone pairs nothing; the surviving half keeps its transfer category.
         transferPairRepository.deleteForTransactions(List.of(id));
+        // Likewise a refund: the purchase counts in full again, or the credit as it's filed.
+        refundPairRepository.deleteForTransactions(List.of(id));
         return ResponseEntity.ok(withChangeId(Map.of("ok", true), changeId));
     }
 
@@ -411,6 +420,7 @@ public class TransactionController {
         receiptRepository.deleteBulk(ids);
         Long changeId = changeLog.recordDelete("Deleted " + deleted + " transaction" + (deleted == 1 ? "" : "s"), doomed, receipts);
         transferPairRepository.deleteForTransactions(ids);
+        refundPairRepository.deleteForTransactions(ids);
         return ResponseEntity.ok(withChangeId(Map.of("ok", true, "deleted", deleted), changeId));
     }
 
@@ -436,6 +446,7 @@ public class TransactionController {
         repository.resetAll();
         receiptRepository.deleteAll();
         transferPairRepository.deleteAll();
+        refundPairRepository.deleteAll();
         duplicateDismissalRepository.deleteAll();
         // Every snapshot in it describes transactions that are gone.
         changeLog.clear();
