@@ -134,9 +134,10 @@ export function UncategorizedReview({ accountId, categories, onChanged, initiall
               const key = keyOf(g);
               return (
                 <li key={key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                      {g.name}{" "}
+                  <div className="min-w-0 grow basis-48">
+                    {/* Only the name truncates: the ✎ (and Undo, or the rename box) must stay in view. */}
+                    <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <span className="max-w-[calc(100%-1.75rem)] truncate">{g.name}</span>
                       <RenameMerchant keys={[g.merchant]} label={g.name} named={g.name !== g.merchant} onRenamed={load} />
                     </p>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
