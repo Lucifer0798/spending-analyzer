@@ -5,6 +5,7 @@ import com.spendinganalyzer.dto.ErrorResponse;
 import com.spendinganalyzer.model.Category;
 import com.spendinganalyzer.dto.CurrencyNetWorth;
 import com.spendinganalyzer.dto.NetWorthResponse;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.AccountBalanceRepository;
 import com.spendinganalyzer.repository.CategoryRepository;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
@@ -60,6 +61,7 @@ public class ExportController {
     private final NetWorthService netWorthService;
     private final AccountBalanceRepository accountBalances;
     private final CsvExportService csv;
+    private final RefundPairRepository refundPairs;
 
     public ExportController(
             TransactionRepository transactionRepository,
@@ -69,7 +71,8 @@ public class ExportController {
             MerchantCategoryRepository merchantRepository,
             NetWorthService netWorthService,
             AccountBalanceRepository accountBalances,
-            CsvExportService csv
+            CsvExportService csv,
+            RefundPairRepository refundPairs
     ) {
         this.transactionRepository = transactionRepository;
         this.statsService = statsService;
@@ -78,6 +81,7 @@ public class ExportController {
         this.merchantRepository = merchantRepository;
         this.netWorthService = netWorthService;
         this.accountBalances = accountBalances;
+        this.refundPairs = refundPairs;
         this.csv = csv;
     }
 
@@ -99,7 +103,8 @@ public class ExportController {
     ) {
         DateRange range = DateRange.of(from, to);
         var rows = transactionRepository.find(category, month, accountId, range, tag, search, NO_LIMIT, 0);
-        return attachment("transactions", csv.transactions(rows));
+        var refunded = refundPairs.refundedByPurchase(rows.stream().map(t -> t.id()).toList());
+        return attachment("transactions", csv.transactions(rows, refunded));
     }
 
     @GetMapping("/categories.csv")

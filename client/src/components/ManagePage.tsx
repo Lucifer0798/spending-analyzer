@@ -18,6 +18,7 @@ import type {
 } from "../types";
 import { KeywordRulesSection } from "./KeywordRulesSection";
 import { TransfersSection } from "./TransfersSection";
+import { RefundsSection } from "./RefundsSection";
 import { AccountsSection } from "./manage/AccountsSection";
 import { BackupSection } from "./manage/BackupSection";
 import { BudgetsSection } from "./manage/BudgetsSection";
@@ -149,6 +150,7 @@ export function ManagePage({ onAccountsChanged }: Props) {
       <KeywordRulesSection categories={categories.map((c) => c.name)} offerUndo={banner.offerUndo} />
 
       <TransfersSection />
+      <RefundsSection />
 
       <RecurringOverridesSection recurringOverrides={recurringOverrides} run={run} />
 

@@ -11,6 +11,7 @@ import com.spendinganalyzer.dto.PeriodComparison;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.MerchantNameRepository;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,10 @@ public class StatsService {
      * <p>Joins accounts so a currency filter can be applied without every call site needing to
      * know how; accounts are never hard-deleted out from under a transaction (deleting one
      * reassigns its transactions first), so the join is never lossy in practice.
+     *
+     * <p>A purchase refunded in full isn't spending at all, so it's left out entirely -- not a $0
+     * row in a category's count or a merchant's average. One refunded in part stays, less the
+     * refund ({@link #EFFECTIVE_AMOUNT}).
      */
     private static final String SPEND_FILTER = """
             FROM transactions t
@@ -58,7 +63,7 @@ public class StatsService {
             WHERE t.type = 'debit'
               AND COALESCE(c.is_income, 0) = 0
               AND COALESCE(c.is_transfer, 0) = 0
-            """;
+            """ + "  AND " + RefundPairRepository.NOT_FULLY_REFUNDED + " ";
 
     /**
      * What actually counts as spent on a transaction — the split share when one is set, the
@@ -66,17 +71,24 @@ public class StatsService {
      * totals, the per-category series behind predictions) is built from this, not {@code
      * t.amount} directly, so a split is reflected everywhere "spend" is measured without each
      * call site needing its own COALESCE.
+     *
+     * <p>Less any confirmed refunds of it (V32), never below zero -- a split purchase refunded
+     * in full would otherwise go negative. On a credit there's nothing to take off.
      */
-    private static final String EFFECTIVE_AMOUNT = "COALESCE(t.split_share, t.amount)";
+    private static final String EFFECTIVE_AMOUNT =
+            "MAX(0, COALESCE(t.split_share, t.amount) - " + RefundPairRepository.REFUNDED_AMOUNT + ")";
 
-    /** The mirror of {@link #SPEND_FILTER} for the credit side: deposits in income categories. */
+    /**
+     * The mirror of {@link #SPEND_FILTER} for the credit side: deposits in income categories --
+     * but not a confirmed refund, which is money back on a purchase rather than income.
+     */
     private static final String INCOME_FILTER = """
             FROM transactions t
             LEFT JOIN categories c ON c.name = t.category
             LEFT JOIN accounts a ON a.id = t.account_id
             WHERE t.type = 'credit'
               AND COALESCE(c.is_income, 0) = 1
-            """;
+            """ + "  AND " + RefundPairRepository.NOT_A_REFUND + " ";
 
     /** Account, currency and date-range predicates, appended to {@link #SPEND_FILTER}. */
     private static String filters(Long accountId, DateRange range, String currency) {

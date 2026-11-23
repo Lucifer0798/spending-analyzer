@@ -20,6 +20,7 @@ import com.spendinganalyzer.repository.RecurringOverrideRepository;
 import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +56,7 @@ public class BackupService {
     private final NetWorthTargetRepository netWorthTarget;
     private final KeywordRuleRepository keywordRules;
     private final TransferPairRepository transferPairs;
+    private final RefundPairRepository refundPairs;
     private final DuplicateDismissalRepository duplicateDismissals;
     private final MerchantNameRepository merchantNames;
     private final ChallengeRepository challenges;
@@ -77,6 +79,7 @@ public class BackupService {
             NetWorthTargetRepository netWorthTarget,
             KeywordRuleRepository keywordRules,
             TransferPairRepository transferPairs,
+            RefundPairRepository refundPairs,
             DuplicateDismissalRepository duplicateDismissals,
             MerchantNameRepository merchantNames,
             ChallengeRepository challenges,
@@ -98,6 +101,7 @@ public class BackupService {
         this.netWorthTarget = netWorthTarget;
         this.keywordRules = keywordRules;
         this.transferPairs = transferPairs;
+        this.refundPairs = refundPairs;
         this.duplicateDismissals = duplicateDismissals;
         this.merchantNames = merchantNames;
         this.challenges = challenges;
@@ -122,7 +126,8 @@ public class BackupService {
             int transferPairs,
             int duplicateDismissals,
             int merchantNames,
-            int challenges
+            int challenges,
+            int refundPairs
     ) {}
 
     public BackupData export() {
@@ -148,7 +153,8 @@ public class BackupService {
                 duplicateDismissals.findAll(),
                 merchantNames.findAll(),
                 List.copyOf(new TreeSet<>(merchantNames.dismissedStems())),
-                challenges.findAll()
+                challenges.findAll(),
+                refundPairs.findAll()
         );
     }
 
@@ -178,6 +184,7 @@ public class BackupService {
         merchantNames.restoreAll(data.merchantNames());
         merchantNames.restoreDismissedStems(data.dismissedMerchantSuggestions());
         challenges.restoreAll(data.challenges());
+        refundPairs.restoreAll(data.refundPairs());
         // History describes the dataset being replaced; undoing any of it now would be nonsense.
         changeLog.clear();
         predictionsCache.deleteAll();
@@ -200,7 +207,8 @@ public class BackupService {
                 data.transferPairs() == null ? 0 : data.transferPairs().size(),
                 data.duplicateDismissals() == null ? 0 : data.duplicateDismissals().size(),
                 data.merchantNames() == null ? 0 : data.merchantNames().size(),
-                data.challenges() == null ? 0 : data.challenges().size()
+                data.challenges() == null ? 0 : data.challenges().size(),
+                data.refundPairs() == null ? 0 : data.refundPairs().size()
         );
     }
 }

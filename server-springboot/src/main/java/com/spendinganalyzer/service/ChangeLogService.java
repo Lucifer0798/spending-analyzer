@@ -5,6 +5,7 @@ import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -170,16 +171,18 @@ public class ChangeLogService {
     private final MerchantCategoryRepository memory;
     private final TransactionReceiptRepository receipts;
     private final TransferPairRepository transferPairs;
+    private final RefundPairRepository refundPairs;
 
     public ChangeLogService(NamedParameterJdbcTemplate jdbc, ObjectMapper json, TransactionRepository transactions,
                             MerchantCategoryRepository memory, TransactionReceiptRepository receipts,
-                            TransferPairRepository transferPairs) {
+                            TransferPairRepository transferPairs, RefundPairRepository refundPairs) {
         this.jdbc = jdbc;
         this.json = json;
         this.transactions = transactions;
         this.memory = memory;
         this.receipts = receipts;
         this.transferPairs = transferPairs;
+        this.refundPairs = refundPairs;
     }
 
     // --- recording --------------------------------------------------------------------------
@@ -330,6 +333,7 @@ public class ChangeLogService {
             removed = transactions.deleteBulk(ids);
             receipts.deleteBulk(ids);
             transferPairs.deleteForTransactions(ids);
+            refundPairs.deleteForTransactions(ids);
         }
 
         jdbc.update("UPDATE change_log SET undone_at = datetime('now') WHERE id = :id", new MapSqlParameterSource("id", id));

@@ -1,6 +1,7 @@
 package com.spendinganalyzer.service;
 
 import com.spendinganalyzer.model.Transaction;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.DuplicateDismissalRepository;
 import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
@@ -76,7 +77,8 @@ public class DuplicateChargeService {
                 WHERE t.type = 'debit'
                   AND COALESCE(c.is_transfer, 0) = 0
                   AND COALESCE(c.is_income, 0) = 0
-                """ + (accountId != null ? " AND t.account_id = :accountId" : ""),
+                """ + "  AND " + RefundPairRepository.NOT_FULLY_REFUNDED  // a double charge refunded is settled
+                + (accountId != null ? " AND t.account_id = :accountId" : ""),
                 new MapSqlParameterSource("accountId", accountId), rs -> {
             LocalDate date = parse(rs.getString("date"));
             if (date == null) return;

@@ -4,6 +4,7 @@ import type { DateRangeValue, FilterPreset, Tag, TransactionWithTags } from "../
 import { ExportLink } from "./ExportLink";
 import { UncategorizedReview } from "./UncategorizedReview";
 import { TransferReview } from "./TransferReview";
+import { RefundReview } from "./RefundReview";
 import { DuplicateReview } from "./DuplicateReview";
 import { UndoNote } from "./UndoNote";
 import { FilterPresets } from "./transactions/FilterPresets";
@@ -227,6 +228,7 @@ export function TransactionsTable({
       />
       {/* Same: nothing once every likely transfer is matched or dismissed. */}
       <TransferReview onChanged={load} refreshKey={transactions} initiallyOpen={initialTransfersOpen} />
+      <RefundReview onChanged={load} refreshKey={transactions} />
       {/* And again: nothing unless something looks charged twice. */}
       <DuplicateReview
         accountId={accountId}

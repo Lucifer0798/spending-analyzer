@@ -70,13 +70,23 @@ public class CsvExportService {
      * {@code signed_your_share} matches what the app already shows for "spend."
      * {@code split_note} is blank for an unsplit transaction, same as an unset category, and
      * {@code note} -- your own note on the transaction -- is blank when there isn't one. It comes
-     * last so that a sheet built on the earlier columns' positions still lines up.
+     * after the original columns so that a sheet built on their positions still lines up.
+     *
+     * <p>{@code refunded}, after it for the same reason, is what confirmed refunds took off a
+     * purchase -- blank when none. The dashboard counts a purchase less its refunds, so a sheet
+     * matching it subtracts this from {@code your_share}; the refund's own row stays as the bank
+     * shows it.
      */
     public byte[] transactions(List<Transaction> transactions) {
+        return transactions(transactions, Map.of());
+    }
+
+    /** As above, with what was refunded of each purchase, by transaction id. */
+    public byte[] transactions(List<Transaction> transactions, Map<Long, Double> refunded) {
         String[] header = {
                 "date", "description", "category", "type",
                 "amount", "signed_amount", "your_share", "signed_your_share", "split_note",
-                "account", "currency", "category_source", "note"
+                "account", "currency", "category_source", "note", "refunded"
         };
         return toCsv(header, printer -> {
             for (Transaction t : transactions) {
@@ -95,7 +105,8 @@ public class CsvExportService {
                         t.accountName() == null ? "" : t.accountName(),
                         t.accountCurrency() == null ? "" : t.accountCurrency(),
                         t.categorySource() == null ? "" : t.categorySource(),
-                        t.note() == null ? "" : t.note()
+                        t.note() == null ? "" : t.note(),
+                        refunded.containsKey(t.id()) ? refunded.get(t.id()) : ""
                 );
             }
         });

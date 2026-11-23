@@ -1,5 +1,6 @@
 package com.spendinganalyzer.dto;
 
+import com.spendinganalyzer.model.RefundPair;
 import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.model.AccountBalance;
 import com.spendinganalyzer.model.Budget;
@@ -60,7 +61,9 @@ public record BackupData(
         /** Optional too: look-alike suggestions turned down, by their shared word. */
         List<String> dismissedMerchantSuggestions,
         /** Optional too: spending challenges; a file from before them restores with none. */
-        List<Challenge> challenges
+        List<Challenge> challenges,
+        /** Optional too: refunds paired with purchases; a file from before them restores with none. */
+        List<RefundPair> refundPairs
 ) {
     // Bumped from 8: transferPairs is a new field a version-8 file has no value for, and there
     // is no migration path between backup versions -- see BackupController.

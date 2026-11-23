@@ -125,7 +125,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("your own note goes in the last column, blank when there isn't one")
+    @DisplayName("your own note comes after the original columns, blank when there isn't one")
     void noteColumn() throws IOException {
         Transaction plain = transaction("2026-06-01", "SHOES", 60.00, "debit", "Shopping", "Visa");
         Transaction noted = new Transaction(2L, "2026-06-02", "SHOES", 60.00, "debit", "Shopping", "ai", "batch",
@@ -134,7 +134,8 @@ class CsvExportServiceTest {
         List<CSVRecord> rows = parse(service.transactions(List.of(plain, noted)));
         assertThat(rows.get(0).get("note")).isEmpty();
         assertThat(rows.get(1).get("note")).isEqualTo("returned, refund pending");
-        assertThat(rows.get(1).get(rows.get(1).size() - 1)).isEqualTo("returned, refund pending");
+        // After every column that existed before notes, so a sheet built on their positions still lines up.
+        assertThat(rows.get(1).get(12)).isEqualTo("returned, refund pending");
     }
 
     @Test

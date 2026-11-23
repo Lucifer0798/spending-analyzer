@@ -10,9 +10,14 @@ import java.util.List;
  * A transaction with its tags flattened alongside its own fields in JSON, plus whether it has a
  * receipt attached -- a lightweight flag, not the receipt itself, which is fetched separately
  * (GET /transactions/{id}/receipt) so the list response never has to carry receipt bytes.
+ *
+ * @param refunded  on a purchase, what confirmed refunds took off it; null when none
+ * @param refundFor on a confirmed refund, the description of the purchase it refunds; null otherwise
  */
 public record TransactionWithTags(
         @JsonUnwrapped Transaction transaction,
         List<String> tags,
-        @JsonProperty("has_receipt") boolean hasReceipt
+        @JsonProperty("has_receipt") boolean hasReceipt,
+        Double refunded,
+        @JsonProperty("refund_for") String refundFor
 ) {}

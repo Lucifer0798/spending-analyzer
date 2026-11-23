@@ -28,6 +28,10 @@ export interface TransactionWithTags extends Transaction {
   tags: string[];
   /** Whether a receipt is attached -- the receipt itself is fetched separately (receiptUrl). */
   has_receipt: boolean;
+  /** On a purchase, what confirmed refunds took off it; null when none. */
+  refunded: number | null;
+  /** On a confirmed refund, the description of the purchase it refunds; null otherwise. */
+  refund_for: string | null;
 }
 
 /** A tag and how many transactions currently carry it. */
@@ -757,6 +761,32 @@ export interface TransferSuggestionsResponse {
 }
 
 /** A recorded pair: "confirmed" moved both into a transfer category, "dismissed" is "not a transfer". */
+/** A credit that looks like a refund of an earlier purchase -- see RefundReview. */
+export interface RefundSuggestion {
+  purchase: Transaction;
+  refund: Transaction;
+  daysAfter: number;
+  /** What earlier confirmed refunds already took off the purchase. */
+  refunded: number;
+  /** Whether the refund is all that's left of the purchase. */
+  exactAmount: boolean;
+}
+
+export interface RefundSuggestionsResponse {
+  /** Every suggestion; `suggestions` holds at most the requested limit, newest refund first. */
+  total: number;
+  suggestions: RefundSuggestion[];
+  maxDaysAfter: number;
+}
+
+export interface RefundPairView {
+  id: number;
+  status: "confirmed" | "dismissed";
+  createdAt: string;
+  purchase: Transaction;
+  refund: Transaction;
+}
+
 export interface TransferPairView {
   id: number;
   status: "confirmed" | "dismissed";

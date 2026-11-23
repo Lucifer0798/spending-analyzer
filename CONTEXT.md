@@ -493,6 +493,27 @@ allowed, missing parameter) now gets its own status instead of a 500 -- before, 
 missing static file came back as "Unexpected error" with a 500. Found because browsers probe for
 icon files.
 
+**Refunds are netted by pairing, not by recategorizing.** A refund used to count as income (the
+categorizer files money in under Income) while its purchase still counted as spending.
+`RefundMatchingService` suggests a credit as a refund of a purchase when they're in the same
+account, from the same merchant (`refundMerchantOf` sets aside REFUND/RETURN/CREDIT/... before
+`MerchantNormalizer`, and one merchant name over several keys counts as one), the credit is 0-120
+days after, and no more than what's left of the purchase. A whole-amount match qualifies on its own;
+a partial one also needs a refund word (`hasRefundWord`, which "CREDIT" alone isn't). Neither side
+may be split or in a transfer category, and the purchase not in income. Greedy: whole amounts first,
+then the nearest purchase; each credit used once, and a purchase only up to its amount. Confirming
+writes a `refund_pairs` row (V32) and changes neither transaction, so undo is deleting the row and
+there's no `prev_category` to keep. `StatsService` reads it: `EFFECTIVE_AMOUNT` is
+`MAX(0, share - REFUNDED_AMOUNT)`, `SPEND_FILTER` drops a purchase refunded in full (no $0 rows in
+counts or averages), and `INCOME_FILTER` drops a confirmed refund. The same fragments
+(`RefundPairRepository.REFUNDED_AMOUNT` / `NOT_FULLY_REFUNDED` / `NOT_A_REFUND`) keep a fully
+refunded purchase out of `findSpendingTransactions` (recurring detection, unusual charges, challenge
+templates -- a partly refunded one comes back at full amount there, being rows not totals) and the
+double-charge check, and a refund out of `findIncomeTransactions`. Deleting either side drops the
+pair (like transfers), so undoing that delete doesn't bring the pairing back. The list rows carry
+`refunded` / `refund_for`; the CSV adds `refunded` last; backups carry `refundPairs` (optional, no
+version bump).
+
 **Transfer matching pairs strictly and changes nothing until confirmed.** `TransferMatchingService`
 loads just id/account/currency/date/cents/is-transfer for every unsplit row, buckets credits by
 currency + amount in cents, and keeps debit-credit edges in different accounts at most
