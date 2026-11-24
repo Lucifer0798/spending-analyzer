@@ -24,6 +24,8 @@ interface Props {
   initialReviewOpen?: boolean;
   /** Opens the transfer review panel expanded -- read once at mount, like initialSearch. */
   initialTransfersOpen?: boolean;
+  /** Arrived from an import summary's "Review refunds": start with the refund review open. */
+  initialRefundsOpen?: boolean;
   /** Opens the double-charge review expanded -- read once at mount, like initialSearch. */
   initialDuplicatesOpen?: boolean;
   /** Pre-selects the category filter -- read once at mount, like initialSearch. */
@@ -45,6 +47,7 @@ export function TransactionsTable({
   initialSearch = "",
   initialReviewOpen = false,
   initialTransfersOpen = false,
+  initialRefundsOpen = false,
   initialDuplicatesOpen = false,
   initialCategory = "",
 }: Props) {
@@ -228,7 +231,7 @@ export function TransactionsTable({
       />
       {/* Same: nothing once every likely transfer is matched or dismissed. */}
       <TransferReview onChanged={load} refreshKey={transactions} initiallyOpen={initialTransfersOpen} />
-      <RefundReview onChanged={load} refreshKey={transactions} />
+      <RefundReview onChanged={load} refreshKey={transactions} initiallyOpen={initialRefundsOpen} />
       {/* And again: nothing unless something looks charged twice. */}
       <DuplicateReview
         accountId={accountId}

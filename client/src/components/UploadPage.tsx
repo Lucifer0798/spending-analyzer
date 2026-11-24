@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, fetchAccountFreshness, fetchTransferSuggestions, runCategorization, undoChange, uploadFile } from "../api";
+import {
+  ApiError,
+  fetchAccountFreshness,
+  fetchRefundSuggestions,
+  fetchTransferSuggestions,
+  runCategorization,
+  undoChange,
+  uploadFile,
+} from "../api";
 import { describeUndo } from "../undo";
 import type { Account, CategorizeResult, ColumnDetectionResult, FreshnessResponse, UploadResult } from "../types";
 import { AccountFreshnessList } from "./AccountFreshnessList";
@@ -13,6 +21,8 @@ interface Props {
   onReviewUncategorized: () => void;
   /** Opens Transactions with the transfer review expanded. */
   onReviewTransfers: () => void;
+  /** Opens Transactions with the refund review expanded. */
+  onReviewRefunds: () => void;
 }
 
 type Stage = "idle" | "uploading" | "categorizing" | "done" | "error";
@@ -180,7 +190,7 @@ function ColumnMappingForm({
   );
 }
 
-export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncategorized, onReviewTransfers }: Props) {
+export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncategorized, onReviewTransfers, onReviewRefunds }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -188,6 +198,8 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
   const [categorization, setCategorization] = useState<CategorizeResult | null>(null);
   // Likely transfers with at least one side from this upload; null until checked.
   const [transferCount, setTransferCount] = useState<number | null>(null);
+  // Likely refunds with a side from this upload -- a refund, or a purchase one refunds; null until checked.
+  const [refundCount, setRefundCount] = useState<number | null>(null);
   // Set once "Undo this import" has run: what it did, shown in place of the summary.
   const [importUndone, setImportUndone] = useState<string | null>(null);
   const [undoingImport, setUndoingImport] = useState(false);
@@ -216,6 +228,7 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
       setResult(null);
       setCategorization(null);
       setTransferCount(null);
+      setRefundCount(null);
       setImportUndone(null);
       setColumnsNeeded(null);
       setStage("uploading");
@@ -246,6 +259,11 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
           setTransferCount((await fetchTransferSuggestions(1, uploaded.batchId)).total);
         } catch {
           setTransferCount(null);
+        }
+        try {
+          setRefundCount((await fetchRefundSuggestions(1, uploaded.batchId)).total);
+        } catch {
+          setRefundCount(null);
         }
         setStage("done");
       } catch (err) {
@@ -487,6 +505,15 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
             </p>
           )}
 
+          {(refundCount ?? 0) > 0 && (
+            <p className="mt-2">
+              <strong>{refundCount}</strong>{" "}
+              {refundCount === 1
+                ? "looks like a refund of an earlier purchase — the purchase still counts as spending until you pair it."
+                : "look like refunds of earlier purchases — the purchases still count as spending until you pair them."}
+            </p>
+          )}
+
           {result.inserted === 0 && result.skippedDuplicates > 0 && (
             <p className="mt-2">
               Everything in this file was already in {result.accountName}, so nothing was added.
@@ -508,6 +535,14 @@ export function UploadPage({ accounts, selectedAccountId, onDone, onReviewUncate
                 className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
               >
                 Review transfers →
+              </button>
+            )}
+            {(refundCount ?? 0) > 0 && (
+              <button
+                onClick={onReviewRefunds}
+                className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
+              >
+                Review refunds →
               </button>
             )}
             <button

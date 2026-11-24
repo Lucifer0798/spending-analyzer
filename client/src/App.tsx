@@ -73,6 +73,7 @@ interface Handoff {
   reviewUncategorized?: boolean;
   /** Transactions: open the transfer review (an import summary's "Review transfers"). */
   reviewTransfers?: boolean;
+  reviewRefunds?: boolean;
   /** Transactions: open the double-charge review (the alerts menu's "possible double charges"). */
   reviewDuplicates?: boolean;
   /** Category tab: which category a Dashboard bar drilled into. */
@@ -471,6 +472,11 @@ function App() {
               setRefreshKey((k) => k + 1);
               go("transactions", { reviewTransfers: true });
             }}
+            onReviewRefunds={() => {
+              loadAccounts();
+              setRefreshKey((k) => k + 1);
+              go("transactions", { reviewRefunds: true });
+            }}
           />
         )}
         {tab === "dashboard" && (
@@ -504,6 +510,7 @@ function App() {
             initialCategory={handoff.category}
             initialReviewOpen={handoff.reviewUncategorized}
             initialTransfersOpen={handoff.reviewTransfers}
+            initialRefundsOpen={handoff.reviewRefunds}
             initialDuplicatesOpen={handoff.reviewDuplicates}
           />
         )}

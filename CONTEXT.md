@@ -512,7 +512,10 @@ templates -- a partly refunded one comes back at full amount there, being rows n
 double-charge check, and a refund out of `findIncomeTransactions`. Deleting either side drops the
 pair (like transfers), so undoing that delete doesn't bring the pairing back. The list rows carry
 `refunded` / `refund_for`; the CSV adds `refunded` last; backups carry `refundPairs` (optional, no
-version bump).
+version bump). Suggestions take a `batchId` like transfers (a pair with either side from that upload),
+for the import summary's "Review refunds" hand-off (`reviewRefunds` -> `initialRefundsOpen`). A paired
+refund is left out of the uncategorized review: it counts nowhere, so a category would change nothing.
+AI categorization still sees it -- harmless, since `NOT_A_REFUND` keeps it out of income whatever it's filed under.
 
 **Transfer matching pairs strictly and changes nothing until confirmed.** `TransferMatchingService`
 loads just id/account/currency/date/cents/is-transfer for every unsplit row, buckets credits by

@@ -67,7 +67,7 @@ public class RefundMatchingService {
         this.merchantNames = merchantNames;
     }
 
-    private record Row(long id, String group, LocalDate date, long cents, boolean refundWord) {}
+    private record Row(long id, String group, LocalDate date, long cents, boolean refundWord, String batchId) {}
 
     private record Edge(Row purchase, Row refund, int daysAfter, boolean exact) {}
 
@@ -97,7 +97,20 @@ public class RefundMatchingService {
 
     /** Likely refunds, the newest refund first, at most {@code limit} ({@code total} is the full count). */
     public Suggestions suggest(int limit) {
+        return suggest(limit, null);
+    }
+
+    /**
+     * As above, keeping only pairs with a side from upload {@code batchId} -- what an import summary
+     * asks after. Matching still runs over everything, so a pair is the same pair either way.
+     */
+    public Suggestions suggest(int limit, String batchId) {
         List<Edge> chosen = matchAll();
+        if (batchId != null) {
+            chosen = chosen.stream()
+                    .filter(e -> batchId.equals(e.purchase().batchId()) || batchId.equals(e.refund().batchId()))
+                    .toList();
+        }
         List<Edge> page = chosen.subList(0, Math.min(limit, chosen.size()));
 
         List<Long> ids = new ArrayList<>();
@@ -125,7 +138,7 @@ public class RefundMatchingService {
         Map<String, List<Row>> purchasesByGroup = new HashMap<>();
         List<Row> credits = new ArrayList<>();
         jdbc.query("""
-                SELECT t.id, t.account_id, a.currency, t.date, t.amount, t.type, t.description,
+                SELECT t.id, t.account_id, a.currency, t.date, t.amount, t.type, t.description, t.upload_batch_id,
                        COALESCE(c.is_transfer, 0) AS is_transfer, COALESCE(c.is_income, 0) AS is_income
                 FROM transactions t
                 LEFT JOIN accounts a ON a.id = t.account_id
@@ -141,7 +154,8 @@ public class RefundMatchingService {
             String merchant = debit ? merchantOf(description) : refundMerchantOf(description);
             // One merchant name over several keys is one merchant, as everywhere else names apply.
             String group = rs.getLong("account_id") + "|" + rs.getString("currency") + "|" + names.label(merchant);
-            Row row = new Row(id, group, date, Math.round(rs.getDouble("amount") * 100), !debit && hasRefundWord(description));
+            Row row = new Row(id, group, date, Math.round(rs.getDouble("amount") * 100), !debit && hasRefundWord(description),
+                    rs.getString("upload_batch_id"));
             if (debit) {
                 if (rs.getInt("is_income") == 1) return;
                 purchasesByGroup.computeIfAbsent(group, k -> new ArrayList<>()).add(row);
