@@ -886,9 +886,12 @@ export function undoTransferPair(id: number) {
 
 // --- refunds ------------------------------------------------------------------
 
-/** Credits that look like refunds of earlier purchases, newest refund first. */
-export function fetchRefundSuggestions(limit = 50) {
-  return request<RefundSuggestionsResponse>(`/refunds/suggestions${qs({ limit })}`);
+/**
+ * Credits that look like refunds of earlier purchases, newest refund first. `batchId` keeps only
+ * pairs with a side from that upload -- what an import summary asks after.
+ */
+export function fetchRefundSuggestions(limit = 50, batchId?: string) {
+  return request<RefundSuggestionsResponse>(`/refunds/suggestions${qs({ limit, batchId })}`);
 }
 
 export function fetchRefundPairs() {

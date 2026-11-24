@@ -47,12 +47,18 @@ class RefundMatchingTest {
     @Autowired private RefundController refundsApi;
     @Autowired private CsvExportService csv;
     @Autowired private NamedParameterJdbcTemplate jdbc;
+    @Autowired private UncategorizedReviewService uncategorized;
 
     private static final DateRange ALL = DateRange.ALL;
 
     private long add(String date, String description, double amount, String type, String category, long accountId) {
+        return add(date, description, amount, type, category, accountId, "refund-test");
+    }
+
+    private long add(String date, String description, double amount, String type, String category, long accountId,
+                     String batchId) {
         transactions.insertBatch(List.of(new ParsedTransaction(date, description, amount, type, category)),
-                "refund-test", accountId);
+                batchId, accountId);
         return jdbc.queryForObject("SELECT MAX(id) FROM transactions", new MapSqlParameterSource(), Long.class);
     }
 
@@ -300,5 +306,35 @@ class RefundMatchingTest {
         backups.restore(older);
         assertThat(pairs.findAll()).isEmpty();
         assertThat(shopping()).isEqualTo(250.0);
+    }
+
+    @Test
+    @DisplayName("an import summary asks only after refunds with a side from that upload")
+    void suggestionsForOneUpload() {
+        long jacket = add("2026-03-01", "OUTDOOR STORE", 250, "debit", "Shopping", Account.DEFAULT_ID, "march");
+        long back = add("2026-03-20", "OUTDOOR STORE", 250, "credit", "Income", Account.DEFAULT_ID, "april");
+        long shoes = add("2026-03-02", "SHOE PALACE", 100, "debit", "Shopping", Account.DEFAULT_ID, "march");
+        long part = add("2026-03-21", "SHOE PALACE REFUND", 30, "credit", "Income", Account.DEFAULT_ID, "march");
+
+        assertThat(refunds.suggest(100, "april").suggestions()).extracting(r -> pair(r.purchase().id(), r.refund().id()))
+                .containsExactly(pair(jacket, back));
+        assertThat(refunds.suggest(100, "march").total()).isEqualTo(2);
+        assertThat(refunds.suggest(100, "may").total()).isZero();
+        assertThat(refunds.suggest(100, null).total()).isEqualTo(2);
+        assertThat(part).isGreaterThan(shoes);
+    }
+
+    @Test
+    @DisplayName("a paired refund isn't asked about in the uncategorized review -- a category would change nothing")
+    void pairedRefundNotUncategorized() {
+        long jacket = buy("2026-03-01", "OUTDOOR STORE", 250);
+        long back = add("2026-03-20", "OUTDOOR STORE REFUND", 250, "credit", null, Account.DEFAULT_ID);
+        add("2026-03-22", "MYSTERY DEPOSIT", 40, "credit", null, Account.DEFAULT_ID);
+        assertThat(uncategorized.merchants(Account.DEFAULT_ID)).extracting("merchant")
+                .containsExactlyInAnyOrder("OUTDOOR STORE REFUND", "MYSTERY DEPOSIT");
+
+        refunds.confirm(List.of(new PairRef(jacket, back)));
+
+        assertThat(uncategorized.merchants(Account.DEFAULT_ID)).extracting("merchant").containsExactly("MYSTERY DEPOSIT");
     }
 }

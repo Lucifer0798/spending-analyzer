@@ -8,6 +8,8 @@ interface Props {
   onChanged: () => void;
   /** Any value that changes whenever the page's transactions change, so suggestions re-fetch. */
   refreshKey?: unknown;
+  /** Start expanded -- when arriving from an import summary's "Review refunds". */
+  initiallyOpen?: boolean;
 }
 
 const pairKey = (s: RefundSuggestion) => `${s.purchase.id}:${s.refund.id}`;
@@ -19,9 +21,9 @@ const ref = (s: RefundSuggestion) => ({ purchaseId: s.purchase.id, refundId: s.r
  * the purchase instead; "Not a refund" stops the pair being suggested. Renders nothing when there's
  * nothing to review.
  */
-export function RefundReview({ onChanged, refreshKey }: Props) {
+export function RefundReview({ onChanged, refreshKey, initiallyOpen = false }: Props) {
   const [data, setData] = useState<RefundSuggestionsResponse | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastDone, setLastDone] = useState<string | null>(null);
@@ -75,8 +77,8 @@ export function RefundReview({ onChanged, refreshKey }: Props) {
     <div className="mb-4 rounded-lg border border-teal-200 bg-teal-50/60 p-4 dark:border-teal-900/60 dark:bg-teal-950/20">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-teal-900 dark:text-teal-200">
-          <strong>{data.total}</strong> likely refund{data.total === 1 ? "" : "s"} — the purchase{" "}
-          {data.total === 1 ? "still counts" : "s still count"} as spending.
+          <strong>{data.total}</strong> likely refund{data.total === 1 ? "" : "s"} —{" "}
+          {data.total === 1 ? "the purchase still counts" : "the purchases still count"} as spending.
         </p>
         <button
           onClick={() => setOpen((o) => !o)}

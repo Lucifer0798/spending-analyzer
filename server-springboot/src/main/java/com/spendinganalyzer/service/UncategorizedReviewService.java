@@ -3,6 +3,7 @@ package com.spendinganalyzer.service;
 import com.spendinganalyzer.dto.UncategorizedMerchant;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.MerchantNameRepository;
+import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 
@@ -36,10 +37,13 @@ public class UncategorizedReviewService {
 
     private final TransactionRepository transactions;
     private final MerchantNameRepository merchantNames;
+    private final RefundPairRepository refundPairs;
 
-    public UncategorizedReviewService(TransactionRepository transactions, MerchantNameRepository merchantNames) {
+    public UncategorizedReviewService(TransactionRepository transactions, MerchantNameRepository merchantNames,
+                                      RefundPairRepository refundPairs) {
         this.transactions = transactions;
         this.merchantNames = merchantNames;
+        this.refundPairs = refundPairs;
     }
 
     /** Most transactions first -- clearing those empties the queue fastest -- then biggest total. */
@@ -61,8 +65,12 @@ public class UncategorizedReviewService {
             }
         }
 
+        // A paired refund counts nowhere -- it's taken off its purchase, not spent or earned -- so
+        // giving it a category would change nothing; it isn't asked about.
+        Set<Long> pairedRefunds = refundPairs.confirmedRefundIds();
         Map<String, Group> groups = new LinkedHashMap<>();
         for (Transaction t : transactions.findUncategorized(accountId)) {
+            if (pairedRefunds.contains(t.id())) continue;
             String merchant = MerchantNormalizer.normalize(t.description());
             String currency = t.accountCurrency() != null ? t.accountCurrency() : "USD";
             Group g = groups.computeIfAbsent(merchant + KEY_SEPARATOR + currency, k -> new Group(merchant, currency));

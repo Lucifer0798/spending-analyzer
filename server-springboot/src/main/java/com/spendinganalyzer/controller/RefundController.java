@@ -31,11 +31,12 @@ public class RefundController {
     }
 
     @GetMapping("/suggestions")
-    public ResponseEntity<?> suggestions(@RequestParam(defaultValue = "50") int limit) {
+    public ResponseEntity<?> suggestions(@RequestParam(defaultValue = "50") int limit,
+                                         @RequestParam(required = false) String batchId) {
         if (limit < 1 || limit > 500) {
             return ResponseEntity.badRequest().body(new ErrorResponse("limit must be between 1 and 500."));
         }
-        RefundMatchingService.Suggestions found = service.suggest(limit);
+        RefundMatchingService.Suggestions found = service.suggest(limit, batchId);
         return ResponseEntity.ok(Map.of(
                 "total", found.total(),
                 "suggestions", found.suggestions(),
