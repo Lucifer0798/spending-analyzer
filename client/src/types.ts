@@ -32,6 +32,10 @@ export interface TransactionWithTags extends Transaction {
   refunded: number | null;
   /** On a confirmed refund, the description of the purchase it refunds; null otherwise. */
   refund_for: string | null;
+  /** On a split charge, what's still owed to you (0 once settled); null otherwise. */
+  owed_left: number | null;
+  /** On a credit recorded as money paid back, the description of the split charge it repays. */
+  repayment_for: string | null;
 }
 
 /** A tag and how many transactions currently carry it. */
@@ -761,6 +765,25 @@ export interface TransferSuggestionsResponse {
 }
 
 /** A recorded pair: "confirmed" moved both into a transfer category, "dismissed" is "not a transfer". */
+/** A split charge with money still owed on it -- see OwedCard. */
+export interface OwedSplit {
+  transaction: Transaction;
+  /** The amount less your share. */
+  owed: number;
+  repaid: number;
+  /** owed less repaid. */
+  outstanding: number;
+  repayments: { id: number; amount: number; repaidOn: string; credit: Transaction | null }[];
+  /** Credits that look like the repayment, likeliest first. */
+  suggestions: Transaction[];
+}
+
+export interface OwedResponse {
+  splits: OwedSplit[];
+  /** Outstanding per currency -- never added across currencies. */
+  totals: { currency: string; outstanding: number; splits: number }[];
+}
+
 /** A credit that looks like a refund of an earlier purchase -- see RefundReview. */
 export interface RefundSuggestion {
   purchase: Transaction;

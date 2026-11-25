@@ -12,6 +12,7 @@ import com.spendinganalyzer.model.Account;
 import com.spendinganalyzer.repository.AccountRepository;
 import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.RefundPairRepository;
+import com.spendinganalyzer.repository.SplitRepaymentRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -80,7 +81,8 @@ public class StatsService {
 
     /**
      * The mirror of {@link #SPEND_FILTER} for the credit side: deposits in income categories --
-     * but not a confirmed refund, which is money back on a purchase rather than income.
+     * but not a confirmed refund, which is money back on a purchase rather than income, nor money
+     * paid back toward a split charge, which was never yours (V33).
      */
     private static final String INCOME_FILTER = """
             FROM transactions t
@@ -88,7 +90,7 @@ public class StatsService {
             LEFT JOIN accounts a ON a.id = t.account_id
             WHERE t.type = 'credit'
               AND COALESCE(c.is_income, 0) = 1
-            """ + "  AND " + RefundPairRepository.NOT_A_REFUND + " ";
+            """ + "  AND " + RefundPairRepository.NOT_A_REFUND + " AND " + SplitRepaymentRepository.NOT_A_REPAYMENT + " ";
 
     /** Account, currency and date-range predicates, appended to {@link #SPEND_FILTER}. */
     private static String filters(Long accountId, DateRange range, String currency) {

@@ -250,7 +250,7 @@ class ChallengeServiceTest {
                 exported.goals(), exported.goalContributions(), exported.tags(), exported.transactionTags(),
                 exported.accountBalances(), exported.filterPresets(), exported.transactionReceipts(),
                 exported.netWorthTarget(), exported.keywordRules(), exported.transferPairs(),
-                exported.duplicateDismissals(), exported.merchantNames(), exported.dismissedMerchantSuggestions(), null, null));
+                exported.duplicateDismissals(), exported.merchantNames(), exported.dismissedMerchantSuggestions(), null, null, null));
         assertThat(challenges.findAll()).isEmpty();
     }
 
