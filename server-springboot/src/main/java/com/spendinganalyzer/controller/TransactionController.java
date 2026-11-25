@@ -14,6 +14,7 @@ import com.spendinganalyzer.repository.TagRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.repository.RefundPairRepository;
+import com.spendinganalyzer.repository.SplitRepaymentRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
 import com.spendinganalyzer.service.ChangeLogService;
 import com.spendinganalyzer.service.MerchantNormalizer;
@@ -53,6 +54,7 @@ public class TransactionController {
     private final TransactionReceiptRepository receiptRepository;
     private final TransferPairRepository transferPairRepository;
     private final RefundPairRepository refundPairRepository;
+    private final SplitRepaymentRepository splitRepaymentRepository;
     private final DuplicateDismissalRepository duplicateDismissalRepository;
     private final ChangeLogService changeLog;
 
@@ -64,6 +66,7 @@ public class TransactionController {
             TransactionReceiptRepository receiptRepository,
             TransferPairRepository transferPairRepository,
             RefundPairRepository refundPairRepository,
+            SplitRepaymentRepository splitRepaymentRepository,
             DuplicateDismissalRepository duplicateDismissalRepository,
             ChangeLogService changeLog
     ) {
@@ -74,6 +77,7 @@ public class TransactionController {
         this.receiptRepository = receiptRepository;
         this.transferPairRepository = transferPairRepository;
         this.refundPairRepository = refundPairRepository;
+        this.splitRepaymentRepository = splitRepaymentRepository;
         this.duplicateDismissalRepository = duplicateDismissalRepository;
         this.changeLog = changeLog;
     }
@@ -102,10 +106,20 @@ public class TransactionController {
         Set<Long> withReceipts = receiptRepository.transactionIdsWithReceipts(ids);
         Map<Long, Double> refunded = refundPairRepository.refundedByPurchase(ids);
         Map<Long, String> refundFor = refundPairRepository.refundedPurchaseDescriptions(ids);
+        Map<Long, Double> repaid = splitRepaymentRepository.repaidByTransaction(ids);
+        Map<Long, String> repaymentFor = splitRepaymentRepository.repaidChargeDescriptions(ids);
         return transactions.stream()
                 .map(t -> new TransactionWithTags(t, tagsById.getOrDefault(t.id(), List.of()), withReceipts.contains(t.id()),
-                        refunded.get(t.id()), refundFor.get(t.id())))
+                        refunded.get(t.id()), refundFor.get(t.id()), owedLeft(t, repaid.get(t.id())), repaymentFor.get(t.id())))
                 .toList();
+    }
+
+    /** On a split charge, what's still to come back (zero once settled); null on anything else. */
+    private static Double owedLeft(Transaction t, Double repaid) {
+        if (!"debit".equals(t.type()) || t.splitShare() == null) return null;
+        long owed = Math.round(t.amount() * 100) - Math.round(t.splitShare() * 100);
+        if (owed <= 0) return null;
+        return Math.max(0, owed - (repaid == null ? 0 : Math.round(repaid * 100))) / 100.0;
     }
 
     /**
@@ -339,6 +353,8 @@ public class TransactionController {
         transferPairRepository.deleteForTransactions(List.of(id));
         // Likewise a refund: the purchase counts in full again, or the credit as it's filed.
         refundPairRepository.deleteForTransactions(List.of(id));
+        // A deleted split charge takes its repayments with it; a deleted credit, the repayment it was.
+        splitRepaymentRepository.deleteForTransactions(List.of(id));
         return ResponseEntity.ok(withChangeId(Map.of("ok", true), changeId));
     }
 
@@ -421,6 +437,7 @@ public class TransactionController {
         Long changeId = changeLog.recordDelete("Deleted " + deleted + " transaction" + (deleted == 1 ? "" : "s"), doomed, receipts);
         transferPairRepository.deleteForTransactions(ids);
         refundPairRepository.deleteForTransactions(ids);
+        splitRepaymentRepository.deleteForTransactions(ids);
         return ResponseEntity.ok(withChangeId(Map.of("ok", true, "deleted", deleted), changeId));
     }
 
@@ -447,6 +464,7 @@ public class TransactionController {
         receiptRepository.deleteAll();
         transferPairRepository.deleteAll();
         refundPairRepository.deleteAll();
+        splitRepaymentRepository.deleteAll();
         duplicateDismissalRepository.deleteAll();
         // Every snapshot in it describes transactions that are gone.
         changeLog.clear();

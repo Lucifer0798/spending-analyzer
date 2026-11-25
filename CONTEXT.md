@@ -493,6 +493,22 @@ allowed, missing parameter) now gets its own status instead of a 500 -- before, 
 missing static file came back as "Unexpected error" with a 500. Found because browsers probe for
 icon files.
 
+**Who owes you is split charges plus repayments.** A split (V17) is your share of a charge; the rest
+is owed by whoever `split_note` names. `split_repayments` (V33) records money coming back: amount,
+date, and optionally the credit it arrived as (`repayment_id`, unique). `OwedService`: owed = amount
+- share, outstanding = owed - repaid (cents; a split with nothing outstanding isn't listed). A linked
+credit leaves income (`SplitRepaymentRepository.NOT_A_REPAYMENT` in `INCOME_FILTER` and
+`findIncomeTransactions`) -- but only while its charge is still split, so clearing a split (or an
+Undo that does) needs no clean-up and splitting again brings it back. Spending is untouched: it
+already counts only the share. Suggestions per charge: credits in its currency, unsplit, not a
+transfer/refund/linked, 3 days before to 90 after, no more than outstanding, and either naming
+someone from the note (`namesIn` drops words like "owes"/"half"/"split") or exactly the outstanding
+amount -- both first, then a name, then the amount. Recording refuses: not a split charge, nothing
+outstanding, more than outstanding, a debit, a split credit, an already-linked credit, a confirmed
+refund, another currency. Deleting the charge or the credit drops its rows. Undo is
+`DELETE /owed/repayments/{id}`, offered inline on the Dashboard card. Backups carry `splitRepayments`
+(optional). List rows carry `owed_left` (0 once settled) and `repayment_for`.
+
 **Refunds are netted by pairing, not by recategorizing.** A refund used to count as income (the
 categorizer files money in under Income) while its purchase still counted as spending.
 `RefundMatchingService` suggests a credit as a refund of a purchase when they're in the same

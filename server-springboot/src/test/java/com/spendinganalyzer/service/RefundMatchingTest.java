@@ -302,7 +302,7 @@ class RefundMatchingTest {
                 snapshot.accountBalances(), snapshot.filterPresets(), snapshot.transactionReceipts(),
                 snapshot.netWorthTarget(), snapshot.keywordRules(), snapshot.transferPairs(),
                 snapshot.duplicateDismissals(), snapshot.merchantNames(), snapshot.dismissedMerchantSuggestions(),
-                snapshot.challenges(), null);
+                snapshot.challenges(), null, null);
         backups.restore(older);
         assertThat(pairs.findAll()).isEmpty();
         assertThat(shopping()).isEqualTo(250.0);

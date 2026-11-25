@@ -6,6 +6,7 @@ import com.spendinganalyzer.repository.MerchantCategoryRepository;
 import com.spendinganalyzer.repository.TransactionReceiptRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.repository.RefundPairRepository;
+import com.spendinganalyzer.repository.SplitRepaymentRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -172,10 +173,12 @@ public class ChangeLogService {
     private final TransactionReceiptRepository receipts;
     private final TransferPairRepository transferPairs;
     private final RefundPairRepository refundPairs;
+    private final SplitRepaymentRepository splitRepayments;
 
     public ChangeLogService(NamedParameterJdbcTemplate jdbc, ObjectMapper json, TransactionRepository transactions,
                             MerchantCategoryRepository memory, TransactionReceiptRepository receipts,
-                            TransferPairRepository transferPairs, RefundPairRepository refundPairs) {
+                            TransferPairRepository transferPairs, RefundPairRepository refundPairs,
+                            SplitRepaymentRepository splitRepayments) {
         this.jdbc = jdbc;
         this.json = json;
         this.transactions = transactions;
@@ -183,6 +186,7 @@ public class ChangeLogService {
         this.receipts = receipts;
         this.transferPairs = transferPairs;
         this.refundPairs = refundPairs;
+        this.splitRepayments = splitRepayments;
     }
 
     // --- recording --------------------------------------------------------------------------
@@ -334,6 +338,7 @@ public class ChangeLogService {
             receipts.deleteBulk(ids);
             transferPairs.deleteForTransactions(ids);
             refundPairs.deleteForTransactions(ids);
+            splitRepayments.deleteForTransactions(ids);
         }
 
         jdbc.update("UPDATE change_log SET undone_at = datetime('now') WHERE id = :id", new MapSqlParameterSource("id", id));

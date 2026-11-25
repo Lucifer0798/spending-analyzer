@@ -157,7 +157,7 @@ class MonthlySummaryServiceTest {
                 exported.recurringOverrides(), exported.goals(), exported.goalContributions(), exported.tags(),
                 exported.transactionTags(), exported.accountBalances(), exported.filterPresets(), exported.transactionReceipts(),
                 exported.netWorthTarget(), exported.keywordRules(), exported.transferPairs(), exported.duplicateDismissals(),
-                exported.merchantNames(), exported.dismissedMerchantSuggestions(), exported.challenges(), exported.refundPairs());
+                exported.merchantNames(), exported.dismissedMerchantSuggestions(), exported.challenges(), exported.refundPairs(), exported.splitRepayments());
         backups.restore(older);
         assertThat(budgets.findByCategory("Groceries")).isPresent();
         assertThat(october().budgetsTotal()).isZero();

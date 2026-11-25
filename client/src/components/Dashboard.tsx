@@ -23,6 +23,7 @@ import { BudgetVsIncomeCard } from "./BudgetVsIncomeCard";
 import { ComparisonCard } from "./ComparisonCard";
 import { TopMerchantsCard } from "./TopMerchantsCard";
 import { MoneyFlowCard } from "./MoneyFlowCard";
+import { OwedCard } from "./OwedCard";
 import { SpendingCalendar } from "./SpendingCalendar";
 
 interface Props {
@@ -374,6 +375,10 @@ export function Dashboard({ accountId, range, onOpenMerchant, onOpenDay, onOpenC
       {/* Renders nothing unless something is flagged, so the dashboard is unchanged for
           anyone with nothing unusual to see. */}
       <AnomaliesCard accountId={accountId} range={range} />
+
+      {/* Split charges with money still to come back, whatever the date range -- a debt doesn't
+          stop being owed because it's outside the period on screen. Renders nothing when none. */}
+      <OwedCard accountId={accountId} />
 
       {/* Renders nothing for "all time" or a half-open filter -- there's no defined-length
           period to compare against. */}

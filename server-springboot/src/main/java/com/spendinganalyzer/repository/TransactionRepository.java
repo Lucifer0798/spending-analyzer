@@ -431,14 +431,16 @@ public class TransactionRepository {
 
     /**
      * All credit rows in income categories, the mirror of {@link #findSpendingTransactions} for
-     * detecting recurring income. A confirmed refund is money back, not income, so it's left out.
+     * detecting recurring income. A confirmed refund is money back, not income, so it's left out --
+     * as is money paid back toward a split charge.
      */
     public List<Transaction> findIncomeTransactions(Long accountId, DateRange range) {
         StringBuilder sql = new StringBuilder(SELECT_WITH_ACCOUNT).append("""
                  LEFT JOIN categories c ON c.name = t.category
                  WHERE t.type = 'credit'
                    AND COALESCE(c.is_income, 0) = 1
-                """).append("   AND ").append(RefundPairRepository.NOT_A_REFUND);
+                """).append("   AND ").append(RefundPairRepository.NOT_A_REFUND)
+                .append(" AND ").append(SplitRepaymentRepository.NOT_A_REPAYMENT);
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (accountId != null) {
             sql.append(" AND t.account_id = :accountId");

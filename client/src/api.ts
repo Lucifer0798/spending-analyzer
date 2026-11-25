@@ -50,6 +50,7 @@ import type {
   TopMerchantsResponse,
   Transaction,
   TransactionWithTags,
+  OwedResponse,
   RefundPairView,
   RefundSuggestionsResponse,
   TransferPairView,
@@ -919,6 +920,29 @@ export function dismissRefunds(pairs: RefundRef[]) {
 /** Unpairs a confirmed refund, or forgets a dismissal. */
 export function undoRefundPair(id: number) {
   return request<{ ok: true }>(`/refunds/${id}`, { method: "DELETE" });
+}
+
+// --- who owes you ----------------------------------------------------------------
+
+/** Split charges with money still to come back, newest first. */
+export function fetchOwed(accountId: number | null) {
+  return request<OwedResponse>(`/owed${qs({ accountId })}`);
+}
+
+/**
+ * Records money paid back toward a split charge: `repaymentId` links the credit it arrived as (its
+ * amount and date); otherwise `amount`, defaulting to everything outstanding, today.
+ */
+export function recordRepayment(transactionId: number, body: { amount?: number; repaymentId?: number } = {}) {
+  return request<{ ok: true; id: number }>(`/owed/${transactionId}/repayments`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Takes a recorded repayment back. */
+export function undoRepayment(id: number) {
+  return request<{ ok: true }>(`/owed/repayments/${id}`, { method: "DELETE" });
 }
 
 /** Income sources against spending categories for the range -- see MoneyFlow. */

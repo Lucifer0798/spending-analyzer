@@ -183,7 +183,7 @@ server-springboot/          Spring Boot backend
     model/ dto/             Data shapes
   src/main/resources/
     db/migration/           Versioned schema migrations (V1–V30)
-  src/test/                 719 tests
+  src/test/                 730 tests
   pom.xml                   The `frontend` profile builds the client into the jar
 
 Dockerfile                  Multi-stage build producing the single deployable image
@@ -326,6 +326,8 @@ All endpoints live under `/api`.
 | `GET` | `/transfers/suggestions` | Likely transfers between your accounts — same currency and amount, different accounts, at most 3 days apart (`limit`, default 50; `batchId` keeps only pairs with a side from that upload) |
 | `GET` `POST` `DELETE` | `/transfers` | Matched and dismissed pairs; `/transfers/confirm` and `/transfers/dismiss` take `{"pairs": [{"debit_id", "credit_id"}]}`; `DELETE /transfers/{id}` undoes one |
 | `GET` | `/refunds/suggestions` | Likely refunds — a credit from a merchant you bought from, same account, at most 120 days after, no more than what's left of the purchase (`limit`, default 50; `batchId` keeps only pairs with a side from that upload) |
+| `GET` | `/owed` | Split charges with money still owed to you, each with what's repaid, what's outstanding and likely repayment credits; totals per currency (`accountId`) |
+| `POST` `DELETE` | `/owed/{id}/repayments` | Record money paid back toward split charge `id`: `{"repaymentId"}` links the credit it came as, else `{"amount", "repaidOn"}` (default: all outstanding, today); `DELETE /owed/repayments/{id}` takes one back |
 | `GET` `POST` `DELETE` | `/refunds` | Paired and dismissed refunds; `/refunds/confirm` and `/refunds/dismiss` take `{"pairs": [{"purchaseId", "refundId"}]}`; `DELETE /refunds/{id}` unpairs one |
 | `GET` | `/monthly-summary` | How the last complete month went (`accountId`): total against the month before, biggest category rise and fall, budgets and challenges kept |
 | `GET` `POST` `DELETE` | `/challenges` | Every spending challenge with how it's going; `POST {"category", "limitAmount", "startDate", "endDate", "accountId"}` starts one (limit 0 = no spending, category null = all spending), `DELETE /challenges/{id}` removes one; `GET /challenges/templates` suggests ready-made ones from your spending; `GET /challenges/alerts` lists those over pace, or broken or kept in the last three days |
@@ -969,7 +971,7 @@ cd client && npm run lint && npm run build
 docker build -t spending-analyzer .
 ```
 
-**Tests (719).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
+**Tests (730).** Most cover pure logic and run in milliseconds: the duplicate counting rules, the
 file-parsing edge cases, merchant name cleanup, and recurring detection — including the negative
 cases that keep groceries and coffee *out* of the recurring list. A smoke test boots the whole
 application with no configuration at all, which is how CI runs it, and catches broken wiring or a failed
@@ -1046,6 +1048,9 @@ Nothing open right now — see Done below.
 
 ### Done
 
+- ~~Who owes you~~ — "Owed to you" on the Dashboard lists split charges with money still to come
+  back; mark one paid back (in full or part), or pick the Zelle/Venmo it came as -- which then
+  isn't counted as income. Rows show what's still owed and what a credit repaid
 - ~~Refund matching~~ — a refund from a merchant you bought from is offered as a refund of that
   purchase; pairing takes it off the purchase in every total and out of income (Manage → Refunds to undo).
   The import summary offers "Review refunds" too, and a paired refund leaves the uncategorized review

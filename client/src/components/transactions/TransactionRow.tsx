@@ -249,6 +249,22 @@ export function TransactionRow({
             {currencyPrecise(t.refunded, t.account_currency ?? undefined)} refunded
           </div>
         )}
+        {t.owed_left != null && (
+          <div
+            className={`mt-0.5 text-right text-[10px] font-normal ${t.owed_left > 0 ? "text-violet-600 dark:text-violet-400" : "text-slate-400"}`}
+            title={t.owed_left > 0 ? "Still owed to you -- see Owed to you on the Dashboard" : "Everyone has paid you back"}
+          >
+            {t.owed_left > 0 ? `${currencyPrecise(t.owed_left, t.account_currency ?? undefined)} owed` : "settled"}
+          </div>
+        )}
+        {t.repayment_for != null && (
+          <div
+            className="mt-0.5 max-w-[10rem] truncate text-right text-[10px] font-normal text-violet-600 dark:text-violet-400"
+            title={`Paid back toward "${t.repayment_for}" -- not counted as income`}
+          >
+            paid back · {t.repayment_for}
+          </div>
+        )}
         {t.refund_for != null && (
           <div
             className="mt-0.5 max-w-[10rem] truncate text-right text-[10px] font-normal text-teal-600 dark:text-teal-400"
