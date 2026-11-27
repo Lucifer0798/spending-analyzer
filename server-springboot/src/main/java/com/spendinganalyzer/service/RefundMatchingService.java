@@ -6,6 +6,7 @@ import com.spendinganalyzer.model.RefundPair;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.MerchantNameRepository;
 import com.spendinganalyzer.repository.RefundPairRepository;
+import com.spendinganalyzer.repository.SplitRepaymentRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -58,13 +59,16 @@ public class RefundMatchingService {
     private final TransactionRepository transactions;
     private final RefundPairRepository pairs;
     private final MerchantNameRepository merchantNames;
+    private final SplitRepaymentRepository splitRepayments;
 
     public RefundMatchingService(NamedParameterJdbcTemplate jdbc, TransactionRepository transactions,
-                                 RefundPairRepository pairs, MerchantNameRepository merchantNames) {
+                                 RefundPairRepository pairs, MerchantNameRepository merchantNames,
+                                 SplitRepaymentRepository splitRepayments) {
         this.jdbc = jdbc;
         this.transactions = transactions;
         this.pairs = pairs;
         this.merchantNames = merchantNames;
+        this.splitRepayments = splitRepayments;
     }
 
     private record Row(long id, String group, LocalDate date, long cents, boolean refundWord, String batchId) {}
@@ -130,7 +134,9 @@ public class RefundMatchingService {
     }
 
     private List<Edge> matchAll() {
-        Set<Long> alreadyRefunds = pairs.confirmedRefundIds();
+        // A credit already claimed as a split repayment is someone paying you back, not a refund.
+        Set<Long> alreadyRefunds = new HashSet<>(pairs.confirmedRefundIds());
+        alreadyRefunds.addAll(splitRepayments.linkedRepaymentIds());
         Set<String> dismissed = pairs.dismissedKeys();
         Map<Long, Long> refundedCents = pairs.refundedCentsByPurchase();
         MerchantNameRepository.Names names = merchantNames.load();
@@ -218,6 +224,7 @@ public class RefundMatchingService {
     @Transactional
     public ConfirmResult confirm(List<PairRef> refs) {
         Set<Long> alreadyRefunds = new HashSet<>(pairs.confirmedRefundIds());
+        Set<Long> repayments = splitRepayments.linkedRepaymentIds();
         Map<Long, Long> refundedCents = new HashMap<>(pairs.refundedCentsByPurchase());
         Set<String> transfer = categoryNames("is_transfer = 1");
         Set<String> notSpending = categoryNames("is_transfer = 1 OR is_income = 1");
@@ -227,7 +234,9 @@ public class RefundMatchingService {
         for (PairRef ref : refs) {
             Optional<Transaction> purchase = transactions.findById(ref.purchaseId());
             Optional<Transaction> refund = transactions.findById(ref.refundId());
-            String reason = reasonNotPairable(purchase, refund, alreadyRefunds, refundedCents, notSpending, transfer);
+            String reason = repayments.contains(ref.refundId())
+                    ? "That credit is recorded as money paid back on a split."
+                    : reasonNotPairable(purchase, refund, alreadyRefunds, refundedCents, notSpending, transfer);
             if (reason != null) {
                 skipped.add(new Skipped(ref.purchaseId(), ref.refundId(), reason));
                 continue;

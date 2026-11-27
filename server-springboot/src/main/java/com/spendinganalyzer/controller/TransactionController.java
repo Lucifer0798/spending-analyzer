@@ -220,6 +220,13 @@ public class TransactionController {
         if (existing.isEmpty()) {
             return ResponseEntity.status(404).body(new ErrorResponse("Transaction not found."));
         }
+        // Checked before anything is applied, so a refused request changes nothing. Refund
+        // matching won't pair a split charge either: a refund comes off the whole charge, and what
+        // others owe on a split is worked out from the whole charge, so the two can't both hold.
+        if (body.get("split_share") != null && !refundPairRepository.refundedByPurchase(List.of(id)).isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    "This charge has a refund paired with it. Unpair it under Manage → Refunds before splitting."));
+        }
 
         String category = asTrimmedString(body.get("category"));
         String date = asTrimmedString(body.get("date"));

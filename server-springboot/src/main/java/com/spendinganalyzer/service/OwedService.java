@@ -6,6 +6,7 @@ import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.repository.RefundPairRepository;
 import com.spendinganalyzer.repository.SplitRepaymentRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
+import com.spendinganalyzer.repository.TransferPairRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -57,13 +58,16 @@ public class OwedService {
     private final TransactionRepository transactions;
     private final SplitRepaymentRepository repayments;
     private final RefundPairRepository refundPairs;
+    private final TransferPairRepository transferPairs;
 
     public OwedService(NamedParameterJdbcTemplate jdbc, TransactionRepository transactions,
-                       SplitRepaymentRepository repayments, RefundPairRepository refundPairs) {
+                       SplitRepaymentRepository repayments, RefundPairRepository refundPairs,
+                       TransferPairRepository transferPairs) {
         this.jdbc = jdbc;
         this.transactions = transactions;
         this.repayments = repayments;
         this.refundPairs = refundPairs;
+        this.transferPairs = transferPairs;
     }
 
     /** Outstanding per currency -- amounts in different currencies are never added together. */
@@ -217,6 +221,9 @@ public class OwedService {
             }
             if (refundPairs.confirmedRefundIds().contains(repaymentId)) {
                 throw new IllegalArgumentException("That credit is a refund of a purchase.");
+            }
+            if (transferPairs.confirmedTransactionIds().contains(repaymentId)) {
+                throw new IllegalArgumentException("That credit is half of a transfer between your accounts.");
             }
             if (cents(credit.amount()) > outstanding) {
                 throw new IllegalArgumentException("That credit is more than what's still owed on this charge.");

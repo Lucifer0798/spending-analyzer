@@ -6,6 +6,8 @@ import com.spendinganalyzer.model.Category;
 import com.spendinganalyzer.model.Transaction;
 import com.spendinganalyzer.model.TransferPair;
 import com.spendinganalyzer.repository.CategoryRepository;
+import com.spendinganalyzer.repository.RefundPairRepository;
+import com.spendinganalyzer.repository.SplitRepaymentRepository;
 import com.spendinganalyzer.repository.TransactionRepository;
 import com.spendinganalyzer.repository.TransferPairRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -51,17 +53,46 @@ public class TransferMatchingService {
     private final TransactionRepository transactions;
     private final TransferPairRepository pairs;
     private final CategoryRepository categories;
+    private final RefundPairRepository refundPairs;
+    private final SplitRepaymentRepository splitRepayments;
 
     public TransferMatchingService(
             NamedParameterJdbcTemplate jdbc,
             TransactionRepository transactions,
             TransferPairRepository pairs,
-            CategoryRepository categories
+            CategoryRepository categories,
+            RefundPairRepository refundPairs,
+            SplitRepaymentRepository splitRepayments
     ) {
         this.jdbc = jdbc;
         this.transactions = transactions;
         this.pairs = pairs;
         this.categories = categories;
+        this.refundPairs = refundPairs;
+        this.splitRepayments = splitRepayments;
+    }
+
+    /**
+     * Why a transaction is already accounted for by a refund or a split repayment, so it can't
+     * also be half of a transfer -- the same money would be taken out of spending or income twice.
+     * Null when it's free.
+     */
+    private record Claims(Set<Long> refunds, Set<Long> refundedPurchases, Set<Long> repayments) {
+        String reason(long debitId, long creditId) {
+            if (refunds.contains(creditId)) return "That credit is a confirmed refund of a purchase.";
+            if (repayments.contains(creditId)) return "That credit is recorded as money paid back on a split.";
+            if (refundedPurchases.contains(debitId)) return "That debit has a refund paired with it.";
+            return null;
+        }
+
+        boolean claimed(long id) {
+            return refunds.contains(id) || repayments.contains(id) || refundedPurchases.contains(id);
+        }
+    }
+
+    private Claims claims() {
+        return new Claims(refundPairs.confirmedRefundIds(), refundPairs.refundedCentsByPurchase().keySet(),
+                splitRepayments.linkedRepaymentIds());
     }
 
     /** Just the columns matching needs, so suggesting doesn't load every description into memory. */
@@ -129,6 +160,7 @@ public class TransferMatchingService {
     private List<Edge> matchAll() {
         Set<Long> alreadyPaired = pairs.confirmedTransactionIds();
         Set<String> dismissed = pairs.dismissedKeys();
+        Claims claims = claims();
 
         Map<String, List<Candidate>> creditsByAmount = new HashMap<>();
         List<Candidate> debits = new ArrayList<>();
@@ -141,7 +173,7 @@ public class TransferMatchingService {
                 WHERE t.split_share IS NULL
                 """, new MapSqlParameterSource(), rs -> {
             long id = rs.getLong("id");
-            if (alreadyPaired.contains(id)) return;
+            if (alreadyPaired.contains(id) || claims.claimed(id)) return;
             LocalDate date = parseDate(rs.getString("date"));
             if (date == null) return;
             Candidate c = new Candidate(id, rs.getLong("account_id"), rs.getString("currency"), date,
@@ -212,6 +244,7 @@ public class TransferMatchingService {
                         "There's no transfer category to move these into. Mark a category as a transfer on the Manage page first."));
         Set<String> transferNames = transferCategoryNames();
         Set<Long> alreadyPaired = new HashSet<>(pairs.confirmedTransactionIds());
+        Claims claims = claims();
 
         int confirmed = 0;
         List<Skipped> skipped = new ArrayList<>();
@@ -219,6 +252,7 @@ public class TransferMatchingService {
             Optional<Transaction> debit = transactions.findById(ref.debitId());
             Optional<Transaction> credit = transactions.findById(ref.creditId());
             String reason = reasonNotPairable(debit, credit, alreadyPaired, transferNames);
+            if (reason == null) reason = claims.reason(ref.debitId(), ref.creditId());
             if (reason != null) {
                 skipped.add(new Skipped(ref.debitId(), ref.creditId(), reason));
                 continue;
