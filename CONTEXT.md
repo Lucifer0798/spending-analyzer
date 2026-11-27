@@ -493,6 +493,16 @@ allowed, missing parameter) now gets its own status instead of a 500 -- before, 
 missing static file came back as "Unexpected error" with a 500. Found because browsers probe for
 icon files.
 
+**One transaction, one claim (review round five).** Transfers, refunds and split repayments each
+take a credit out of income (and transfers and refunds a debit out of spending), so a transaction
+claimed by two would hide the same money twice. Each refuses what another has claimed, in its
+suggestions and when confirming: transfer matching skips confirmed refunds, purchases with a refund
+paired and linked repayments (`TransferMatchingService.Claims`); refund matching skips linked
+repayments; recording a repayment refuses a confirmed refund or a confirmed transfer half; and PATCH
+refuses a split on a purchase with a refund paired (checked before anything in the request is
+applied), as refund matching already refused a split purchase. `MoneyClaimedOnceTest` covers it.
+Known gap: History's Undo can restore an old split onto a purchase paired with a refund since.
+
 **Who owes you is split charges plus repayments.** A split (V17) is your share of a charge; the rest
 is owed by whoever `split_note` names. `split_repayments` (V33) records money coming back: amount,
 date, and optionally the credit it arrived as (`repayment_id`, unique). `OwedService`: owed = amount
